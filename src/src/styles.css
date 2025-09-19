@@ -5,3 +5,7 @@ main { display:grid; grid-template-columns: 2fr 1fr; gap:16px; padding:16px; }
 .hidden { display:none; }
 video, canvas { width:100%; max-height:240px; background:#000; }
 .tabs .tab { margin-right:8px; }
+
+/* prueba rápida */
+body { background:#f7f7f7; font-family: Arial, sans-serif; }
+header { border-bottom:1px solid #eee; }
