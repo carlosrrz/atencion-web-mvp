@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>MVP Atención</title>
+  <link rel="stylesheet" href="./src/styles.css" />
+</head>
+<body>
+  <header>
+    <h1>Modo Estudio – Monitoreo</h1>
+    <nav><a href="#" id="open-privacy">Privacidad</a></nav>
+  </header>
+
+  <main>
+    <section class="left">
+      <div class="tabs">
+        <button class="tab active" data-t="lectura">Lectura</button>
+        <button class="tab" data-t="video">Video</button>
+      </div>
+      <article id="lectura">
+        <h2>Recurso: Atención sostenida</h2>
+        <p>Texto breve de ejemplo para lectura…</p>
+      </article>
+      <div id="video" class="hidden"><div class="video-placeholder">[Video]</div></div>
+    </section>
+
+    <aside class="right">
+      <div class="card">
+        <button id="btn-permitir">Permitir cámara</button>
+        <video id="cam" autoplay playsinline muted></video>
+        <canvas id="canvas" width="640" height="480"></canvas>
+      </div>
+      <div class="card">
+        <h3>Estado</h3>
+        <p>Pestaña: <span id="tab-state">—</span></p>
+        <p>Atención: <span id="attn-state">—</span></p>
+        <p>FPS: <span id="fps">—</span> | Latencia p95: <span id="p95">—</span> ms</p>
+      </div>
+      <div class="card">
+        <button id="btn-start">Iniciar</button>
+        <button id="btn-stop">Finalizar y exportar</button>
+        <button id="btn-config">Configurar</button>
+      </div>
+    </aside>
+  </main>
+
+  <script type="module" src="./src/metrics.js"></script>
+  <script type="module" src="./src/tab-logger.js"></script>
+  <script type="module" src="./src/app.js"></script>
+</body>
+</html>
