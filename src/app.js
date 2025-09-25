@@ -125,8 +125,8 @@ function loop() {
   // Actualiza UI cada ~10 frames
   if (performance.now() % 10 < 1) {
     const { fpsMed, latP95 } = metrics.read();
-    fpsEl.textContent = fpsMed;
-    p95El.textContent = latP95;
+    fpsEl.textContent = Math.round(fpsMed);   // antes: fpsEl.textContent = fpsMed
+    p95El.textContent = latP95.toFixed(1);    // antes: p95El.textContent = latP95
     tabState.textContent = document.visibilityState === 'visible' ? 'En pestaña' : 'Fuera de pestaña';
   }
   requestAnimationFrame(loop);

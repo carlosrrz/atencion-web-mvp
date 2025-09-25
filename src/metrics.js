@@ -49,13 +49,15 @@ export function createMetrics() {
   }
 
   // Lectura rápida para HUD (UI)
+  // Dentro de createMetrics(), reemplaza read() por esto:
   function read() {
-    const dts   = frames.map(f => f.dt).filter(v => v > 0);
-    const steps = frames.map(f => f.step).filter(v => v != null);
-    const fpsMed = dts.length ? Math.round(1000 / median(dts)) : 0;
-    const latP95 = steps.length ? Math.round(p95(steps)) : 0;
-    return { fpsMed, latP95 };
-  }
+  const dts   = frames.map(f => f.dt).filter(v => v > 0);
+  const steps = frames.map(f => f.step).filter(v => v != null);
+  const fpsMed = dts.length ? (1000 / median(dts)) : 0;   // ← sin Math.round
+  const latP95 = steps.length ? p95(steps) : 0;           // ← sin Math.round
+  return { fpsMed, latP95 };
+}
+
 
   // Exporta CSV con detalle por frame y resumen al final
   function downloadCSV(filename = 'rendimiento.csv') {
