@@ -1,10 +1,10 @@
 <!doctype html>
 <html lang="es">
 <head>
-    <link rel="stylesheet" href="./src/styles.css" />
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>MVP Atención</title>
+  <!-- Deja un SOLO link al CSS -->
   <link rel="stylesheet" href="./src/styles.css" />
 </head>
 <body>
@@ -27,17 +27,28 @@
     </section>
 
     <aside class="right">
+      <!-- ⬇️ CARD DE CÁMARA: aquí están los cambios de HU-002 -->
       <div class="card">
+        <h3>Cámara</h3>
+        <p>Estado:
+          <span id="cam-status" class="pill pill-neutral">Permiso pendiente</span>
+        </p>
+        <div id="cam-help" class="help hidden"></div>
+
         <button id="btn-permitir">Permitir cámara</button>
+        <button id="btn-reintentar" class="secondary">Reintentar</button>
+
         <video id="cam" autoplay playsinline muted></video>
         <canvas id="canvas" width="640" height="480"></canvas>
       </div>
+
       <div class="card">
         <h3>Estado</h3>
         <p>Pestaña: <span id="tab-state">—</span></p>
         <p>Atención: <span id="attn-state">—</span></p>
         <p>FPS: <span id="fps">—</span> | Latencia p95: <span id="p95">—</span> ms</p>
       </div>
+
       <div class="card">
         <button id="btn-start">Iniciar</button>
         <button id="btn-stop">Finalizar y exportar</button>
@@ -45,6 +56,7 @@
       </div>
     </aside>
   </main>
+
   <script type="module" src="./src/metrics.js"></script>
   <script type="module" src="./src/tab-logger.js"></script>
   <script type="module" src="./src/app.js"></script>
