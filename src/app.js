@@ -1,4 +1,4 @@
-// app.js
+// src/app.js
 import { createMetrics } from './metrics.js';
 import { createTabLogger } from './tab-logger.js';
 
@@ -12,7 +12,7 @@ const attn = document.getElementById('attn-state');
 const fpsEl = document.getElementById('fps');
 const p95El = document.getElementById('p95');
 
-// ⬇️ NUEVO: elementos de HU-002
+// HU-002: elementos de estado de cámara
 const camStatus = document.getElementById('cam-status');
 const camHelp   = document.getElementById('cam-help');
 const btnRetry  = document.getElementById('btn-reintentar');
@@ -138,11 +138,14 @@ function loop() {
 btnStart.onclick = () => {
   if (!stream) { alert('Primero permite la cámara.'); return; }
   running = true;
+  metrics.start();         // inicia medición de rendimiento (EN-001)
   tabLogger.start();
   loop();
 };
 
 btnStop.onclick = () => {
   running = false;
-  tabLogger.stopAndDownloadCSV();
+  metrics.stop();                          // detiene medición
+  metrics.downloadCSV('rendimiento.csv');  // descarga CSV de rendimiento
+  tabLogger.stopAndDownloadCSV();          // descarga CSV del logger de pestaña
 };
