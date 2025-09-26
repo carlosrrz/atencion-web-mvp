@@ -18,6 +18,13 @@ const attn = document.getElementById('attn-state');
 const fpsEl = document.getElementById('fps');
 const p95El = document.getElementById('p95');
 
+/* HU-010: tabs y cronómetro */
+const tabButtons = document.querySelectorAll('.tab');
+const lecturaSec = document.getElementById('lectura');
+const videoSec   = document.getElementById('video');
+const sessionStatus = document.getElementById('session-status');
+const sessionTime   = document.getElementById('session-time');
+
 /* (opcionales en HTML; si no existen, no rompe) */
 const yawEl   = document.getElementById('yaw')   || { textContent: '' };
 const blinkEl = document.getElementById('blink') || { textContent: '' };
@@ -27,20 +34,51 @@ const ctx = canvas.getContext('2d');
 const metrics = createMetrics();
 const tabLogger = createTabLogger();
 
-// Actualiza el estado de pestaña en vivo
-tabLogger.onChange((rec) => {
-  tabState.textContent = (rec.label === 'EN_PESTAÑA') ? 'En pestaña' : 'Fuera de pestaña';
-});
-
-// Alerta visual simple cuando se supera el umbral (off-tab)
-tabLogger.setOnAlert(() => {
-  attn.textContent = 'ALERTA: fuera de pestaña';
-});
-
 let stream = null;
 let running = false;
 
-/* ==== HU-002: utilidades de estado de cámara ==== */
+/* HU-010: control de cronómetro de sesión */
+let t0 = 0;
+let timerId = null;
+function fmtMMSS(ms) {
+  const s = Math.floor(ms/1000);
+  const mm = String(Math.floor(s/60)).padStart(2,'0');
+  const ss = String(s%60).padStart(2,'0');
+  return `${mm}:${ss}`;
+}
+function startTimer() {
+  t0 = Date.now();
+  sessionStatus.textContent = 'Monitoreando';
+  sessionTime.textContent = '00:00';
+  clearInterval(timerId);
+  timerId = setInterval(() => {
+    sessionTime.textContent = fmtMMSS(Date.now() - t0);
+  }, 500);
+}
+function stopTimer() {
+  clearInterval(timerId);
+  timerId = null;
+  sessionStatus.textContent = 'Detenida';
+}
+
+/* HU-010: tabs Lectura/Video */
+function switchTab(which) {
+  tabButtons.forEach(b => b.classList.toggle('active', b.dataset.t === which));
+  if (which === 'lectura') {
+    lecturaSec.classList.remove('hidden');
+    videoSec.classList.add('hidden');
+  } else {
+    lecturaSec.classList.add('hidden');
+    videoSec.classList.remove('hidden');
+  }
+}
+tabButtons.forEach(btn => {
+  btn.addEventListener('click', () => switchTab(btn.dataset.t));
+});
+
+/* =========================
+   HU-002: utilidades de estado de cámara
+   ========================= */
 function insecureContext() {
   return !(location.protocol === 'https:' || location.hostname === 'localhost');
 }
@@ -60,7 +98,9 @@ async function hasVideoInput() {
   return devices.some(d => d.kind === 'videoinput');
 }
 
-/* ==== BU-001: permisos y recuperación robusta ==== */
+/* =========================
+   BU-001: permisos y recuperación robusta
+   ========================= */
 async function getCamPermissionState() {
   if (!navigator.permissions?.query) return null;
   try {
@@ -138,6 +178,9 @@ async function startCamera() {
 
 /* Estado inicial al cargar + vigilancia de permiso */
 (async function initCameraStatus() {
+  // Tabs por defecto
+  switchTab('lectura');
+
   if (!navigator.mediaDevices?.getUserMedia) {
     setCamStatus('err', 'No soportado', 'Este navegador no soporta cámara (getUserMedia). Prueba Chrome/Edge.');
     return;
@@ -272,6 +315,9 @@ btnStart.onclick = async () => {
   running = true;
   metrics.start();         // EN-001: medir rendimiento
   tabLogger.start();
+  startTimer();            // HU-010: cronómetro de sesión
+  btnStart.disabled = true;
+  btnStop.disabled  = false;
   loop();
 };
 btnStop.onclick = () => {
@@ -279,4 +325,7 @@ btnStop.onclick = () => {
   metrics.stop();                          // EN-001: detiene medición
   metrics.downloadCSV('rendimiento.csv');  // EN-001: CSV rendimiento
   tabLogger.stopAndDownloadCSV();          // CSV actividad pestaña
+  stopTimer();                             // HU-010: detiene cronómetro
+  btnStart.disabled = false;
+  btnStop.disabled  = true;
 };
