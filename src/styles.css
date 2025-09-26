@@ -26,3 +26,7 @@ header { border-bottom:1px solid #eee; }
 /* Panel Estado */
 #session-status { font-weight:700; }
 #session-time { font-variant-numeric: tabular-nums; font-weight:600; }
+
+.video-wrap { position: relative; width: 100%; background:#000; }
+#cam, #canvas { width: 100%; height: auto; display:block; }
+#canvas { position:absolute; inset:0; pointer-events:none; } /* overlay */

@@ -161,6 +161,10 @@ async function startCamera() {
     const { stream: s, label } = await openCameraWithFallback();
     stream = s;
     cam.srcObject = stream;
+    cam.onloadedmetadata = () => {
+      canvas.width  = cam.videoWidth;
+      canvas.height = cam.videoHeight;
+    };
     attachStreamHandlers(stream);
     setCamStatus('ok', `Listo (${label})`, 'La cámara está activa. Puedes Iniciar la evaluación.');
   } catch (e) {
