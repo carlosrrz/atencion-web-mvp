@@ -52,3 +52,26 @@ header { border-bottom:1px solid #eee; }
   top: 0; left: 0; right: 0; bottom: 0; 
   pointer-events: none; 
 }
+
+/* Banner solo para el título */
+header { 
+  display: block;         /* evitamos el layout en fila */
+  padding: 0;
+  margin-bottom: 16px;
+}
+
+header h1 {
+  display: block;
+  width: 100%;
+  margin: 0 0 8px 0;
+  padding: 16px 20px;
+  background: #4aa3ff;    /* azul claro */
+  color: #fff;            /* texto blanco */
+  border-radius: 8px;     /* opcional: esquinas suaves */
+}
+
+/* El enlace de Privacidad queda abajo a la derecha */
+header nav { 
+  text-align: right; 
+  padding: 0 20px 0 20px; 
+}
