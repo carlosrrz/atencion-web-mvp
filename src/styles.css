@@ -30,3 +30,23 @@ header { border-bottom:1px solid #eee; }
 .video-wrap { position: relative; width: 100%; background:#000; }
 #cam, #canvas { width: 100%; height: auto; display:block; }
 #canvas { position:absolute; inset:0; pointer-events:none; } /* overlay */
+
+/* Overlay: video abajo, canvas encima y contenido contenido en su caja */
+.video-wrap { 
+  position: relative; 
+  width: 100%; 
+  background:#000; 
+  overflow: hidden;    /* evita que el overlay se desborde */
+}
+
+#cam, #canvas { 
+  width: 100%; 
+  height: auto; 
+  display: block; 
+}
+
+#canvas { 
+  position: absolute; 
+  top: 0; left: 0; right: 0; bottom: 0; 
+  pointer-events: none; 
+}
