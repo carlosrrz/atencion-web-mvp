@@ -27,6 +27,16 @@ const ctx = canvas.getContext('2d');
 const metrics = createMetrics();
 const tabLogger = createTabLogger();
 
+// Actualiza el estado de pestaña en vivo
+tabLogger.onChange((rec) => {
+  tabState.textContent = (rec.label === 'EN_PESTAÑA') ? 'En pestaña' : 'Fuera de pestaña';
+});
+
+// Alerta visual simple cuando se supera el umbral (off-tab)
+tabLogger.setOnAlert(() => {
+  attn.textContent = 'ALERTA: fuera de pestaña';
+});
+
 let stream = null;
 let running = false;
 
