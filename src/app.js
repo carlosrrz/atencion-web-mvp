@@ -161,6 +161,16 @@ async function startCamera() {
     const { stream: s, label } = await openCameraWithFallback();
     stream = s;
     cam.srcObject = stream;
+    // Arranca el video y ajusta tamaño del canvas
+    try { await cam.play(); } catch {}
+    cam.onloadedmetadata = () => {
+      canvas.width  = cam.videoWidth;
+      canvas.height = cam.videoHeight;
+    };
+    // Para preview: mostrar video y ocultar overlay
+    cam.classList.remove('hidden');
+    canvas.classList.add('hidden');
+
     cam.onloadedmetadata = () => {
       canvas.width  = cam.videoWidth;
       canvas.height = cam.videoHeight;
@@ -322,6 +332,7 @@ btnStart.onclick = async () => {
   startTimer();            // HU-010: cronómetro de sesión
   btnStart.disabled = true;
   btnStop.disabled  = false;
+  canvas.classList.remove('hidden');
   loop();
 };
 btnStop.onclick = () => {
@@ -332,4 +343,6 @@ btnStop.onclick = () => {
   stopTimer();                             // HU-010: detiene cronómetro
   btnStart.disabled = false;
   btnStop.disabled  = true;
+  canvas.classList.add('hidden');
+  cam.classList.remove('hidden');
 };
