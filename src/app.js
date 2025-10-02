@@ -340,6 +340,18 @@ btnStop.onclick = () => {
   metrics.stop();                          // EN-001: detiene medición
   metrics.downloadCSV('rendimiento.csv');  // EN-001: CSV rendimiento
   tabLogger.stopAndDownloadCSV();          // CSV actividad pestaña
+
+    // ⬇️ NUEVO: calcular y mostrar resumen de off-tab
+  const summary = tabLogger.getSummary();
+  const offEp   = document.getElementById('off-episodes');
+  const offTime = document.getElementById('off-time');
+  if (offEp)   offEp.textContent = String(summary.offEpisodes);
+  if (offTime) offTime.textContent = fmtMMSS(summary.offTotalMs);
+
+  // ⬇️ NUEVO: descargar resumen (elige JSON o CSV)
+  tabLogger.downloadSummaryJSON('resumen_sesion.json');
+  // tabLogger.downloadSummaryCSV('resumen_sesion.csv');
+  
   stopTimer();                             // HU-010: detiene cronómetro
   btnStart.disabled = false;
   btnStop.disabled  = true;
