@@ -37,6 +37,8 @@ const tabLogger = createTabLogger();
 
 let stream = null;
 let running = false;
+let camRequested = false; // solo reconectar si el usuario lo pidió explícitamente
+
 
 /* HU-010: control de cronómetro de sesión */
 let t0 = 0;
@@ -212,7 +214,7 @@ async function startCamera() {
 
 /* Reintentos suaves por visibilidad/dispositivos */
 document.addEventListener('visibilitychange', async () => {
-  if (document.visibilityState === 'visible' && !stream) {
+  if (document.visibilityState === 'visible' && !stream && camRequested) {
     const st = await getCamPermissionState();
     if (st === 'granted') {
       setCamStatus('warn', 'Reintentando cámara…', 'Volviste a la pestaña; intentando reconectar.');
@@ -220,12 +222,14 @@ document.addEventListener('visibilitychange', async () => {
     }
   }
 });
+
 navigator.mediaDevices?.addEventListener?.('devicechange', async () => {
-  if (!stream) {
+  if (!stream && camRequested) {
     const st = await getCamPermissionState();
     if (st === 'granted') await startCamera();
   }
 });
+
 
 /* ==== TA-001: MediaPipe Face Landmarker (yaw + blink) ==== */
 let mpReady = false;
@@ -315,11 +319,17 @@ function loop() {
 }
 
 /* ==== Botones ==== */
-btnPermitir.onclick = async () => { await startCamera(); };
+btnPermitir.onclick = async () => {
+  camRequested = true;
+  await startCamera();
+};
+
 btnRetry.onclick = async () => {
   releaseStream();
+  camRequested = false; // opcional: pedir de nuevo intención
   setCamStatus('neutral', 'Permiso pendiente', 'Presiona “Permitir cámara” para iniciar.');
 };
+
 btnStart.onclick = async () => {
   if (!stream) { alert('Primero permite la cámara.'); return; }
   await ensureMediaPipe();
