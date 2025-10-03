@@ -87,27 +87,65 @@ header nav {
 .exam-actions { display: flex; gap: 8px; }
 #exam-result { margin-top: 10px; padding: 10px; border: 1px solid #e5e7eb; border-radius: 8px; background: #f6ffed; }
 
-/* Modal de consentimiento */
+/* Modal de consentimiento – una sola tarjeta */
 .modal-backdrop {
-  position: fixed; inset: 0; background: rgba(0,0,0,.45); z-index: 50;
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,.45);
+  z-index: 50;
 }
-.modal {
-  position: fixed; inset: 0; display: grid; place-items: center; z-index: 51;
-}
-.modal > * { box-sizing: border-box; }
-.modal.hidden, .modal-backdrop.hidden { display: none; }
-.modal .consent-check { display: flex; gap: 8px; align-items: center; margin: 10px 0; }
 
-.modal { padding: 16px; }
-.modal > h3, .modal > p, .modal > ul, .modal > .modal-actions {
+.modal {
+  position: fixed;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  z-index: 51;
+}
+
+.modal.hidden,
+.modal-backdrop.hidden {
+  display: none;
+}
+
+.modal-card {
+  box-sizing: border-box;
   width: min(720px, 92vw);
-  background: #fff; color: #111; border: 1px solid #e5e7eb; border-radius: 12px;
-  padding: 16px; box-shadow: 0 10px 30px rgba(0,0,0,.15);
+  background: #fff;
+  color: #111;
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  padding: 18px 20px;
+  box-shadow: 0 10px 30px rgba(0,0,0,.15);
 }
-.modal > h3 { margin-bottom: 0; border-bottom-left-radius: 0; border-bottom-right-radius: 0; }
-.modal > p, .modal > ul { margin-top: 8px; border-top-left-radius: 0; border-top-right-radius: 0; }
-.modal > .modal-actions {
-  display: flex; align-items: center; gap: 10px; margin-top: 8px;
-  border-top-left-radius: 0; border-top-right-radius: 0;
+
+.modal-card h3 {
+  margin: 0 0 10px;
 }
-.modal-actions .spacer { flex: 1; }
+
+.modal-card p {
+  margin: 8px 0;
+}
+
+.modal-card ul {
+  margin: 8px 0 14px 18px;
+}
+
+.consent-check {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin: 10px 0;
+}
+
+.modal-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.modal-actions .spacer {
+  flex: 1;
+}
+

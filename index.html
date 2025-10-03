@@ -126,34 +126,39 @@
       </div>
     </aside>
   </main>
-  
-<!-- BACKDROP + MODAL DE CONSENTIMIENTO -->
+
+<!-- BACKDROP + MODAL DE CONSENTIMIENTO (UN SOLO CUADRO) -->
 <div id="consent-backdrop" class="modal-backdrop hidden" aria-hidden="true"></div>
 <div id="consent-modal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="consent-title">
-  <h3 id="consent-title">Consentimiento para Modo Estudio</h3>
-  <p>Para iniciar el “Modo Estudio” esta aplicación necesita usar tu cámara y registrar eventos
-     de atención (pestaña activa/inactiva, parpadeo/ojos cerrados, giro de cabeza) y métricas de
-     rendimiento (FPS/latencia). <strong>No se guarda video crudo</strong>; sólo señales y conteos
-     para generar un resumen de sesión.</p>
-  <ul>
-    <li>Uso de cámara (preview local en el navegador).</li>
-    <li>Detección de pestaña activa/inactiva (on/off-tab).</li>
-    <li>Cómputo de eventos (ojos cerrados, giro de cabeza), FPS y p95.</li>
-    <li>Exportación local de CSV/JSON bajo tu control.</li>
-  </ul>
+  <div class="modal-card">
+    <h3 id="consent-title">Consentimiento para Modo Estudio</h3>
 
-  <label class="consent-check">
-    <input type="checkbox" id="consent-check" />
-    He leído y acepto las condiciones del Modo Estudio.
-  </label>
+    <p>Para iniciar el “Modo Estudio” esta aplicación necesita usar tu cámara y registrar eventos
+       de atención (pestaña activa/inactiva, parpadeo/ojos cerrados, giro de cabeza) y métricas de
+       rendimiento (FPS/latencia). <strong>No se guarda video crudo</strong>; sólo señales y conteos
+       para generar un resumen de sesión.</p>
 
-  <div class="modal-actions">
-    <a href="/privacidad.html" target="_blank" rel="noopener">Ver política completa</a>
-    <span class="spacer"></span>
-    <button id="consent-cancel" class="secondary">Cancelar</button>
-    <button id="consent-accept" disabled>Acepto</button>
+    <ul>
+      <li>Uso de cámara (preview local en el navegador).</li>
+      <li>Detección de pestaña activa/inactiva (on/off-tab).</li>
+      <li>Cómputo de eventos (ojos cerrados, giro de cabeza), FPS y p95.</li>
+      <li>Exportación local de CSV/JSON bajo tu control.</li>
+    </ul>
+
+    <label class="consent-check">
+      <input type="checkbox" id="consent-check" />
+      He leído y acepto las condiciones del Modo Estudio.
+    </label>
+
+    <div class="modal-actions">
+      <a href="/privacidad.html" target="_blank" rel="noopener">Ver política completa</a>
+      <span class="spacer"></span>
+      <button id="consent-cancel" class="secondary">Cancelar</button>
+      <button id="consent-accept" disabled>Acepto</button>
+    </div>
   </div>
 </div>
+
 
   <script type="module" src="./src/metrics.js"></script>
   <script type="module" src="./src/tab-logger.js"></script>
