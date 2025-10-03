@@ -18,6 +18,49 @@ const attn = document.getElementById('attn-state');
 const fpsEl = document.getElementById('fps');
 const p95El = document.getElementById('p95');
 
+// Umbrales RN-001
+const PERF_THRESH = {
+  fps: { green: 24, amber: 18 },       // ≥24 OK, 18–23 ámbar, <18 rojo
+  p95: { green: 200, amber: 350 }      // ≤200 OK, 201–350 ámbar, >350 rojo
+};
+
+// Accesos a los "pills"
+const fpsPill = document.getElementById('fps-pill');
+const p95Pill = document.getElementById('p95-pill');
+const overallPill = document.getElementById('perf-overall');
+
+function levelForFPS(fps) {
+  if (fps >= PERF_THRESH.fps.green) return 'ok';
+  if (fps >= PERF_THRESH.fps.amber) return 'warn';
+  return 'err';
+}
+function levelForP95(ms) {
+  if (ms <= PERF_THRESH.p95.green) return 'ok';
+  if (ms <= PERF_THRESH.p95.amber) return 'warn';
+  return 'err';
+}
+function setPill(el, level, label) {
+  if (!el) return;
+  el.classList.remove('pill-neutral','pill-ok','pill-warn','pill-err');
+  el.classList.add('pill', `pill-${level}`);
+  el.textContent = label;
+  el.setAttribute('data-level', level);
+  el.setAttribute('aria-label', `Estado ${label}`);
+}
+function overallFrom(levelA, levelB) {
+  const rank = { ok: 0, warn: 1, err: 2 };
+  return (rank[levelA] >= rank[levelB]) ? levelA : levelB; // el peor manda
+}
+function updatePerfIndicators(fpsMed, latP95) {
+  const lvFps = levelForFPS(fpsMed);
+  const lvP95 = levelForP95(latP95);
+  setPill(fpsPill, lvFps, lvFps === 'ok' ? '🟢' : lvFps === 'warn' ? '🟠' : '🔴');
+  setPill(p95Pill, lvP95, lvP95 === 'ok' ? '🟢' : lvP95 === 'warn' ? '🟠' : '🔴');
+  const ov = overallFrom(lvFps, lvP95);
+  setPill(overallPill, ov, ov === 'ok' ? '🟢 Óptimo' : ov === 'warn' ? '🟠 Atención' : '🔴 Riesgo');
+}
+
+
 /* HU-010: tabs y cronómetro */
 const tabButtons = document.querySelectorAll('.tab');
 const lecturaSec = document.getElementById('lectura');
@@ -348,6 +391,7 @@ function loop() {
     fpsEl.textContent = Math.round(fpsMed);
     p95El.textContent = latP95.toFixed(1);
     tabState.textContent = document.visibilityState === 'visible' ? 'En pestaña' : 'Fuera de pestaña';
+    updatePerfIndicators(fpsMed, latP95);
   }
   requestAnimationFrame(loop);
 }

@@ -12,11 +12,16 @@ video, canvas { width:100%; max-height:240px; background:#000; }
 body { background:#f7f7f7; font-family: Arial, sans-serif; }
 header { border-bottom:1px solid #eee; }
 
-.pill { display:inline-block; padding:2px 8px; border-radius:999px; font-weight:600; }
-.pill-neutral { background:#eee; color:#333; }
-.pill-ok { background:#d1fae5; color:#065f46; }
-.pill-warn { background:#fef3c7; color:#92400e; }
-.pill-err { background:#fee2e2; color:#991b1b; }
+/* Semáforo */
+.pill {
+  display: inline-block; padding: 2px 8px; border-radius: 999px;
+  font-size: 12px; line-height: 1.4; border: 1px solid transparent;
+}
+.pill-neutral { background:#f3f4f6; color:#374151; border-color:#e5e7eb; }
+.pill-ok      { background:#e6f9ed; color:#0f5132; border-color:#a7e1bf; }   /* verde  */
+.pill-warn    { background:#fff7e6; color:#8a6d3b; border-color:#ffe0a6; }   /* ámbar  */
+.pill-err     { background:#fde7e7; color:#842029; border-color:#f5b5b8; }   /* rojo   */
+
 .help { font-size:0.9rem; color:#555; margin:8px 0; }
 .secondary { background:#f5f5f5; border:1px solid #ddd; }
 
