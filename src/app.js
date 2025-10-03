@@ -39,6 +39,20 @@ const sections = {
   examen:  document.getElementById('examen') || document.getElementById('exam-root'),
 };
 
+// Detección “mirada desviada” con histéresis
+const DETECT_EVERY = 4;     // chequea cada 4 frames (menos ruido)
+const ENTER_AR   = 0.62;    // entrar a “desviado” si ancho/alto < 0.62
+const EXIT_AR    = 0.70;    // salir cuando > 0.70 (histéresis)
+const ENTER_OFF  = 0.22;    // entrar si |offset nariz| > 0.22
+const EXIT_OFF   = 0.18;    // salir cuando < 0.18
+const SCORE_ENTER = 12;     // ~1.2 s si chequeas ~10 veces/seg
+const SCORE_EXIT  = 6;      // ~0.6 s para volver a “atento”
+const MIN_FACE_AREA = 0.05; // ignora detecciones muy pequeñas (ruido)
+
+let awayScore = 0;          // acumulador
+let isLookAway = false;     // estado estable actual
+
+
 // ===== Estado =====
 let stream = null;
 let running = false;
@@ -48,7 +62,7 @@ let sessionStart = 0;
 
 let landmarker = null;
 let lastVideoTime = -1;
-const DETECT_EVERY   = 3;      // corre cada 3 frames
+
 const LOOK_AWAY_MS   = 1000;   // tiempo sostenido para declarar “mirada desviada”
 const AR_THRESHOLD   = 0.70;   // ancho/alto < 0.70 ≈ perfil lateral (ajústalo 0.65–0.75)
 
@@ -193,63 +207,74 @@ function loop(){
     const ms = performance.now() - sessionStart;
     sessionTime && (sessionTime.textContent = fmtTime(ms));
 
-  // Pestaña actual
+  // Pestaña
 const nowVisible = (document.visibilityState === 'visible');
 tabState && (tabState.textContent = nowVisible ? 'En pestaña' : 'Fuera de pestaña');
 
-// Atención:
-// - fuera de pestaña >= 2s → "distracción (fuera de pestaña)"
-// - mirada desviada (perfil o sin rostro) >= 1s → "mirada desviada"
-// - fuera de pestaña < 2s → "intermitente"
-// - en pestaña y sin desvío → "atento"
+// Atención priorizando pestaña; luego mirada estabilizada
 let attnState = 'atento';
-const now = performance.now();
-
 if (!nowVisible) {
-  const hiddenFor = offTabStart ? (now - offTabStart) : 0;
+  const hiddenFor = offTabStart ? (performance.now() - offTabStart) : 0;
   attnState = hiddenFor >= 2000 ? 'distracción (fuera de pestaña)' : 'intermitente';
-} else if (lookAwaySince && (now - lookAwaySince) >= LOOK_AWAY_MS) {
+} else if (isLookAway) {
   attnState = 'mirada desviada';
 }
-
 attnEl && (attnEl.textContent = attnState);
+
 
   // Tiempo fuera acumulado
   const accum = offTabAccumMs + (offTabStart ? (performance.now() - offTabStart) : 0);
   offTimeEl && (offTimeEl.textContent = fmtTime(accum));
   offCntEl  && (offCntEl.textContent  = String(offTabEpisodes));
 }
-  // ---- Detección de “mirada desviada” cada N frames ----
+  // ---- Detección estabilizada de “mirada desviada” ----
 if (landmarker && frameCount % DETECT_EVERY === 0) {
   const ts = performance.now();
   if (cam.currentTime !== lastVideoTime) {
     lastVideoTime = cam.currentTime;
-
     const out = landmarker.detectForVideo(cam, ts);
     const lm  = out?.faceLandmarks?.[0];
-    const now = performance.now();
+
+    let awayNow = false, backNow = false;
 
     if (!lm) {
-      // no hay rostro detectado
-      if (!lookAwaySince) lookAwaySince = now;
+      // sin rostro: no penalices de inmediato; sube score lentamente
+      awayNow = true;
     } else {
-      // bounding box del rostro
-      let minx = 1, maxx = 0, miny = 1, maxy = 0;
-      for (const p of lm) {
-        if (p.x < minx) minx = p.x;
-        if (p.x > maxx) maxx = p.x;
-        if (p.y < miny) miny = p.y;
-        if (p.y > maxy) maxy = p.y;
-      }
-      const w = maxx - minx, h = maxy - miny;
-      const ar = w / (h + 1e-6);  // ancho/alto (normalizado)
+      // bbox normalizado
+      let minx=1,maxx=0,miny=1,maxy=0;
+      for (const p of lm) { if(p.x<minx)minx=p.x; if(p.x>maxx)maxx=p.x; if(p.y<miny)miny=p.y; if(p.y>maxy)maxy=p.y; }
+      const w = maxx - minx, h = maxy - miny, area = w * h;
+      const ar = w / (h + 1e-6);
 
-      // cara “estrecha” ≈ perfil (mirada desviada)
-      if (ar < AR_THRESHOLD) {
-        if (!lookAwaySince) lookAwaySince = now;
-      } else {
-        lookAwaySince = null;
+      // centro vs nariz → offset lateral normalizado
+      const cx = (minx + maxx) / 2;
+      const nose = lm[1] || lm[4] || lm[0];
+      const offset = Math.abs((nose.x - cx) / (w + 1e-6));
+
+      // si la cara es muy pequeña (ruido), no actualices nada
+      if (area >= MIN_FACE_AREA) {
+        // condiciones de entrada/salida con histéresis
+        awayNow = (ar < ENTER_AR) || (offset > ENTER_OFF);
+        backNow = (ar > EXIT_AR)  && (offset < EXIT_OFF);
       }
+    }
+
+    // integrar con histéresis: sube/baja score
+    if (awayNow) {
+      awayScore = Math.min(SCORE_ENTER, awayScore + 1);
+    } else if (backNow) {
+      awayScore = Math.max(0, awayScore - 2); // bajar más rápido al volver
+    } else {
+      awayScore = Math.max(0, awayScore - 1);
+    }
+
+    // cambios de estado cuando cruzan umbrales
+    if (!isLookAway && awayScore >= SCORE_ENTER) {
+      isLookAway = true;
+    }
+    if (isLookAway && awayScore <= SCORE_EXIT) {
+      isLookAway = false;
     }
   }
 }
