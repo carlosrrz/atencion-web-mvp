@@ -164,3 +164,12 @@ header nav {
   background: #000;         /* evita “gris” cuando no hay señal */
   border-radius: 8px;
 }
+/* Preview/canvas 16:9 controlado */
+#cam, #canvas {
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  max-height: 360px;
+  object-fit: cover;
+  background: #000;
+  border-radius: 8px;
+}
