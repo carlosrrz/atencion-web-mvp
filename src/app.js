@@ -65,6 +65,8 @@ function updatePerfIndicators(fpsMed, latP95) {
 const tabButtons = document.querySelectorAll('.tab');
 const lecturaSec = document.getElementById('lectura');
 const videoSec   = document.getElementById('video');
+let frameCount = 0;
+let sessionStart = 0;
 const sessionStatus = document.getElementById('session-status');
 const sessionTime   = document.getElementById('session-time');
 const examSec   = document.getElementById('examen');  // NUEVO
@@ -365,7 +367,39 @@ function predictMP(videoEl) {
 let uiCounter = 0;
 function loop() {
   if (!running) return;
+
+  // Espera a que el video tenga datos
+  if (cam.readyState < 2) {
+    requestAnimationFrame(loop);
+    return;
+  }
+
   const t0 = metrics.onFrameStart();
+  ctx.drawImage(cam, 0, 0, canvas.width, canvas.height);
+  metrics.onFrameEnd(t0);
+
+  // Actualiza UI cada ~10 frames
+  frameCount++;
+  if (frameCount % 10 === 0) {
+    const { fpsMed, latP95 } = metrics.read();
+    fpsEl.textContent = fpsMed;
+    p95El.textContent = latP95;
+    updatePerfIndicators?.(fpsMed, latP95);  // si implementaste RN-001
+
+    // Timer de sesión
+    const ms = performance.now() - sessionStart;
+    const s  = Math.floor(ms / 1000);
+    const mm = String(Math.floor(s / 60)).padStart(2, '0');
+    const ss = String(s % 60).padStart(2, '0');
+    sessionTime.textContent = `${mm}:${ss}`;
+
+    // Estado pestaña
+    tabState.textContent = document.visibilityState === 'visible' ? 'En pestaña' : 'Fuera de pestaña';
+  }
+
+  requestAnimationFrame(loop);
+}
+
 
   // Dibuja frame
   ctx.drawImage(cam, 0, 0, canvas.width, canvas.height);
@@ -400,8 +434,31 @@ function loop() {
 btnPermitir.onclick = async () => {
   if (!hasConsent()) { showConsent(); return; }
   camRequested = true;
-  await startCamera();
+  try {
+    stream = await navigator.mediaDevices.getUserMedia({ video: { width: 1280, height: 720 } });
+    cam.srcObject = stream;
+    await cam.play?.();
+
+    const setDims = () => {
+      // Usa dimensiones reales del video
+      if (cam.videoWidth && cam.videoHeight) {
+        canvas.width = cam.videoWidth;
+        canvas.height = cam.videoHeight;
+      } else {
+        // fallback a 640x360 si aún no hay metadata
+        canvas.width = 640; canvas.height = 360;
+      }
+    };
+    if (cam.readyState >= 2) setDims();
+    else cam.addEventListener('loadedmetadata', setDims, { once: true });
+
+    setCamStatus('ok', `Listo (${cam.videoWidth || 1280}x${cam.videoHeight || 720})`,
+                 'La cámara está activa. Puedes Iniciar la evaluación.');
+  } catch (e) {
+    // ... tu manejo de errores existente
+  }
 };
+
 
 btnRetry.onclick = async () => {
   releaseStream();
@@ -412,13 +469,19 @@ btnRetry.onclick = async () => {
 btnStart.onclick = () => {
   if (!hasConsent()) { showConsent(); return; }
   if (!stream) { alert('Primero permite la cámara.'); return; }
-  running = true; tabLogger.start(); loop();
+  running = true;
+  frameCount = 0;
+  sessionStart = performance.now();
+  sessionStatus.textContent = 'Monitoreando';
+  loop();
 };
+
 btnStop.onclick = () => {
   running = false;
-  metrics.stop();                          // EN-001: detiene medición
-  metrics.downloadCSV('rendimiento.csv');  // EN-001: CSV rendimiento
-  tabLogger.stopAndDownloadCSV();          // CSV actividad pestaña
+  sessionStatus.textContent = 'Detenida';
+  tabLogger.stopAndDownloadCSV();
+};
+
 
     // ⬇️ NUEVO: calcular y mostrar resumen de off-tab
   const summary = tabLogger.getSummary();

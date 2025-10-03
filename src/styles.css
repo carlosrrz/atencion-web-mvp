@@ -154,3 +154,13 @@ header nav {
   flex: 1;
 }
 
+/* Ajuste de cámara/canvas: 16:9, altura controlada */
+.card video,
+.card canvas {
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  max-height: 360px;        /* sube o baja este valor si quieres */
+  object-fit: cover;
+  background: #000;         /* evita “gris” cuando no hay señal */
+  border-radius: 8px;
+}
