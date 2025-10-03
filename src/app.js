@@ -40,6 +40,45 @@ let running = false;
 let camRequested = false; // solo reconectar si el usuario lo pidió explícitamente
 
 
+// === Consentimiento (RN-009) ===
+const consentBackdrop = document.getElementById('consent-backdrop');
+const consentModal    = document.getElementById('consent-modal');
+const consentAccept   = document.getElementById('consent-accept');
+const consentCancel   = document.getElementById('consent-cancel');
+const consentCheck    = document.getElementById('consent-check');
+
+// Si tu link del header es <a id="open-privacy">Privacidad</a>, también abrirá el modal:
+document.getElementById('open-privacy')?.addEventListener('click', (e) => {
+  e.preventDefault(); showConsent();
+});
+
+const CONSENT_KEY = 'mvp.consent.v1';
+function hasConsent() {
+  try { return !!localStorage.getItem(CONSENT_KEY); } catch { return false; }
+}
+function setConsent() {
+  try { localStorage.setItem(CONSENT_KEY, JSON.stringify({ v: 1, ts: Date.now() })); } catch {}
+}
+function clearConsent() { try { localStorage.removeItem(CONSENT_KEY); } catch {} }
+
+function showConsent() {
+  consentCheck.checked = false;
+  consentAccept.disabled = true;
+  consentBackdrop.classList.remove('hidden');
+  consentModal.classList.remove('hidden');
+  consentCheck.focus();
+}
+function hideConsent() {
+  consentBackdrop.classList.add('hidden');
+  consentModal.classList.add('hidden');
+}
+consentCheck?.addEventListener('change', () => {
+  consentAccept.disabled = !consentCheck.checked;
+});
+consentCancel?.addEventListener('click', hideConsent);
+consentAccept?.addEventListener('click', () => { setConsent(); hideConsent(); });
+
+
 /* HU-010: control de cronómetro de sesión */
 let t0 = 0;
 let timerId = null;
@@ -214,21 +253,16 @@ async function startCamera() {
 
 /* Reintentos suaves por visibilidad/dispositivos */
 document.addEventListener('visibilitychange', async () => {
-  if (document.visibilityState === 'visible' && !stream && camRequested) {
-    const st = await getCamPermissionState();
-    if (st === 'granted') {
-      setCamStatus('warn', 'Reintentando cámara…', 'Volviste a la pestaña; intentando reconectar.');
-      await startCamera();
-    }
+  if (document.visibilityState === 'visible' && !stream && camRequested && hasConsent()) {
+    const st = await getCamPermissionState?.(); // si tienes este helper
+    if (!st || st === 'granted') await startCamera();
   }
 });
 
 navigator.mediaDevices?.addEventListener?.('devicechange', async () => {
-  if (!stream && camRequested) {
-    const st = await getCamPermissionState();
-    if (st === 'granted') await startCamera();
-  }
+  if (!stream && camRequested && hasConsent()) await startCamera();
 });
+
 
 
 /* ==== TA-001: MediaPipe Face Landmarker (yaw + blink) ==== */
@@ -320,6 +354,7 @@ function loop() {
 
 /* ==== Botones ==== */
 btnPermitir.onclick = async () => {
+  if (!hasConsent()) { showConsent(); return; }
   camRequested = true;
   await startCamera();
 };
@@ -330,17 +365,10 @@ btnRetry.onclick = async () => {
   setCamStatus('neutral', 'Permiso pendiente', 'Presiona “Permitir cámara” para iniciar.');
 };
 
-btnStart.onclick = async () => {
+btnStart.onclick = () => {
+  if (!hasConsent()) { showConsent(); return; }
   if (!stream) { alert('Primero permite la cámara.'); return; }
-  await ensureMediaPipe();
-  running = true;
-  metrics.start();         // EN-001: medir rendimiento
-  tabLogger.start();
-  startTimer();            // HU-010: cronómetro de sesión
-  btnStart.disabled = true;
-  btnStop.disabled  = false;
-  canvas.classList.remove('hidden');
-  loop();
+  running = true; tabLogger.start(); loop();
 };
 btnStop.onclick = () => {
   running = false;
