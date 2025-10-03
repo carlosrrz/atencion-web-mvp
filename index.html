@@ -18,14 +18,79 @@
       <div class="tabs">
         <button class="tab active" data-t="lectura">Lectura</button>
         <button class="tab" data-t="video">Video</button>
+        <button class="tab" data-t="examen">Examen</button>
       </div>
       <article id="lectura">
-        <h2>Recurso: Atención sostenida</h2>
-        <p>Texto breve de ejemplo para lectura…</p>
-      </article>
-      <div id="video" class="hidden"><div class="video-placeholder">[Video]</div></div>
-    </section>
+        <h2>Hábitos de estudio eficaces para Ingeniería</h2>
+        <p>En carreras como Ingeniería de Computación y Sistemas, el estudio efectivo combina
+          <strong>planificación</strong>, <strong>práctica deliberada</strong> y <strong>descanso controlado</strong>.El objetivo no es estudiar más horas, sino estudiar mejor.</p>
+          <h3>1) Plan de bloques cortos</h3>
+          <ul>
+            <li>Define sesiones de 25–40 min de concentración y 5–10 min de pausa breve.</li>
+            <li>Comienza por 1–2 objetivos muy concretos (p. ej., “resolver 4 ejercicios de recursividad”).</li>
+          </ul>
+          <h3>2) Práctica activa</h3>
+          <ul>
+            <li>Alterna entre <em>leer</em> y <em>hacer</em>: implementa pequeños fragmentos de código o resuelve
+              un ejercicio similar tras cada sección teórica.</li>
+              <li>Explícale el concepto a otra persona (o a ti mismo en voz alta) para detectar lagunas.</li>
+            </ul>
+            <h3>3) Gestión de distracciones</h3>
+            <ul>
+              <li>Estudia con una sola pestaña principal y desactiva notificaciones durante el bloque.</li>
+              <li>Si aparecen interrupciones, anótalas y retómalas en la pausa.</li>
+            </ul>
+            <h3>4) Espaciado y repasos</h3>
+            <ul>
+              <li>Usa repasos espaciados (1–2–4 días) con tarjetas o resúmenes breves.</li>
+              <li>Prioriza errores: vuelve sobre los ejercicios en los que fallaste.</li>
+            </ul>
+            <h3>5) Cuidado personal</h3>
+            <ul>
+              <li>Sueño, hidratación y pausas activas mejoran la atención sostenida.</li>
+            </ul>
+            <blockquote>
+              <strong>Consejo:</strong> para temas complejos (p. ej., complejidad algorítmica),
+              alterna 1 bloque de lectura con 1 bloque de implementación de un caso mínimo.
+            </blockquote>
+          </article>
 
+      <div id="video" class="hidden">
+  <div class="video-container">
+    <iframe
+      title="Técnicas de estudio para ingeniería"
+      width="560" height="315"
+      src="https://www.youtube-nocookie.com/embed?listType=search&list=tecnicas%20de%20estudio%20ingenieria"
+      allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+      referrerpolicy="strict-origin-when-cross-origin"
+      allowfullscreen>
+    </iframe>
+  </div>
+</div>
+
+<section id="examen" class="hidden">
+  <h2>Test de Prueba</h2>
+  <p id="exam-instr">
+    Responde las siguientes preguntas por favor. Los resultados se guardarán de manera anónima.
+  </p>
+  <div id="exam-ui" class="quiz">
+    <div id="exam-meta" class="quiz-meta">
+      Pregunta <span id="exam-idx">0</span>/<span id="exam-total">0</span>
+      · RT: <span id="exam-rt">0.0</span>s
+    </div>
+
+    <div id="q-text" class="q-text">—</div>
+    <div id="q-options" class="q-options"></div>
+
+    <div class="exam-actions">
+      <button id="btn-exam-start">Iniciar test</button>
+      <button id="btn-exam-next" class="hidden">Siguiente</button>
+      <button id="btn-exam-finish" class="hidden">Finalizar</button>
+    </div>
+
+    <div id="exam-result" class="hidden"></div>
+  </div>
+</section>
     <aside class="right">
       <!-- ⬇️ CARD DE CÁMARA: aquí están los cambios de HU-002 -->
       <div class="card">
@@ -66,5 +131,6 @@
   <script type="module" src="./src/metrics.js"></script>
   <script type="module" src="./src/tab-logger.js"></script>
   <script type="module" src="./src/app.js"></script>
+  <script type="module" src="./src/exam.js"></script>
 </body>
 </html>

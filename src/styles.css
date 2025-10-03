@@ -75,3 +75,14 @@ header nav {
   text-align: right; 
   padding: 0 20px 0 20px; 
 }
+.video-container { position: relative; padding-bottom: 56.25%; height: 0; overflow: hidden; border-radius: 10px; }
+.video-container iframe { position: absolute; top:0; left:0; width:100%; height:100%; border:0; }
+
+/* Examen */
+.quiz { margin-top: 8px; }
+.quiz-meta { font-size: 0.95rem; opacity: 0.9; margin-bottom: 8px; }
+.q-text { font-weight: 600; margin: 8px 0; }
+.q-options { display: grid; gap: 6px; margin-bottom: 10px; }
+.q-options label { display: flex; gap: 8px; align-items: flex-start; padding: 8px; border: 1px solid #e5e7eb; border-radius: 8px; background: #fafafa; }
+.exam-actions { display: flex; gap: 8px; }
+#exam-result { margin-top: 10px; padding: 10px; border: 1px solid #e5e7eb; border-radius: 8px; background: #f6ffed; }
