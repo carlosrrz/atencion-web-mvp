@@ -24,6 +24,7 @@ const lecturaSec = document.getElementById('lectura');
 const videoSec   = document.getElementById('video');
 const sessionStatus = document.getElementById('session-status');
 const sessionTime   = document.getElementById('session-time');
+const examSec   = document.getElementById('examen');  // NUEVO
 
 /* (opcionales en HTML; si no existen, no rompe) */
 const yawEl   = document.getElementById('yaw')   || { textContent: '' };
@@ -64,13 +65,9 @@ function stopTimer() {
 /* HU-010: tabs Lectura/Video */
 function switchTab(which) {
   tabButtons.forEach(b => b.classList.toggle('active', b.dataset.t === which));
-  if (which === 'lectura') {
-    lecturaSec.classList.remove('hidden');
-    videoSec.classList.add('hidden');
-  } else {
-    lecturaSec.classList.add('hidden');
-    videoSec.classList.remove('hidden');
-  }
+  lecturaSec.classList.toggle('hidden', which !== 'lectura');
+  videoSec.classList.toggle('hidden',   which !== 'video');
+  examSec.classList.toggle('hidden',    which !== 'examen');
 }
 tabButtons.forEach(btn => {
   btn.addEventListener('click', () => switchTab(btn.dataset.t));
