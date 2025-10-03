@@ -1,6 +1,7 @@
 // app.js — MVP estable con pestaña/atención/episodios/tiempo fuera en vivo
 import { createMetrics } from './metrics.js';
 import { createTabLogger } from './tab-logger.js';
+import { FilesetResolver, FaceLandmarker } from "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.3";
 
 // ===== DOM =====
 const cam = document.getElementById('cam');
@@ -44,6 +45,13 @@ let running = false;
 let camRequested = false;
 let frameCount = 0;
 let sessionStart = 0;
+
+let landmarker = null;
+let lastVideoTime = -1;
+const DETECT_EVERY = 3;                 // corre cada 3 frames
+const YAW_DEG_THRESHOLD = 20;           // umbral de “mirada desviada”
+const LOOK_AWAY_MS = 1000;              // sostenido por ≥ 1s
+let lookAwaySince = null;               // cuándo empezó la desviación
 
 // pestaña/atención
 let offTabStart = null;   // timestamp cuando se sale de pestaña
@@ -95,22 +103,69 @@ function updatePerfUI(){
 }
 
 // ===== Cámara =====
-async function startCamera(){
-  if (insecureContext()){ setCamStatus('warn','HTTPS requerido','Abre la app en HTTPS o localhost.'); return; }
-  try{
-    stream = await navigator.mediaDevices.getUserMedia({ video:{ width:1280, height:720 } });
-    cam.srcObject = stream; await cam.play?.();
-    if (cam.readyState>=2) syncCanvasToVideo();
-    else cam.addEventListener('loadedmetadata', syncCanvasToVideo, {once:true});
-    setCamStatus('ok',`Listo (${cam.videoWidth||1280}x${cam.videoHeight||720})`,'La cámara está activa. Puedes Iniciar.');
-  }catch(e){
-    const n=e?.name||'CameraError';
-    if(n==='NotAllowedError'||n==='SecurityError') setCamStatus('err','Permiso denegado','Candado → Cámara: Permitir.');
-    else if(n==='NotFoundError'||n==='OverconstrainedError') setCamStatus('err','Sin cámara','Conecta una webcam o verifica drivers.');
-    else if(n==='NotReadableError') setCamStatus('warn','Cámara ocupada','Cierra Zoom/Meet/Teams y reintenta.');
-    else setCamStatus('err','Error de cámara',`Detalle: ${n}`);
+async function startCamera() {
+  if (insecureContext()) {
+    setCamStatus('warn', 'HTTPS requerido', 'Abre la app en HTTPS o localhost.');
+    return;
+  }
+  try {
+    // 1) Abrir cámara
+    stream = await navigator.mediaDevices.getUserMedia({
+      video: { width: 1280, height: 720 }
+    });
+    cam.srcObject = stream;
+    await cam.play?.();
+
+    // 2) Ajustar canvas al tamaño real del video
+    if (cam.readyState >= 2) {
+      syncCanvasToVideo();
+    } else {
+      cam.addEventListener('loadedmetadata', syncCanvasToVideo, { once: true });
+    }
+
+    // 3) UI OK
+    setCamStatus(
+      'ok',
+      `Listo (${cam.videoWidth || 1280}x${cam.videoHeight || 720})`,
+      'La cámara está activa. Puedes Iniciar.'
+    );
+
+    // 4) Cargar en paralelo el modelo de rostro (para "mirada desviada").
+    //    Si falla, se continúa sin ese plus (no rompe el MVP).
+    (async () => {
+      try {
+        if (!landmarker) {
+          const wasmBase = "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.3/wasm";
+          const fileset   = await FilesetResolver.forVisionTasks(wasmBase);
+          landmarker = await FaceLandmarker.createFromOptions(fileset, {
+            baseOptions: {
+              modelAssetPath:
+                "https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task"
+            },
+            runningMode: "VIDEO",
+            numFaces: 1,
+            outputFaceBlendshapes: true
+          });
+        }
+      } catch (err) {
+        console.warn("No se pudo cargar FaceLandmarker (se continúa sin mirada):", err);
+      }
+    })();
+
+  } catch (e) {
+    const n = e?.name || 'CameraError';
+    if (n === 'NotAllowedError' || n === 'SecurityError') {
+      setCamStatus('err', 'Permiso denegado', 'Candado → Cámara: Permitir.');
+    } else if (n === 'NotFoundError' || n === 'OverconstrainedError') {
+      setCamStatus('err', 'Sin cámara', 'Conecta una webcam o verifica drivers.');
+    } else if (n === 'NotReadableError') {
+      setCamStatus('warn', 'Cámara ocupada', 'Cierra Zoom/Meet/Teams y reintenta.');
+    } else {
+      setCamStatus('err', 'Error de cámara', `Detalle: ${n}`);
+    }
   }
 }
+
 
 // ===== Loop =====
 function loop(){
@@ -136,23 +191,63 @@ function loop(){
     const ms = performance.now() - sessionStart;
     sessionTime && (sessionTime.textContent = fmtTime(ms));
 
-    // ======= ACTUALIZACIONES PEDIDAS =======
-    const nowVisible = (document.visibilityState === 'visible');
-    tabState && (tabState.textContent = nowVisible ? 'En pestaña' : 'Fuera de pestaña');
-
-    // Atención: 'atento', 'intermitente' (<2s fuera), 'distracción (fuera de pestaña)' (>=2s)
-    let attnState = 'atento';
-    if (!nowVisible){
-      const hiddenFor = offTabStart ? (performance.now() - offTabStart) : 0;
-      attnState = hiddenFor >= 2000 ? 'distracción (fuera de pestaña)' : 'intermitente';
-    }
-    attnEl && (attnEl.textContent = attnState);
-
-    // Tiempo fuera acumulado (si sigue fuera, suma el tramo actual)
-    const accum = offTabAccumMs + (offTabStart ? (performance.now() - offTabStart) : 0);
-    offTimeEl && (offTimeEl.textContent = fmtTime(accum));
-    offCntEl  && (offCntEl.textContent  = String(offTabEpisodes));
+   // ======= ACTUALIZACIONES PEDIDAS =======
+   const nowVisible = (document.visibilityState === 'visible');
+   tabState && (tabState.textContent = nowVisible ? 'En pestaña' : 'Fuera de pestaña');
+   // Atención:
+   // // - fuera de pestaña >=2s  -> "distracción (fuera de pestaña)"
+   // // - mirada desviada >=1s   -> "mirada desviada"
+   // // - fuera de pestaña <2s   -> "intermitente"
+   // // - en pestaña sin desvío  -> "atento"
+   let attnState = 'atento';
+   const now = performance.now();
+   if (!nowVisible) {
+    const hiddenFor = offTabStart ? (now - offTabStart) : 0;
+    attnState = hiddenFor >= 2000 ? 'distracción (fuera de pestaña)' : 'intermitente';
+  } else if (lookAwaySince && (now - lookAwaySince) >= LOOK_AWAY_MS) {
+    attnState = 'mirada desviada';
   }
+  attnEl && (attnEl.textContent = attnState);
+  // Tiempo fuera acumulado
+  const accum = offTabAccumMs + (offTabStart ? (performance.now() - offTabStart) : 0);
+  offTimeEl && (offTimeEl.textContent = fmtTime(accum));
+  offCntEl  && (offCntEl.textContent  = String(offTabEpisodes));
+}
+  // ---- Detección de "mirada desviada" cada N frames ----
+if (landmarker && frameCount % DETECT_EVERY === 0) {
+  const ts = performance.now();
+  // evita reprocesar el mismo frame de video
+  if (cam.currentTime !== lastVideoTime) {
+    lastVideoTime = cam.currentTime;
+
+    const out = landmarker.detectForVideo(cam, ts);
+    const lm  = out?.faceLandmarks?.[0];
+    const cats = out?.faceBlendshapes?.[0]?.categories || [];
+
+    // 1) intenta con blendshape headYaw si existe
+    let yawDeg = 0;
+    const yawBS = cats.find(c => c.categoryName === "headYaw")?.score;
+    if (typeof yawBS === "number") {
+      yawDeg = Math.round((yawBS - 0.5) * 90);  // ~[-45, +45]
+    } else if (lm) {
+      // 2) fallback geométrico: nariz vs centro del rostro
+      const xs = lm.map(p => p.x);
+      const minx = Math.min(...xs), maxx = Math.max(...xs);
+      const cx = (minx + maxx) / 2;
+      const nose = lm[1] || lm[4] || lm[0];
+      const offset = (nose.x - cx) / (maxx - minx + 1e-6);
+      yawDeg = Math.round(offset * 90);
+    }
+
+    // marcar/salvar periodo sostenido de desvío
+    const now = performance.now();
+    if (Math.abs(yawDeg) > YAW_DEG_THRESHOLD) {
+      if (!lookAwaySince) lookAwaySince = now;
+    } else {
+      lookAwaySince = null;
+    }
+  }
+}
 
   requestAnimationFrame(loop);
 }
