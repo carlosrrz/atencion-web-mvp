@@ -48,10 +48,11 @@ let sessionStart = 0;
 
 let landmarker = null;
 let lastVideoTime = -1;
-const DETECT_EVERY = 3;                 // corre cada 3 frames
-const YAW_DEG_THRESHOLD = 20;           // umbral de “mirada desviada”
-const LOOK_AWAY_MS = 1000;              // sostenido por ≥ 1s
-let lookAwaySince = null;               // cuándo empezó la desviación
+const DETECT_EVERY   = 3;      // corre cada 3 frames
+const LOOK_AWAY_MS   = 1000;   // tiempo sostenido para declarar “mirada desviada”
+const AR_THRESHOLD   = 0.70;   // ancho/alto < 0.70 ≈ perfil lateral (ajústalo 0.65–0.75)
+
+let lookAwaySince = null;      // cuándo empezó la desviación
 
 // pestaña/atención
 let offTabStart = null;   // timestamp cuando se sale de pestaña
@@ -133,24 +134,25 @@ async function startCamera() {
     // 4) Cargar en paralelo el modelo de rostro (para "mirada desviada").
     //    Si falla, se continúa sin ese plus (no rompe el MVP).
     (async () => {
-      try {
-        if (!landmarker) {
-          const wasmBase = "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.3/wasm";
-          const fileset   = await FilesetResolver.forVisionTasks(wasmBase);
-          landmarker = await FaceLandmarker.createFromOptions(fileset, {
-            baseOptions: {
-              modelAssetPath:
-                "https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task"
-            },
-            runningMode: "VIDEO",
-            numFaces: 1,
-            outputFaceBlendshapes: true
-          });
-        }
-      } catch (err) {
-        console.warn("No se pudo cargar FaceLandmarker (se continúa sin mirada):", err);
-      }
-    })();
+  try {
+    if (!landmarker) {
+      const wasmBase = "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.3/wasm";
+      const fileset = await FilesetResolver.forVisionTasks(wasmBase);
+      landmarker = await FaceLandmarker.createFromOptions(fileset, {
+        baseOptions: {
+          modelAssetPath:
+            "https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task",
+        },
+        runningMode: "VIDEO",
+        numFaces: 1,
+        outputFaceBlendshapes: true,
+      });
+    }
+  } catch (err) {
+    console.warn("FaceLandmarker no disponible (continuará sin mirada):", err);
+  }
+})();
+
 
   } catch (e) {
     const n = e?.name || 'CameraError';
@@ -191,63 +193,67 @@ function loop(){
     const ms = performance.now() - sessionStart;
     sessionTime && (sessionTime.textContent = fmtTime(ms));
 
-   // ======= ACTUALIZACIONES PEDIDAS =======
-   const nowVisible = (document.visibilityState === 'visible');
-   tabState && (tabState.textContent = nowVisible ? 'En pestaña' : 'Fuera de pestaña');
-   // Atención:
-   // // - fuera de pestaña >=2s  -> "distracción (fuera de pestaña)"
-   // // - mirada desviada >=1s   -> "mirada desviada"
-   // // - fuera de pestaña <2s   -> "intermitente"
-   // // - en pestaña sin desvío  -> "atento"
-   let attnState = 'atento';
-   const now = performance.now();
-   if (!nowVisible) {
-    const hiddenFor = offTabStart ? (now - offTabStart) : 0;
-    attnState = hiddenFor >= 2000 ? 'distracción (fuera de pestaña)' : 'intermitente';
-  } else if (lookAwaySince && (now - lookAwaySince) >= LOOK_AWAY_MS) {
-    attnState = 'mirada desviada';
-  }
-  attnEl && (attnEl.textContent = attnState);
+  // Pestaña actual
+const nowVisible = (document.visibilityState === 'visible');
+tabState && (tabState.textContent = nowVisible ? 'En pestaña' : 'Fuera de pestaña');
+
+// Atención:
+// - fuera de pestaña >= 2s → "distracción (fuera de pestaña)"
+// - mirada desviada (perfil o sin rostro) >= 1s → "mirada desviada"
+// - fuera de pestaña < 2s → "intermitente"
+// - en pestaña y sin desvío → "atento"
+let attnState = 'atento';
+const now = performance.now();
+
+if (!nowVisible) {
+  const hiddenFor = offTabStart ? (now - offTabStart) : 0;
+  attnState = hiddenFor >= 2000 ? 'distracción (fuera de pestaña)' : 'intermitente';
+} else if (lookAwaySince && (now - lookAwaySince) >= LOOK_AWAY_MS) {
+  attnState = 'mirada desviada';
+}
+
+attnEl && (attnEl.textContent = attnState);
+
   // Tiempo fuera acumulado
   const accum = offTabAccumMs + (offTabStart ? (performance.now() - offTabStart) : 0);
   offTimeEl && (offTimeEl.textContent = fmtTime(accum));
   offCntEl  && (offCntEl.textContent  = String(offTabEpisodes));
 }
-  // ---- Detección de "mirada desviada" cada N frames ----
+  // ---- Detección de “mirada desviada” cada N frames ----
 if (landmarker && frameCount % DETECT_EVERY === 0) {
   const ts = performance.now();
-  // evita reprocesar el mismo frame de video
   if (cam.currentTime !== lastVideoTime) {
     lastVideoTime = cam.currentTime;
 
     const out = landmarker.detectForVideo(cam, ts);
     const lm  = out?.faceLandmarks?.[0];
-    const cats = out?.faceBlendshapes?.[0]?.categories || [];
-
-    // 1) intenta con blendshape headYaw si existe
-    let yawDeg = 0;
-    const yawBS = cats.find(c => c.categoryName === "headYaw")?.score;
-    if (typeof yawBS === "number") {
-      yawDeg = Math.round((yawBS - 0.5) * 90);  // ~[-45, +45]
-    } else if (lm) {
-      // 2) fallback geométrico: nariz vs centro del rostro
-      const xs = lm.map(p => p.x);
-      const minx = Math.min(...xs), maxx = Math.max(...xs);
-      const cx = (minx + maxx) / 2;
-      const nose = lm[1] || lm[4] || lm[0];
-      const offset = (nose.x - cx) / (maxx - minx + 1e-6);
-      yawDeg = Math.round(offset * 90);
-    }
-
-    // marcar/salvar periodo sostenido de desvío
     const now = performance.now();
-    if (Math.abs(yawDeg) > YAW_DEG_THRESHOLD) {
+
+    if (!lm) {
+      // no hay rostro detectado
       if (!lookAwaySince) lookAwaySince = now;
     } else {
-      lookAwaySince = null;
+      // bounding box del rostro
+      let minx = 1, maxx = 0, miny = 1, maxy = 0;
+      for (const p of lm) {
+        if (p.x < minx) minx = p.x;
+        if (p.x > maxx) maxx = p.x;
+        if (p.y < miny) miny = p.y;
+        if (p.y > maxy) maxy = p.y;
+      }
+      const w = maxx - minx, h = maxy - miny;
+      const ar = w / (h + 1e-6);  // ancho/alto (normalizado)
+
+      // cara “estrecha” ≈ perfil (mirada desviada)
+      if (ar < AR_THRESHOLD) {
+        if (!lookAwaySince) lookAwaySince = now;
+      } else {
+        lookAwaySince = null;
+      }
     }
   }
 }
+
 
   requestAnimationFrame(loop);
 }
