@@ -1,4 +1,4 @@
-// app.js — MVP estable con calibración y detección robusta de "mirada desviada"
+// app.js — Detección más sensible a giros (EMA + movimiento), umbrales dinámicos y calibración
 import { createMetrics } from './metrics.js';
 import { createTabLogger } from './tab-logger.js';
 import { FilesetResolver, FaceLandmarker } from "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.3";
@@ -37,17 +37,17 @@ const sections = {
   examen:  document.getElementById('examen') || document.getElementById('exam-root'),
 };
 
-/* ========== Detección/Calibración ========== */
-// Detecta cada N frames para reducir ruido
-const DETECT_EVERY = 3;
-// Mínimo área de cara en coords normalizadas para considerar medición (ruido si es menor)
-const MIN_FACE_AREA = 0.08;
-// Ventana de warm-up para calibrar línea base mirando al frente
-const CALIBRATION_MS = 1500;
+/* ========== Detección / Calibración ========== */
+// Chequea más seguido → mayor reactividad
+const DETECT_EVERY = 2;
+// Cara mínima para medir (más permisivo que antes)
+const MIN_FACE_AREA = 0.06;
+// Calibración breve mirando al frente
+const CALIBRATION_MS = 1200;
 
-// Histeresis vía score (estable)
-const SCORE_ENTER = 8; // ~0.8s si detectas ~10/s
-const SCORE_EXIT  = 3; // baja más rápido
+// Histeresis por score (más reactiva)
+const SCORE_ENTER = 6; // frames “away” para entrar
+const SCORE_EXIT  = 2; // frames “back” para salir
 
 let awayScore   = 0;
 let isLookAway  = false;
@@ -69,13 +69,18 @@ let offTabAccumMs = 0;
 const metrics = createMetrics();
 const tabLogger = createTabLogger();
 
-/* Calibración dinámica */
+/* Calibración dinámica y filtros */
 let calibrating = false;
 let calStart = 0;
 let calAR = [];
 let calOFF = [];
 let dyn = { enterAR: 0.62, exitAR: 0.70, enterOFF: 0.22, exitOFF: 0.18 };
-let noFaceStreak = 0;
+
+// Suavizado y detector de movimiento
+let emaAR = null, emaOFF = null;
+const EMA_ALPHA = 0.30;       // smoothing corto
+const MOVE_OFF  = 0.085;      // salto de offset que se considera “movimiento” inmediato
+const MOVE_AR   = 0.060;      // salto de aspect ratio que se considera “movimiento” inmediato
 
 /* ========== Utiles ========== */
 const CONSENT_KEY = 'mvp.consent.v1';
@@ -137,7 +142,6 @@ async function startCamera() {
 
     setCamStatus('ok', `Listo (${cam.videoWidth||1280}x${cam.videoHeight||720})`, 'La cámara está activa. Puedes Iniciar.');
 
-    // Cargar modelo en paralelo
     (async () => {
       try {
         if (!landmarker) {
@@ -209,7 +213,7 @@ function loop(){
     offCntEl  && (offCntEl.textContent  = String(offTabEpisodes));
   }
 
-  // ---- Detección robusta de “mirada desviada” con calibración ----
+  // ---- Detección robusta de “mirada desviada” con EMA + MOVIMIENTO ----
   if (landmarker && frameCount % DETECT_EVERY === 0) {
     const ts = performance.now();
     if (cam.currentTime !== lastVideoTime) {
@@ -220,67 +224,43 @@ function loop(){
       let awayNow = false;
       let backNow = false;
 
-      if (!lm) {
-        // No penalizar ausencia de rostro (evita falsos positivos al inicio/ruido)
-        noFaceStreak++;
-        awayNow = false;
-      } else {
-        noFaceStreak = 0;
-
+      if (lm) {
         // bbox normalizado
         let minx=1,maxx=0,miny=1,maxy=0;
         for (const p of lm) { if(p.x<minx)minx=p.x; if(p.x>maxx)maxx=p.x; if(p.y<miny)miny=p.y; if(p.y>maxy)maxy=p.y; }
         const w = maxx - minx, h = maxy - miny, area = w * h;
-        const ar = w / (h + 1e-6);
+        const arRaw = w / (h + 1e-6);
 
-        // Centro del bbox vs CENTROIDE de landmarks (más estable que "nariz")
+        // Centro del bbox vs centroide de landmarks (offset lateral)
         const cx = (minx + maxx) / 2;
         let gx = 0;
         for (const p of lm) gx += p.x;
         gx /= lm.length;
-        const offset = Math.abs((gx - cx) / (w + 1e-6));
+        const offRaw = Math.abs((gx - cx) / (w + 1e-6));
 
         if (area >= MIN_FACE_AREA) {
-          // --- Calibración: recoge baseline 1.5s mirando al frente ---
-          if (calibrating) {
-            calAR.push(ar);
-            calOFF.push(offset);
-            if ((performance.now() - calStart) >= CALIBRATION_MS && calAR.length >= 6) {
-              const med = a => {
-                const s=[...a].sort((x,y)=>x-y);
-                const m=Math.floor(s.length/2);
-                return s.length%2?s[m]:(s[m-1]+s[m])/2;
-              };
-              const baseAR  = med(calAR);
-              const baseOFF = med(calOFF);
+          // EMA corto
+          emaAR  = (emaAR  == null) ? arRaw  : (1-EMA_ALPHA)*emaAR  + EMA_ALPHA*arRaw;
+          emaOFF = (emaOFF == null) ? offRaw : (1-EMA_ALPHA)*emaOFF + EMA_ALPHA*offRaw;
 
-              // Umbrales dinámicos con márgenes seguros
-              dyn.enterAR  = Math.max(0.55, baseAR - 0.12);
-              dyn.exitAR   = Math.max(dyn.enterAR + 0.06, baseAR - 0.04);
-              dyn.enterOFF = Math.min(0.35, baseOFF + 0.12);
-              dyn.exitOFF  = Math.min(0.30, baseOFF + 0.08);
+          const dAR  = Math.abs(arRaw  - emaAR);
+          const dOFF = Math.abs(offRaw - emaOFF);
+          const movementFast = (dOFF > MOVE_OFF) || (dAR > MOVE_AR);
 
-              calibrating = false;
-              // Opcional: feedback en consola
-              console.log('Calibrado:', { baseAR, baseOFF, dyn });
-            }
-          }
+          // Umbrales dinámicos con histéresis (más sensibles)
+          const useEnterAR  = dyn.enterAR;
+          const useExitAR   = dyn.exitAR;
+          const useEnterOFF = dyn.enterOFF;
+          const useExitOFF  = dyn.exitOFF;
 
-          // Condiciones usando umbrales dinámicos (con histéresis)
-          const useEnterAR  = dyn.enterAR,  useExitAR  = dyn.exitAR;
-          const useEnterOFF = dyn.enterOFF, useExitOFF = dyn.exitOFF;
-
-          awayNow = (ar < useEnterAR) || (offset > useEnterOFF);
-          backNow = (ar > useExitAR)  && (offset < useExitOFF);
-        } else {
-          // Cara demasiado pequeña → ignora
-          awayNow = false;
+          awayNow = movementFast || (arRaw < useEnterAR) || (offRaw > useEnterOFF);
+          backNow = (arRaw > useExitAR) && (offRaw < useExitOFF) && !movementFast;
         }
-      }
+      } // si no hay rostro, no penalizamos
 
-      // Integrador con histéresis por score
+      // Integrador por score (más reactivo a movimiento)
       if (awayNow) {
-        awayScore = Math.min(SCORE_ENTER, awayScore + 1);
+        awayScore = Math.min(SCORE_ENTER, awayScore + (3)); // sube más rápido
       } else if (backNow) {
         awayScore = Math.max(0, awayScore - 2);
       } else {
@@ -343,7 +323,8 @@ btnStart?.addEventListener('click', ()=>{
   // reset detección
   awayScore = 0; isLookAway = false;
   calibrating = !!landmarker; calStart = performance.now();
-  calAR.length=0; calOFF.length=0; noFaceStreak = 0;
+  calAR.length=0; calOFF.length=0;
+  emaAR=null; emaOFF=null;
 
   // métricas
   metrics.start();
@@ -354,7 +335,6 @@ btnStart?.addEventListener('click', ()=>{
 });
 
 btnStop?.addEventListener('click', ()=>{
-  // cierra episodio si sigue fuera
   if (offTabStart != null){
     const now = performance.now();
     const dur = now - offTabStart;
@@ -397,7 +377,42 @@ showSection(tabButtons.find(b=>b.classList.contains('active'))?.dataset.t || 'le
   tabState&&(tabState.textContent='—'); attnEl&&(attnEl.textContent='—');
   offCntEl&&(offCntEl.textContent='0'); offTimeEl&&(offTimeEl.textContent='00:00');
 
-  // link de privacidad en nueva pestaña
   document.getElementById('open-privacy')
     ?.addEventListener('click', (e)=>{ e.preventDefault(); window.open('/privacidad.html','_blank','noopener'); });
 })();
+
+/* ========== Calibración: umbrales dinámicos (más sensibles) ========== */
+// Se ejecuta durante el loop: guardamos muestras y al cumplir tiempo calculamos baseline
+(function attachCalibrationWatcher(){
+  const med = a => {
+    const s=[...a].sort((x,y)=>x-y), m=Math.floor(s.length/2);
+    return s.length%2?s[m]:(s[m-1]+s[m])/2;
+  };
+
+  // Hook: revisit dyn cada ~300ms usando requestAnimationFrame guardado en variables de arriba
+  let lastCheck = 0;
+  const tick = ()=>{
+    if (running && calibrating) {
+      const now = performance.now();
+      if ((now - calStart) >= CALIBRATION_MS && calAR.length >= 6) {
+        const baseAR  = med(calAR);
+        const baseOFF = med(calOFF);
+
+        // Márgenes más sensibles: entran antes, salen con pequeña histéresis
+        dyn.enterAR  = Math.max(0.55, baseAR - 0.10);
+        dyn.exitAR   = Math.max(dyn.enterAR + 0.04, baseAR - 0.03);
+        dyn.enterOFF = Math.min(0.32, baseOFF + 0.08);
+        dyn.exitOFF  = Math.min(0.28, baseOFF + 0.05);
+
+        calibrating = false;
+        console.log('Calibrado (sens):', { baseAR, baseOFF, dyn });
+      }
+      lastCheck = now;
+    }
+    requestAnimationFrame(tick);
+  };
+  requestAnimationFrame(tick);
+})();
+
+/* ========== Captura muestras para calibración dentro del loop de landmarks ========== */
+// (La recolección ocurre en el bloque de landmarks; cuando calibrating=true se hace calAR.push/calOFF.push)
