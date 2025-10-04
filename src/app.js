@@ -1,9 +1,9 @@
-// app.js — MVP estable con pestaña/atención/episodios/tiempo fuera en vivo
+// app.js — MVP estable con calibración y detección robusta de "mirada desviada"
 import { createMetrics } from './metrics.js';
 import { createTabLogger } from './tab-logger.js';
 import { FilesetResolver, FaceLandmarker } from "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.3";
 
-// ===== DOM =====
+/* ========== DOM ========== */
 const cam = document.getElementById('cam');
 const canvas = document.getElementById('canvas');
 const ctx = canvas.getContext('2d');
@@ -19,7 +19,6 @@ const camHelp   = document.getElementById('cam-help');
 const sessionStatus = document.getElementById('session-status');
 const sessionTime   = document.getElementById('session-time');
 
-// ===== NUEVO: campos a actualizar =====
 const tabState  = document.getElementById('tab-state');
 const attnEl    = document.getElementById('attn-state');
 const offCntEl  = document.getElementById('offtab-count');
@@ -31,7 +30,6 @@ const fpsPill = document.getElementById('fps-pill');
 const p95Pill = document.getElementById('p95-pill');
 const perfAll = document.getElementById('perf-overall');
 
-// Tabs
 const tabButtons = Array.from(document.querySelectorAll('.tab'));
 const sections = {
   lectura: document.getElementById('lectura'),
@@ -39,21 +37,21 @@ const sections = {
   examen:  document.getElementById('examen') || document.getElementById('exam-root'),
 };
 
-// Detección “mirada desviada” con histéresis
-const DETECT_EVERY = 4;     // chequea cada 4 frames (menos ruido)
-const ENTER_AR   = 0.62;    // entrar a “desviado” si ancho/alto < 0.62
-const EXIT_AR    = 0.70;    // salir cuando > 0.70 (histéresis)
-const ENTER_OFF  = 0.22;    // entrar si |offset nariz| > 0.22
-const EXIT_OFF   = 0.18;    // salir cuando < 0.18
-const SCORE_ENTER = 12;     // ~1.2 s si chequeas ~10 veces/seg
-const SCORE_EXIT  = 6;      // ~0.6 s para volver a “atento”
-const MIN_FACE_AREA = 0.05; // ignora detecciones muy pequeñas (ruido)
+/* ========== Detección/Calibración ========== */
+// Detecta cada N frames para reducir ruido
+const DETECT_EVERY = 3;
+// Mínimo área de cara en coords normalizadas para considerar medición (ruido si es menor)
+const MIN_FACE_AREA = 0.08;
+// Ventana de warm-up para calibrar línea base mirando al frente
+const CALIBRATION_MS = 1500;
 
-let awayScore = 0;          // acumulador
-let isLookAway = false;     // estado estable actual
+// Histeresis vía score (estable)
+const SCORE_ENTER = 8; // ~0.8s si detectas ~10/s
+const SCORE_EXIT  = 3; // baja más rápido
 
+let awayScore   = 0;
+let isLookAway  = false;
 
-// ===== Estado =====
 let stream = null;
 let running = false;
 let camRequested = false;
@@ -63,20 +61,23 @@ let sessionStart = 0;
 let landmarker = null;
 let lastVideoTime = -1;
 
-const LOOK_AWAY_MS   = 1000;   // tiempo sostenido para declarar “mirada desviada”
-const AR_THRESHOLD   = 0.70;   // ancho/alto < 0.70 ≈ perfil lateral (ajústalo 0.65–0.75)
-
-let lookAwaySince = null;      // cuándo empezó la desviación
-
 // pestaña/atención
-let offTabStart = null;   // timestamp cuando se sale de pestaña
-let offTabEpisodes = 0;   // # de episodios acumulados
-let offTabAccumMs = 0;    // tiempo fuera acumulado
+let offTabStart = null;
+let offTabEpisodes = 0;
+let offTabAccumMs = 0;
 
 const metrics = createMetrics();
 const tabLogger = createTabLogger();
 
-// ===== Util =====
+/* Calibración dinámica */
+let calibrating = false;
+let calStart = 0;
+let calAR = [];
+let calOFF = [];
+let dyn = { enterAR: 0.62, exitAR: 0.70, enterOFF: 0.22, exitOFF: 0.18 };
+let noFaceStreak = 0;
+
+/* ========== Utiles ========== */
 const CONSENT_KEY = 'mvp.consent.v1';
 const hasConsent  = () => { try { return !!localStorage.getItem(CONSENT_KEY); } catch { return false; } };
 const setConsent  = () => { try { localStorage.setItem(CONSENT_KEY, JSON.stringify({v:1,ts:Date.now()})); } catch {} };
@@ -95,78 +96,66 @@ function releaseStream(){ try { stream?.getTracks()?.forEach(t=>t.stop()); } cat
 function syncCanvasToVideo(){ const w=cam.videoWidth||640, h=cam.videoHeight||360; canvas.width=w; canvas.height=h; }
 const fmtTime = (ms)=>{ const s=Math.floor(ms/1000); const mm=String(Math.floor(s/60)).padStart(2,'0'); const ss=String(s%60).padStart(2,'0'); return `${mm}:${ss}`; };
 
-// ===== Semáforo rendimiento =====
+/* Semáforo rendimiento */
 const PERF={ fps:{green:24,amber:18}, p95:{green:200,amber:350} };
 const levelFPS=v=>v>=PERF.fps.green?'ok':v>=PERF.fps.amber?'warn':'err';
 const levelP95=v=>v<=PERF.p95.green?'ok':v<=PERF.p95.amber?'warn':'err';
 const worst=(a,b)=>({ok:0,warn:1,err:2}[a] >= {ok:0,warn:1,err:2}[b] ? a : b);
 function setPill(el, level, label){ if(!el) return; el.classList.remove('pill-neutral','pill-ok','pill-warn','pill-err'); el.classList.add('pill',`pill-${level}`); el.textContent=label; }
 
-// tracker simple FPS/p95
-let lastFrameTs=0; const fpsS=[]; const procS=[]; const MAXS=120;
-const push=(a,v)=>{a.push(v); if(a.length>MAXS)a.shift();};
-const median=a=>{ if(!a.length) return 0; const s=[...a].sort((x,y)=>x-y); const m=Math.floor(s.length/2); return s.length%2?s[m]:(s[m-1]+s[m])/2; };
-const perc=(a,p=.95)=>{ if(!a.length) return 0; const s=[...a].sort((x,y)=>x-y); const i=Math.min(s.length-1, Math.floor(p*(s.length-1))); return s[i]; };
 function updatePerfUI(){
-  const fpsMed=Math.round(median(fpsS));
-  const p95=Math.round(perc(procS,.95)*10)/10;
-  fpsEl&&(fpsEl.textContent=fpsMed); p95El&&(p95El.textContent=p95);
-  const lf=levelFPS(fpsMed), lp=levelP95(p95);
+  const { fpsMed, latP95 } = metrics.read();
+  fpsEl && (fpsEl.textContent = fpsMed.toFixed(1));
+  p95El && (p95El.textContent = latP95.toFixed(1));
+  const lf=levelFPS(fpsMed), lp=levelP95(latP95);
   setPill(fpsPill,lf,lf==='ok'?'🟢':lf==='warn'?'🟠':'🔴');
   setPill(p95Pill,lp,lp==='ok'?'🟢':lp==='warn'?'🟠':'🔴');
   setPill(perfAll,worst(lf,lp), worst(lf,lp)==='ok'?'🟢 Óptimo': worst(lf,lp)==='warn'?'🟠 Atención':'🔴 Riesgo');
 }
 
-// ===== Cámara =====
+/* ========== Cámara ========== */
 async function startCamera() {
   if (insecureContext()) {
     setCamStatus('warn', 'HTTPS requerido', 'Abre la app en HTTPS o localhost.');
     return;
   }
   try {
-    // 1) Abrir cámara
+    if (stream) releaseStream(); // idempotente
+
     stream = await navigator.mediaDevices.getUserMedia({
-      video: { width: 1280, height: 720 }
+      video: {
+        width: { ideal: 1280 }, height: { ideal: 720 },
+        facingMode: { ideal: 'user' }
+      },
+      audio: false
     });
     cam.srcObject = stream;
     await cam.play?.();
 
-    // 2) Ajustar canvas al tamaño real del video
-    if (cam.readyState >= 2) {
-      syncCanvasToVideo();
-    } else {
-      cam.addEventListener('loadedmetadata', syncCanvasToVideo, { once: true });
-    }
+    if (cam.readyState >= 2) syncCanvasToVideo();
+    else cam.addEventListener('loadedmetadata', syncCanvasToVideo, { once: true });
 
-    // 3) UI OK
-    setCamStatus(
-      'ok',
-      `Listo (${cam.videoWidth || 1280}x${cam.videoHeight || 720})`,
-      'La cámara está activa. Puedes Iniciar.'
-    );
+    setCamStatus('ok', `Listo (${cam.videoWidth||1280}x${cam.videoHeight||720})`, 'La cámara está activa. Puedes Iniciar.');
 
-    // 4) Cargar en paralelo el modelo de rostro (para "mirada desviada").
-    //    Si falla, se continúa sin ese plus (no rompe el MVP).
+    // Cargar modelo en paralelo
     (async () => {
-  try {
-    if (!landmarker) {
-      const wasmBase = "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.3/wasm";
-      const fileset = await FilesetResolver.forVisionTasks(wasmBase);
-      landmarker = await FaceLandmarker.createFromOptions(fileset, {
-        baseOptions: {
-          modelAssetPath:
-            "https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task",
-        },
-        runningMode: "VIDEO",
-        numFaces: 1,
-        outputFaceBlendshapes: true,
-      });
-    }
-  } catch (err) {
-    console.warn("FaceLandmarker no disponible (continuará sin mirada):", err);
-  }
-})();
-
+      try {
+        if (!landmarker) {
+          const wasmBase = "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.3/wasm";
+          const fileset = await FilesetResolver.forVisionTasks(wasmBase);
+          landmarker = await FaceLandmarker.createFromOptions(fileset, {
+            baseOptions: {
+              modelAssetPath: "https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task",
+            },
+            runningMode: "VIDEO",
+            numFaces: 1,
+            outputFaceBlendshapes: true,
+          });
+        }
+      } catch (err) {
+        console.warn("FaceLandmarker no disponible (continuará sin mirada):", err);
+      }
+    })();
 
   } catch (e) {
     const n = e?.name || 'CameraError';
@@ -182,8 +171,7 @@ async function startCamera() {
   }
 }
 
-
-// ===== Loop =====
+/* ========== Loop ========== */
 function loop(){
   if (!running) return;
   if (cam.readyState < 2){ requestAnimationFrame(loop); return; }
@@ -192,118 +180,138 @@ function loop(){
   ctx.drawImage(cam,0,0,canvas.width,canvas.height);
   const t1 = performance.now();
 
-  push(procS, t1-t0);
-  if (lastFrameTs) push(fpsS, 1000/(t1-lastFrameTs));
-  lastFrameTs = t1;
-
-  // opcional: tus métricas
-  try{ const m0=metrics.onFrameStart?.(); metrics.onFrameEnd?.(m0??t0); }catch{}
+  // Métricas por frame
+  try { const m0=metrics.onFrameStart?.(); metrics.onFrameEnd?.(m0??t0); } catch {}
 
   frameCount++;
   if (frameCount % 10 === 0){
     updatePerfUI();
-
-    // Cronómetro de sesión
     const ms = performance.now() - sessionStart;
     sessionTime && (sessionTime.textContent = fmtTime(ms));
 
-  // Pestaña
-const nowVisible = (document.visibilityState === 'visible');
-tabState && (tabState.textContent = nowVisible ? 'En pestaña' : 'Fuera de pestaña');
+    // Pestaña
+    const nowVisible = (document.visibilityState === 'visible');
+    tabState && (tabState.textContent = nowVisible ? 'En pestaña' : 'Fuera de pestaña');
 
-// Atención priorizando pestaña; luego mirada estabilizada
-let attnState = 'atento';
-if (!nowVisible) {
-  const hiddenFor = offTabStart ? (performance.now() - offTabStart) : 0;
-  attnState = hiddenFor >= 2000 ? 'distracción (fuera de pestaña)' : 'intermitente';
-} else if (isLookAway) {
-  attnState = 'mirada desviada';
-}
-attnEl && (attnEl.textContent = attnState);
+    // Atención priorizando pestaña; luego mirada estabilizada
+    let attnState = 'atento';
+    if (!nowVisible) {
+      const hiddenFor = offTabStart ? (performance.now() - offTabStart) : 0;
+      attnState = hiddenFor >= 2000 ? 'distracción (fuera de pestaña)' : 'intermitente';
+    } else if (isLookAway) {
+      attnState = 'mirada desviada';
+    }
+    attnEl && (attnEl.textContent = attnState);
 
+    // Tiempo fuera acumulado
+    const accum = offTabAccumMs + (offTabStart ? (performance.now() - offTabStart) : 0);
+    offTimeEl && (offTimeEl.textContent = fmtTime(accum));
+    offCntEl  && (offCntEl.textContent  = String(offTabEpisodes));
+  }
 
-  // Tiempo fuera acumulado
-  const accum = offTabAccumMs + (offTabStart ? (performance.now() - offTabStart) : 0);
-  offTimeEl && (offTimeEl.textContent = fmtTime(accum));
-  offCntEl  && (offCntEl.textContent  = String(offTabEpisodes));
-}
-  // ---- Detección estabilizada de “mirada desviada” ----
-if (landmarker && frameCount % DETECT_EVERY === 0) {
-  const ts = performance.now();
-  if (cam.currentTime !== lastVideoTime) {
-    lastVideoTime = cam.currentTime;
-    const out = landmarker.detectForVideo(cam, ts);
-    const lm  = out?.faceLandmarks?.[0];
+  // ---- Detección robusta de “mirada desviada” con calibración ----
+  if (landmarker && frameCount % DETECT_EVERY === 0) {
+    const ts = performance.now();
+    if (cam.currentTime !== lastVideoTime) {
+      lastVideoTime = cam.currentTime;
+      const out = landmarker.detectForVideo(cam, ts);
+      const lm  = out?.faceLandmarks?.[0];
 
-    let awayNow = false, backNow = false;
+      let awayNow = false;
+      let backNow = false;
 
-    if (!lm) {
-      // sin rostro: no penalices de inmediato; sube score lentamente
-      awayNow = true;
-    } else {
-      // bbox normalizado
-      let minx=1,maxx=0,miny=1,maxy=0;
-      for (const p of lm) { if(p.x<minx)minx=p.x; if(p.x>maxx)maxx=p.x; if(p.y<miny)miny=p.y; if(p.y>maxy)maxy=p.y; }
-      const w = maxx - minx, h = maxy - miny, area = w * h;
-      const ar = w / (h + 1e-6);
+      if (!lm) {
+        // No penalizar ausencia de rostro (evita falsos positivos al inicio/ruido)
+        noFaceStreak++;
+        awayNow = false;
+      } else {
+        noFaceStreak = 0;
 
-      // centro vs nariz → offset lateral normalizado
-      const cx = (minx + maxx) / 2;
-      const nose = lm[1] || lm[4] || lm[0];
-      const offset = Math.abs((nose.x - cx) / (w + 1e-6));
+        // bbox normalizado
+        let minx=1,maxx=0,miny=1,maxy=0;
+        for (const p of lm) { if(p.x<minx)minx=p.x; if(p.x>maxx)maxx=p.x; if(p.y<miny)miny=p.y; if(p.y>maxy)maxy=p.y; }
+        const w = maxx - minx, h = maxy - miny, area = w * h;
+        const ar = w / (h + 1e-6);
 
-      // si la cara es muy pequeña (ruido), no actualices nada
-      if (area >= MIN_FACE_AREA) {
-        // condiciones de entrada/salida con histéresis
-        awayNow = (ar < ENTER_AR) || (offset > ENTER_OFF);
-        backNow = (ar > EXIT_AR)  && (offset < EXIT_OFF);
+        // Centro del bbox vs CENTROIDE de landmarks (más estable que "nariz")
+        const cx = (minx + maxx) / 2;
+        let gx = 0;
+        for (const p of lm) gx += p.x;
+        gx /= lm.length;
+        const offset = Math.abs((gx - cx) / (w + 1e-6));
+
+        if (area >= MIN_FACE_AREA) {
+          // --- Calibración: recoge baseline 1.5s mirando al frente ---
+          if (calibrating) {
+            calAR.push(ar);
+            calOFF.push(offset);
+            if ((performance.now() - calStart) >= CALIBRATION_MS && calAR.length >= 6) {
+              const med = a => {
+                const s=[...a].sort((x,y)=>x-y);
+                const m=Math.floor(s.length/2);
+                return s.length%2?s[m]:(s[m-1]+s[m])/2;
+              };
+              const baseAR  = med(calAR);
+              const baseOFF = med(calOFF);
+
+              // Umbrales dinámicos con márgenes seguros
+              dyn.enterAR  = Math.max(0.55, baseAR - 0.12);
+              dyn.exitAR   = Math.max(dyn.enterAR + 0.06, baseAR - 0.04);
+              dyn.enterOFF = Math.min(0.35, baseOFF + 0.12);
+              dyn.exitOFF  = Math.min(0.30, baseOFF + 0.08);
+
+              calibrating = false;
+              // Opcional: feedback en consola
+              console.log('Calibrado:', { baseAR, baseOFF, dyn });
+            }
+          }
+
+          // Condiciones usando umbrales dinámicos (con histéresis)
+          const useEnterAR  = dyn.enterAR,  useExitAR  = dyn.exitAR;
+          const useEnterOFF = dyn.enterOFF, useExitOFF = dyn.exitOFF;
+
+          awayNow = (ar < useEnterAR) || (offset > useEnterOFF);
+          backNow = (ar > useExitAR)  && (offset < useExitOFF);
+        } else {
+          // Cara demasiado pequeña → ignora
+          awayNow = false;
+        }
       }
-    }
 
-    // integrar con histéresis: sube/baja score
-    if (awayNow) {
-      awayScore = Math.min(SCORE_ENTER, awayScore + 1);
-    } else if (backNow) {
-      awayScore = Math.max(0, awayScore - 2); // bajar más rápido al volver
-    } else {
-      awayScore = Math.max(0, awayScore - 1);
-    }
+      // Integrador con histéresis por score
+      if (awayNow) {
+        awayScore = Math.min(SCORE_ENTER, awayScore + 1);
+      } else if (backNow) {
+        awayScore = Math.max(0, awayScore - 2);
+      } else {
+        awayScore = Math.max(0, awayScore - 1);
+      }
 
-    // cambios de estado cuando cruzan umbrales
-    if (!isLookAway && awayScore >= SCORE_ENTER) {
-      isLookAway = true;
-    }
-    if (isLookAway && awayScore <= SCORE_EXIT) {
-      isLookAway = false;
+      if (!isLookAway && awayScore >= SCORE_ENTER) isLookAway = true;
+      if (isLookAway  && awayScore <= SCORE_EXIT)  isLookAway = false;
     }
   }
-}
-
 
   requestAnimationFrame(loop);
 }
 
-// ===== Pestaña: episodios y acumulado =====
+/* ========== Pestaña: episodios y acumulado ========== */
 document.addEventListener('visibilitychange', () => {
-  if (!running) return; // solo contar durante sesión
+  if (!running) return;
   const now = performance.now();
   if (document.visibilityState === 'hidden') {
-    // empieza un episodio
     offTabStart = now;
-  } else {
-    // termina episodio: si duró >=1.5s, cuenta; en todo caso suma al acumulado
-    if (offTabStart != null) {
-      const dur = now - offTabStart;
-      if (dur >= 1500) offTabEpisodes += 1;
-      offTabAccumMs += dur;
-      offTabStart = null;
-    }
+  } else if (offTabStart != null) {
+    const dur = now - offTabStart;
+    if (dur >= 1500) offTabEpisodes += 1;
+    offTabAccumMs += dur;
+    offTabStart = null;
   }
 });
 
-// ===== Handlers =====
+/* ========== Handlers ========== */
 btnPermitir?.addEventListener('click', async ()=>{
-  if (!hasConsent()){ // modal opcional
+  if (!hasConsent()){
     const mb=document.getElementById('consent-backdrop'), mm=document.getElementById('consent-modal');
     if (mb && mm){ mb.classList.remove('hidden'); mm.classList.remove('hidden'); }
     return;
@@ -311,7 +319,10 @@ btnPermitir?.addEventListener('click', async ()=>{
   camRequested = true;
   await startCamera();
 });
-btnRetry?.addEventListener('click', ()=>{ releaseStream(); setCamStatus('neutral','Permiso pendiente','Presiona “Permitir cámara”.'); });
+btnRetry?.addEventListener('click', ()=>{
+  releaseStream();
+  setCamStatus('neutral','Permiso pendiente','Presiona “Permitir cámara”.');
+});
 
 btnStart?.addEventListener('click', ()=>{
   if (!hasConsent()){
@@ -323,16 +334,23 @@ btnStart?.addEventListener('click', ()=>{
   running = true;
   frameCount = 0;
   sessionStart = performance.now();
-  lastFrameTs = 0; fpsS.length=0; procS.length=0;
 
   // reset pestaña/atención
   offTabStart   = (document.visibilityState === 'hidden') ? performance.now() : null;
   offTabEpisodes= 0;
   offTabAccumMs = 0;
 
+  // reset detección
+  awayScore = 0; isLookAway = false;
+  calibrating = !!landmarker; calStart = performance.now();
+  calAR.length=0; calOFF.length=0; noFaceStreak = 0;
+
+  // métricas
+  metrics.start();
+
   sessionStatus && (sessionStatus.textContent = 'Monitoreando');
   tabLogger.start?.();
-  loop();
+  requestAnimationFrame(loop);
 });
 
 btnStop?.addEventListener('click', ()=>{
@@ -345,6 +363,7 @@ btnStop?.addEventListener('click', ()=>{
     offTabStart = null;
   }
   running = false;
+  metrics.stop();
   sessionStatus && (sessionStatus.textContent = 'Detenida');
   tabLogger.stopAndDownloadCSV?.();
 });
@@ -359,7 +378,7 @@ navigator.mediaDevices?.addEventListener?.('devicechange', async ()=>{
   if (!stream && camRequested && hasConsent()) await startCamera();
 });
 
-// ===== Tabs =====
+/* ========== Tabs ========== */
 function showSection(key){
   for (const k of Object.keys(sections)){ const el=sections[k]; if(!el) continue; (k===key)?el.classList.remove('hidden'):el.classList.add('hidden'); }
   tabButtons.forEach(b => b.classList.toggle('active', b.dataset.t===key));
@@ -367,7 +386,7 @@ function showSection(key){
 tabButtons.forEach(btn=>btn.addEventListener('click', ()=>{ const k=btn.dataset.t; if(k) showSection(k); }));
 showSection(tabButtons.find(b=>b.classList.contains('active'))?.dataset.t || 'lectura');
 
-// ===== Estado inicial =====
+/* ========== Estado inicial ========== */
 (function init(){
   if (!navigator.mediaDevices?.getUserMedia){ setCamStatus('err','No soportado','Usa Chrome/Edge.'); return; }
   if (insecureContext()){ setCamStatus('warn','HTTPS requerido','Abre con candado (HTTPS) o localhost.'); return; }
@@ -377,4 +396,8 @@ showSection(tabButtons.find(b=>b.classList.contains('active'))?.dataset.t || 'le
   fpsEl&&(fpsEl.textContent='0'); p95El&&(p95El.textContent='0.0');
   tabState&&(tabState.textContent='—'); attnEl&&(attnEl.textContent='—');
   offCntEl&&(offCntEl.textContent='0'); offTimeEl&&(offTimeEl.textContent='00:00');
+
+  // link de privacidad en nueva pestaña
+  document.getElementById('open-privacy')
+    ?.addEventListener('click', (e)=>{ e.preventDefault(); window.open('/privacidad.html','_blank','noopener'); });
 })();
