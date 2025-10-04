@@ -1,4 +1,4 @@
-// app.js — Detección de atención con YAW real (MediaPipe) + offset + AR, calibración y adaptación
+// app.js — Atención con YAW real (matriz) + fallback por profundidad Z, calibración y adaptación
 import { createMetrics } from './metrics.js';
 import { createTabLogger } from './tab-logger.js';
 import { FilesetResolver, FaceLandmarker } from "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.3";
@@ -37,19 +37,18 @@ const sections = {
   examen:  document.getElementById('examen') || document.getElementById('exam-root'),
 };
 
-/* ===== Parámetros de detección ===== */
-const DETECT_EVERY   = 2;        // más reactivo
-const MIN_FACE_AREA  = 0.06;     // cara mínima aceptada (normalizada)
-const CALIBRATION_MS = 1200;     // mirar al frente al iniciar (~1.2 s)
+/* ===== Parámetros ===== */
+const DETECT_EVERY   = 2;
+const MIN_FACE_AREA  = 0.06;
+const CALIBRATION_MS = 1200;
 
-const EMA_ALPHA   = 0.30;        // suavizado de señales
-const MOVE_OFF    = 0.085;       // salto en offset considerado “movimiento”
-const MOVE_AR     = 0.060;       // salto en AR considerado “movimiento”
-const MOVE_YAW    = 0.12;        // salto en yaw rad (~7°) considerado “movimiento”
+const EMA_ALPHA = 0.30;
+const MOVE_OFF  = 0.085;
+const MOVE_AR   = 0.060;
+const MOVE_YAW  = 0.12;  // ~7° si usamos rad
 
-// Histéresis temporal (frames)
-const SCORE_ENTER = 6;           // frames away para entrar
-const SCORE_EXIT  = 2;           // frames back para salir
+const SCORE_ENTER = 6;
+const SCORE_EXIT  = 2;
 
 /* ===== Estado ===== */
 let awayScore   = 0;
@@ -64,7 +63,6 @@ let sessionStart = 0;
 let landmarker = null;
 let lastVideoTime = -1;
 
-// pestaña/atención
 let offTabStart = null;
 let offTabEpisodes = 0;
 let offTabAccumMs = 0;
@@ -72,19 +70,18 @@ let offTabAccumMs = 0;
 const metrics = createMetrics();
 const tabLogger = createTabLogger();
 
-/* Calibración y adaptación */
+/* Calibración / baseline */
 let calibrating = false;
 let calStart = 0;
 let calAR = [], calOFF = [], calYAW = [];
 
-// baseline dinámico y umbrales
-let base = { ar: 0.68, off: 0.18, yaw: 0.04 }; // valores razonables por defecto
+// baseline y umbrales (se ajustan tras calibrar/adaptar)
+let base = { ar: 0.68, off: 0.18, yaw: 0.04 };
 let thr  = {
-  enter: { ar: 0.58, off: 0.28, yaw: 0.25 },   // ≈ 14°
-  exit:  { ar: 0.62, off: 0.24, yaw: 0.16 }    // ≈ 9°
+  enter: { ar: 0.58, off: 0.28, yaw: 0.25 },
+  exit:  { ar: 0.62, off: 0.24, yaw: 0.16 }
 };
 
-// EMA de señales
 let ema = { ar: null, off: null, yaw: null };
 
 /* ===== Util ===== */
@@ -122,31 +119,40 @@ function updatePerfUI(){
 }
 
 /* ===== Pose helpers ===== */
-// Extrae yaw (rad) de la matriz 4x4 (aprox). Usamos magnitud |yaw|.
+// Yaw desde matriz 4x4 (row-major). Usamos |yaw| (rad).
 function yawFromMatrix(m){
-  // m es Float32Array(16) row-major: r00 r01 r02 0; r10 r11 r12 0; r20 r21 r22 0; 0 0 0 1
   const r00 = m[0], r01 = m[1], r02 = m[2];
   const r10 = m[4], r11 = m[5], r12 = m[6];
   const r20 = m[8], r21 = m[9], r22 = m[10];
-  // Aproximación estable (Y como eje vertical): yaw ≈ atan2(r02, r22)
-  const yaw = Math.atan2(r02, r22);
-  return Math.abs(yaw);
+  // Aproximación estable para yaw (eje Y): atan2(r02, r22)
+  return Math.abs(Math.atan2(r02, r22));
+}
+// Fallback: yaw proxy por diferencia de profundidad Z (izq vs der)
+function yawFromZ(lm, cx){
+  let zl=0, zr=0, nl=0, nr=0;
+  for (const p of lm){
+    if (p.x < cx){ zl += p.z; nl++; } else { zr += p.z; nr++; }
+  }
+  if (!nl || !nr) return 0;
+  return Math.abs((zl/nl) - (zr/nr)); // escala relativa; la calibración lo normaliza
 }
 
-function adaptBaseline(ar, off, yaw){
-  // adapta muy lento sólo cuando estamos atentos → sigue tu postura real
-  const ALPHA = 0.02;
+function adaptBaseline(ar, off, yaw, usingMatrixYaw){
+  const ALPHA = 0.02;      // adaptación lenta
   base.ar  = (1-ALPHA)*base.ar  + ALPHA*ar;
   base.off = (1-ALPHA)*base.off + ALPHA*off;
   base.yaw = (1-ALPHA)*base.yaw + ALPHA*yaw;
 
-  // Umbrales derivados del baseline (sensibles pero con histéresis)
+  // Delta según origen de yaw (matriz en rad vs z-diff)
+  const dEnter = usingMatrixYaw ? 0.20 : 0.06;
+  const dExit  = usingMatrixYaw ? 0.14 : 0.04;
+
   thr.enter.ar  = Math.max(0.50, base.ar  - 0.10);
   thr.exit.ar   = Math.max(thr.enter.ar + 0.04, base.ar - 0.03);
   thr.enter.off = Math.min(0.40, base.off + 0.10);
   thr.exit.off  = Math.min(0.34, base.off + 0.06);
-  thr.enter.yaw = Math.min(0.52, base.yaw + 0.22); // ~13°
-  thr.exit.yaw  = Math.min(0.40, base.yaw + 0.16); // ~9°
+  thr.enter.yaw = base.yaw + dEnter;
+  thr.exit.yaw  = base.yaw + dExit;
 }
 
 /* ===== Cámara ===== */
@@ -177,7 +183,11 @@ async function startCamera() {
           const fileset = await FilesetResolver.forVisionTasks(wasmBase);
           landmarker = await FaceLandmarker.createFromOptions(fileset, {
             baseOptions: { modelAssetPath: "https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task" },
-            runningMode: "VIDEO", numFaces: 1, outputFaceBlendshapes: true
+            runningMode: "VIDEO",
+            numFaces: 1,
+            outputFaceBlendshapes: true,
+            // 👇 IMPORTANTE: habilita matriz de transformación para obtener yaw real
+            outputFacialTransformationMatrixes: true
           });
         }
       } catch (err) { console.warn("FaceLandmarker no disponible:", err); }
@@ -223,7 +233,7 @@ function loop(){
     offCntEl  && (offCntEl.textContent  = String(offTabEpisodes));
   }
 
-  // ---- Detección: fusiona YAW + offset + AR ----
+  // ---- Detección: YAW (matriz o Z), offset y AR ----
   if (landmarker && frameCount % DETECT_EVERY === 0) {
     const ts = performance.now();
     if (cam.currentTime !== lastVideoTime) {
@@ -234,35 +244,38 @@ function loop(){
       let awayNow = false, backNow = false;
 
       if (lm) {
-        // bbox normalizado
+        // bbox
         let minx=1,maxx=0,miny=1,maxy=0;
         for (const p of lm) { if(p.x<minx)minx=p.x; if(p.x>maxx)maxx=p.x; if(p.y<miny)miny=p.y; if(p.y>maxy)maxy=p.y; }
         const w = maxx - minx, h = maxy - miny, area = w * h;
         if (area >= MIN_FACE_AREA) {
-          const arRaw = w / (h + 1e-6);
-          const cx = (minx + maxx) / 2;
+          const arRaw  = w / (h + 1e-6);
+          const cx     = (minx + maxx) / 2;
           let gx = 0; for (const p of lm) gx += p.x; gx /= lm.length;
           const offRaw = Math.abs((gx - cx) / (w + 1e-6));
 
-          // YAW real si hay matriz de transformación
+          // YAW real si hay matriz; si no, fallback por z
+          let usingMatrixYaw = false;
           let yawAbs = 0;
           const M = out?.facialTransformationMatrixes?.[0];
           if (M && typeof M[0] === 'number') {
             yawAbs = yawFromMatrix(M);
+            usingMatrixYaw = true;
+          } else {
+            yawAbs = yawFromZ(lm, cx); // diferencia de profundidades
           }
 
-          // EMA de señales
+          // EMA
           ema.ar  = (ema.ar  == null) ? arRaw  : (1-EMA_ALPHA)*ema.ar  + EMA_ALPHA*arRaw;
           ema.off = (ema.off == null) ? offRaw : (1-EMA_ALPHA)*ema.off + EMA_ALPHA*offRaw;
           ema.yaw = (ema.yaw == null) ? yawAbs : (1-EMA_ALPHA)*ema.yaw + EMA_ALPHA*yawAbs;
 
-          // Movimiento rápido
           const dAR  = Math.abs(arRaw  - ema.ar);
           const dOFF = Math.abs(offRaw - ema.off);
           const dYAW = Math.abs(yawAbs - ema.yaw);
           const movementFast = (dOFF > MOVE_OFF) || (dAR > MOVE_AR) || (dYAW > MOVE_YAW);
 
-          // Calibración inicial (baseline)
+          // Calibración inicial
           if (calibrating) {
             calAR.push(arRaw); calOFF.push(offRaw); calYAW.push(yawAbs);
             if ((performance.now() - calStart) >= CALIBRATION_MS && calAR.length >= 6) {
@@ -270,21 +283,22 @@ function loop(){
               base.ar  = med(calAR);
               base.off = med(calOFF);
               base.yaw = med(calYAW);
-              adaptBaseline(base.ar, base.off, base.yaw); // inicializa thr desde base
+              adaptBaseline(base.ar, base.off, base.yaw, usingMatrixYaw);
               calibrating = false;
-              console.log('Calibrado:', { base, thr });
+              console.log('Calibrado:', { base, thr, usingMatrixYaw });
             }
           }
 
-          // Umbrales actuales (si aún no calibró, usa thr iniciales por defecto)
+          // Umbrales vigentes
           const enter = (arRaw < thr.enter.ar) || (offRaw > thr.enter.off) || (yawAbs > thr.enter.yaw);
           const exit  = (arRaw > thr.exit.ar)  && (offRaw < thr.exit.off)  && (yawAbs < thr.exit.yaw);
+
           awayNow = movementFast || enter;
           backNow = !movementFast && exit;
 
-          // Adaptación lenta del baseline cuando estamos atentos (reduce falsos positivos)
+          // Adaptación lenta cuando “atento”
           if (!isLookAway && !movementFast) {
-            adaptBaseline(ema.ar, ema.off, ema.yaw);
+            adaptBaseline(ema.ar, ema.off, ema.yaw, usingMatrixYaw);
           }
         }
       }
@@ -302,7 +316,7 @@ function loop(){
   requestAnimationFrame(loop);
 }
 
-/* ===== Pestaña: episodios/acumulado ===== */
+/* ===== Pestaña ===== */
 document.addEventListener('visibilitychange', () => {
   if (!running) return;
   const now = performance.now();
@@ -342,7 +356,6 @@ btnStart?.addEventListener('click', ()=>{
   frameCount = 0;
   sessionStart = performance.now();
 
-  // reset pestaña/atención
   offTabStart   = (document.visibilityState === 'hidden') ? performance.now() : null;
   offTabEpisodes= 0;
   offTabAccumMs = 0;
@@ -353,7 +366,6 @@ btnStart?.addEventListener('click', ()=>{
   calAR.length=0; calOFF.length=0; calYAW.length=0;
   ema = { ar: null, off: null, yaw: null };
 
-  // métricas
   metrics.start();
 
   sessionStatus && (sessionStatus.textContent = 'Monitoreando');
@@ -393,7 +405,7 @@ function showSection(key){
 tabButtons.forEach(btn=>btn.addEventListener('click', ()=>{ const k=btn.dataset.t; if(k) showSection(k); }));
 showSection(tabButtons.find(b=>b.classList.contains('active'))?.dataset.t || 'lectura');
 
-/* ===== Estado inicial ===== */
+/* ===== Init ===== */
 (function init(){
   if (!navigator.mediaDevices?.getUserMedia){ setCamStatus('err','No soportado','Usa Chrome/Edge.'); return; }
   if (insecureContext()){ setCamStatus('warn','HTTPS requerido','Abre con candado (HTTPS) o localhost.'); return; }
