@@ -1,4 +1,4 @@
-// app.js — Mirada + Oclusión + Labios (habla normal) + Anti-blink (no dispara mirada desviada)
+// app.js — Mirada + Oclusión + Labios (habla normal) + Anti-blink + Off-tab por visibilidad O foco
 import { createMetrics } from './metrics.js';
 import { createTabLogger } from './tab-logger.js';
 import { FilesetResolver, FaceLandmarker } from "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.3";
@@ -58,22 +58,19 @@ const SCORE_ENTER = 6;
 const SCORE_EXIT  = 2;
 
 /* ===== LABIOS (habla) ===== */
-// Histéresis
 const LIPS_SCORE_ENTER = 6;
 const LIPS_SCORE_EXIT  = 2;
-// Actividad temporal
-const LIPS_VEL_ALPHA = 0.5;       // EMA de velocidad de labios
-const LIPS_VEL_ENTER = 0.040;     // ↓ más sensible (habla normal)
+const LIPS_VEL_ALPHA = 0.5;
+const LIPS_VEL_ENTER = 0.040;
 const LIPS_VEL_EXIT  = 0.026;
-// Oscilaciones en ventana
 const LIPS_WIN_MS    = 900;
-const LIPS_OSC_MIN   = 2;         // al menos 2 oscilaciones ~ sílabas
-const LIPS_MIN_AMP   = 0.060;     // amplitud mínima en la ventana
+const LIPS_OSC_MIN   = 2;
+const LIPS_MIN_AMP   = 0.060;
 
 /* ===== BLINK (anti “mirada desviada” por parpadeo) ===== */
 const BLINK_ENTER = 0.55;
 const BLINK_EXIT  = 0.35;
-const BLINK_MAX_MS = 280;         // blink típico 100–250 ms; añadimos margen
+const BLINK_MAX_MS = 280;
 
 /* ===== Estado ===== */
 let awayScore   = 0;
@@ -98,6 +95,7 @@ let sessionStart = 0;
 
 let landmarker = null;
 
+// Off-tab (cuenta por visibilidad O foco)
 let offTabStart = null;
 let offTabEpisodes = 0;
 let offTabAccumMs = 0;
@@ -125,10 +123,12 @@ let lipsPrev = null;    // { jaw, upper, lower, stretch, funnel, pucker, smile }
 let lipsVelEMA = 0;
 let mouthHist = [];     // [{t, v}] v = mouthRaw (pre-EMA)
 
+/* ===== Util ===== */
 const CONSENT_KEY = 'mvp.consent.v1';
 const hasConsent  = () => { try { return !!localStorage.getItem(CONSENT_KEY); } catch { return false; } };
 const insecureContext = () => !(location.protocol === 'https:' || location.hostname === 'localhost');
 const clamp01 = v => Math.max(0, Math.min(1, v));
+const isInTab = () => (document.visibilityState === 'visible') && document.hasFocus();  // ← NUEVO
 
 function setCamStatus(kind, msg, help=''){
   if(!camStatus) return;
@@ -251,7 +251,6 @@ function lipsComponents(bs){
 }
 function mouthOpenScore(comp){
   if (!comp) return 0;
-  // apertura + elevación + estiramiento; ligero aporte vocalización; penaliza sonrisa
   const raw =
     0.50*comp.jaw +
     0.22*((comp.upper + comp.lower)/2) +
@@ -282,7 +281,6 @@ function lipsOscillationFeatures(){
   if (mouthHist.length < 4) return {amp:0, osc:0};
   const vals = mouthHist.map(x=>x.v);
   const amp = Math.max(...vals) - Math.min(...vals);
-  // cero-cruces de la derivada (oscilaciones)
   let osc = 0;
   let prevDiff = null;
   for (let i=1;i<vals.length;i++){
@@ -319,7 +317,6 @@ function adaptBaseline(ar, off, yaw, pitch, gaze, gH, gV, mouth){
   thr.enter.gaze  = base.gaze + 0.20;
   thr.exit.gaze   = base.gaze + 0.12;
 
-  // ↓ más sensible (habla normal)
   thr.enter.mouth = Math.max(0.20, base.mouth + 0.14);
   thr.exit.mouth  = Math.max(0.12, base.mouth + 0.08);
 }
@@ -383,11 +380,11 @@ function loop(){
     const ms = performance.now() - sessionStart;
     sessionTime && (sessionTime.textContent = fmtTime(ms));
 
-    const nowVisible = (document.visibilityState === 'visible');
-    tabState && (tabState.textContent = nowVisible ? 'En pestaña' : 'Fuera de pestaña');
+    const inTab = isInTab();                                         // ← NUEVO
+    tabState && (tabState.textContent = inTab ? 'En pestaña' : 'Fuera de pestaña'); // ← NUEVO
 
     let attnState = 'atento';
-    if (!nowVisible) {
+    if (!inTab) {
       const hiddenFor = offTabStart ? (performance.now() - offTabStart) : 0;
       attnState = hiddenFor >= 2000 ? 'distracción (fuera de pestaña)' : 'intermitente';
     } else if (isOccluded) {
@@ -412,7 +409,6 @@ function loop(){
       const lm  = out?.faceLandmarks?.[0];
       const bs  = out?.faceBlendshapes?.[0];
 
-      // BLINK: actualizar primero (si hay bs)
       if (bs) updateBlink(bs, ts);
 
       // ===== OCLUSIÓN / SIN CARA =====
@@ -503,13 +499,11 @@ function loop(){
           const dGH  = Math.abs(hAbs    - ema.gH);
           const dGV  = Math.abs(vAbs    - ema.gV);
 
-          // Gating por parpadeo: si blink activo reciente, NO usamos ojos para "movementFast" ni para eyesAway
           const allowEyeMotion = !blinkActive;
-
           const movementFast = (dOFF > MOVE_OFF) || (dAR > MOVE_AR) || (dYAW > MOVE_YAW) || (dPIT > MOVE_PITCH) ||
                                (allowEyeMotion && ((dGH > MOVE_EYE) || (dGV > MOVE_EYE)));
 
-          // Calibración (frontal, boca cerrada)
+          // Calibración
           if (calibrating) {
             calAR.push(arRaw); calOFF.push(offRaw); calYAW.push(yawRaw); calPITCH.push(pitchRaw); calGAZE.push(gazeRaw);
             calGazeH.push(hAbs); calGazeV.push(vAbs); calMouth.push(mouthRaw);
@@ -543,7 +537,6 @@ function loop(){
           const transAwayEnter = (offRaw > thr.enter.off) && (yawRaw > thr.exit.yaw*0.7 || pitchRaw > thr.exit.pitch*0.7);
           const transAwayExit  = (offRaw < thr.exit.off);
 
-          // Ojos → suprimidos si hay blink
           const headFrontal = (yawRaw < thr.exit.yaw) && (pitchRaw < thr.exit.pitch);
           const eyesAwayEnter = allowEyeMotion && headFrontal && (ema.gH > thr.enter.gH || ema.gV > thr.enter.gV);
           const eyesAwayExit  = allowEyeMotion ? ((ema.gH < thr.exit.gH) && (ema.gV < thr.exit.gV)) : true;
@@ -563,7 +556,7 @@ function loop(){
             exit  = flippedExit;
           }
 
-          // LABIOS: entrada por cualquiera de tres vías
+          // LABIOS
           const lipsActivityHigh = (lipsVelEMA > LIPS_VEL_ENTER);
           const lipsActivityLow  = (lipsVelEMA < LIPS_VEL_EXIT);
           const lipsOscOK        = (mouthOsc >= LIPS_OSC_MIN) && (mouthAmp > LIPS_MIN_AMP);
@@ -615,21 +608,25 @@ function loop(){
   requestAnimationFrame(loop);
 }
 
-/* ===== Pestaña ===== */
-document.addEventListener('visibilitychange', () => {
+/* ===== Off-tab: visibilidad O foco ===== */
+function handleTabStateChange(){
   if (!running) return;
   const now = performance.now();
-  if (document.visibilityState === 'hidden') {
-    offTabStart = now;
+  const inTab = isInTab();
+  if (!inTab) {
+    if (offTabStart == null) offTabStart = now; // inicia episodio si no estaba ya
   } else if (offTabStart != null) {
     const dur = now - offTabStart;
     if (dur >= 1500) offTabEpisodes += 1;
     offTabAccumMs += dur;
     offTabStart = null;
   }
-});
+}
+document.addEventListener('visibilitychange', handleTabStateChange);
+window.addEventListener('blur', handleTabStateChange);
+window.addEventListener('focus', handleTabStateChange);
 
-/* ===== Handlers ===== */
+/* ===== Botones ===== */
 btnPermitir?.addEventListener('click', async ()=>{
   camRequested = true;
   await startCamera();
@@ -645,7 +642,8 @@ btnStart?.addEventListener('click', ()=>{
   frameCount = 0;
   sessionStart = performance.now();
 
-  offTabStart   = (document.visibilityState === 'hidden') ? performance.now() : null;
+  // Off-tab: arranca según estado actual (visibilidad O foco)
+  offTabStart   = isInTab() ? null : performance.now();
   offTabEpisodes= 0;
   offTabAccumMs = 0;
 
@@ -671,6 +669,7 @@ btnStart?.addEventListener('click', ()=>{
 });
 
 btnStop?.addEventListener('click', ()=>{
+  // cierra episodio si sigue fuera
   if (offTabStart != null){
     const now = performance.now();
     const dur = now - offTabStart;
