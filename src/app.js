@@ -1,4 +1,4 @@
-// app.js — Failsafe + mirada (cabeza/ojos) + oclusión + LABIOS con “actividad” (habla normal)
+// app.js — Mirada + Oclusión + Labios (habla normal) + Anti-blink (no dispara mirada desviada)
 import { createMetrics } from './metrics.js';
 import { createTabLogger } from './tab-logger.js';
 import { FilesetResolver, FaceLandmarker } from "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.3";
@@ -21,7 +21,7 @@ const sessionTime   = document.getElementById('session-time');
 
 const tabState  = document.getElementById('tab-state');
 const attnEl    = document.getElementById('attn-state');
-const lipsEl    = document.getElementById('lips-state');   // UI “Labios”
+const lipsEl    = document.getElementById('lips-state');
 const offCntEl  = document.getElementById('offtab-count');
 const offTimeEl = document.getElementById('offtab-time');
 
@@ -61,10 +61,19 @@ const SCORE_EXIT  = 2;
 // Histéresis
 const LIPS_SCORE_ENTER = 6;
 const LIPS_SCORE_EXIT  = 2;
-// Actividad temporal (velocidad de labios)
-const LIPS_VEL_ALPHA = 0.5;     // EMA para la “velocidad”
-const LIPS_VEL_ENTER = 0.045;   // umbral de entrada por actividad (más sensible)
-const LIPS_VEL_EXIT  = 0.028;   // umbral de salida
+// Actividad temporal
+const LIPS_VEL_ALPHA = 0.5;       // EMA de velocidad de labios
+const LIPS_VEL_ENTER = 0.040;     // ↓ más sensible (habla normal)
+const LIPS_VEL_EXIT  = 0.026;
+// Oscilaciones en ventana
+const LIPS_WIN_MS    = 900;
+const LIPS_OSC_MIN   = 2;         // al menos 2 oscilaciones ~ sílabas
+const LIPS_MIN_AMP   = 0.060;     // amplitud mínima en la ventana
+
+/* ===== BLINK (anti “mirada desviada” por parpadeo) ===== */
+const BLINK_ENTER = 0.55;
+const BLINK_EXIT  = 0.35;
+const BLINK_MAX_MS = 280;         // blink típico 100–250 ms; añadimos margen
 
 /* ===== Estado ===== */
 let awayScore   = 0;
@@ -76,6 +85,10 @@ let lipsActive  = false;
 let isOccluded       = false;
 let occlSince        = null;
 let occlClearSince   = null;
+
+// Blink state
+let blinkActive = false;
+let blinkSince  = null;
 
 let stream = null;
 let running = false;
@@ -98,19 +111,19 @@ let calStart = 0;
 let calAR = [], calOFF = [], calYAW = [], calPITCH = [], calGAZE = [];
 let calGazeH = [], calGazeV = [];
 let calMouth = [];
-
 let invertSense = false;
 
 let base = { ar: 0.68, off: 0.18, yaw: 0.04, pitch: 0.04, gaze: 0.05, gH: 0.00, gV: 0.00, mouth: 0.02 };
 let thr  = {
-  enter: { ar: 0.58, off: 0.28, yaw: 0.24, pitch: 0.12, gaze: 0.35, gH: 0.28, gV: 0.28, mouth: 0.30 },
-  exit:  { ar: 0.62, off: 0.24, yaw: 0.16, pitch: 0.09, gaze: 0.25, gH: 0.20, gV: 0.20, mouth: 0.20 }
+  enter:{ ar:0.58, off:0.28, yaw:0.24, pitch:0.12, gaze:0.35, gH:0.28, gV:0.28, mouth:0.28 },
+  exit: { ar:0.62, off:0.24, yaw:0.16, pitch:0.09, gaze:0.25, gH:0.20, gV:0.20, mouth:0.18 }
 };
-let ema = { ar: null, off: null, yaw: null, pitch: null, gaze: null, gH: null, gV: null, mouth: null };
+let ema = { ar:null, off:null, yaw:null, pitch:null, gaze:null, gH:null, gV:null, mouth:null };
 
-/* Velocidad (actividad) de labios — guardamos comp prev + EMA de diffs */
-let lipsPrev = null;   // { jaw, upper, lower, stretch, funnel, pucker }
+/* Velocidad & ventana de labios */
+let lipsPrev = null;    // { jaw, upper, lower, stretch, funnel, pucker, smile }
 let lipsVelEMA = 0;
+let mouthHist = [];     // [{t, v}] v = mouthRaw (pre-EMA)
 
 const CONSENT_KEY = 'mvp.consent.v1';
 const hasConsent  = () => { try { return !!localStorage.getItem(CONSENT_KEY); } catch { return false; } };
@@ -201,8 +214,30 @@ function gazeHV(bs){
   return { h, v, hAbs, vAbs };
 }
 
-/* ===== LABIOS (blendshapes) ===== */
+/* ===== Blendshapes helpers ===== */
 function pickBS(bs, name){ return bs?.categories?.find(c => c.categoryName === name)?.score ?? 0; }
+
+/* ===== BLINK ===== */
+function blinkScore(bs){
+  const L = pickBS(bs,'eyeBlinkLeft');
+  const R = pickBS(bs,'eyeBlinkRight');
+  return Math.max(L, R);
+}
+function updateBlink(bs, ts){
+  const s = blinkScore(bs);
+  if (!blinkActive && s >= BLINK_ENTER){
+    blinkActive = true;
+    blinkSince = ts;
+  } else if (blinkActive){
+    const dur = ts - (blinkSince ?? ts);
+    if ((s <= BLINK_EXIT) || (dur > BLINK_MAX_MS)){
+      blinkActive = false;
+      blinkSince = null;
+    }
+  }
+}
+
+/* ===== LABIOS ===== */
 function lipsComponents(bs){
   if (!bs) return null;
   const jaw    = pickBS(bs,'jawOpen');
@@ -214,31 +249,48 @@ function lipsComponents(bs){
   const smile  = (pickBS(bs,'mouthSmileLeft') + pickBS(bs,'mouthSmileRight'))/2;
   return { jaw, upper, lower, stretch, funnel, pucker, smile };
 }
-// Score de “apertura/gesticulación” útil para habla (no exige abrir muchísimo)
 function mouthOpenScore(comp){
   if (!comp) return 0;
-  // pesos: apertura + elevación labial + estiramiento; leve aporte de vocalización (funnel/pucker); penaliza sonrisa sostenida
+  // apertura + elevación + estiramiento; ligero aporte vocalización; penaliza sonrisa
   const raw =
-    0.55*comp.jaw +
-    0.20*((comp.upper + comp.lower)/2) +
-    0.15*comp.stretch +
+    0.50*comp.jaw +
+    0.22*((comp.upper + comp.lower)/2) +
+    0.18*comp.stretch +
     0.10*((comp.funnel + comp.pucker)/2) -
-    0.08*comp.smile;
+    0.10*comp.smile;
   return clamp01(raw);
 }
-// Actualiza EMA de “velocidad” (actividad labial) a partir de diferencias absolutas de componentes
 function updateLipsVelocity(comp){
   if (!comp) return;
   if (!lipsPrev) { lipsPrev = comp; lipsVelEMA = 0; return; }
   const dif =
     Math.abs(comp.jaw - lipsPrev.jaw) * 0.45 +
-    Math.abs(comp.upper - lipsPrev.upper) * 0.20 +
-    Math.abs(comp.lower - lipsPrev.lower) * 0.20 +
-    Math.abs(comp.stretch - lipsPrev.stretch) * 0.10 +
-    Math.abs(comp.funnel - lipsPrev.funnel) * 0.03 +
-    Math.abs(comp.pucker - lipsPrev.pucker) * 0.02; // sonrisa no entra en actividad
+    Math.abs(comp.upper - lipsPrev.upper) * 0.18 +
+    Math.abs(comp.lower - lipsPrev.lower) * 0.18 +
+    Math.abs(comp.stretch - lipsPrev.stretch) * 0.12 +
+    Math.abs(comp.funnel - lipsPrev.funnel) * 0.04 +
+    Math.abs(comp.pucker - lipsPrev.pucker) * 0.03;
   lipsVelEMA = (1 - LIPS_VEL_ALPHA) * lipsVelEMA + LIPS_VEL_ALPHA * dif;
   lipsPrev = comp;
+}
+function pushMouthHist(t, v){
+  mouthHist.push({t, v});
+  const cutoff = t - LIPS_WIN_MS;
+  while (mouthHist.length && mouthHist[0].t < cutoff) mouthHist.shift();
+}
+function lipsOscillationFeatures(){
+  if (mouthHist.length < 4) return {amp:0, osc:0};
+  const vals = mouthHist.map(x=>x.v);
+  const amp = Math.max(...vals) - Math.min(...vals);
+  // cero-cruces de la derivada (oscilaciones)
+  let osc = 0;
+  let prevDiff = null;
+  for (let i=1;i<vals.length;i++){
+    const diff = vals[i] - vals[i-1];
+    if (prevDiff != null && Math.sign(diff) !== Math.sign(prevDiff)) osc++;
+    prevDiff = diff;
+  }
+  return { amp, osc };
 }
 
 function adaptBaseline(ar, off, yaw, pitch, gaze, gH, gV, mouth){
@@ -266,9 +318,10 @@ function adaptBaseline(ar, off, yaw, pitch, gaze, gH, gV, mouth){
   thr.exit.gV     = Math.max(0.16, base.gV + 0.12);
   thr.enter.gaze  = base.gaze + 0.20;
   thr.exit.gaze   = base.gaze + 0.12;
-  // ↓ más sensible que antes: queremos detectar habla normal
-  thr.enter.mouth = Math.max(0.22, base.mouth + 0.16);
-  thr.exit.mouth  = Math.max(0.14, base.mouth + 0.09);
+
+  // ↓ más sensible (habla normal)
+  thr.enter.mouth = Math.max(0.20, base.mouth + 0.14);
+  thr.exit.mouth  = Math.max(0.12, base.mouth + 0.08);
 }
 
 /* ===== Cámara + Modelo ===== */
@@ -359,6 +412,9 @@ function loop(){
       const lm  = out?.faceLandmarks?.[0];
       const bs  = out?.faceBlendshapes?.[0];
 
+      // BLINK: actualizar primero (si hay bs)
+      if (bs) updateBlink(bs, ts);
+
       // ===== OCLUSIÓN / SIN CARA =====
       if (!lm) {
         occlClearSince = null;
@@ -368,6 +424,7 @@ function loop(){
           awayScore = 0; isLookAway = false;
           lipsScore = 0; lipsActive = false;
           lipsPrev = null; lipsVelEMA = 0;
+          blinkActive = false; blinkSince = null;
         }
       }
 
@@ -391,6 +448,7 @@ function loop(){
             awayScore = 0; isLookAway = false;
             lipsScore = 0; lipsActive = false;
             lipsPrev = null; lipsVelEMA = 0;
+            blinkActive = false; blinkSince = null;
           }
         } else {
           occlSince = null;
@@ -424,7 +482,9 @@ function loop(){
           // LABIOS
           const comp     = lipsComponents(bs);
           const mouthRaw = mouthOpenScore(comp);
-          updateLipsVelocity(comp); // actualiza lipsVelEMA
+          updateLipsVelocity(comp);
+          pushMouthHist(ts, mouthRaw);
+          const { amp: mouthAmp, osc: mouthOsc } = lipsOscillationFeatures();
 
           // EMA
           ema.ar    = (ema.ar    == null) ? arRaw    : (1-EMA_ALPHA)*ema.ar    + EMA_ALPHA*arRaw;
@@ -442,7 +502,12 @@ function loop(){
           const dPIT = Math.abs(pitchRaw - ema.pitch);
           const dGH  = Math.abs(hAbs    - ema.gH);
           const dGV  = Math.abs(vAbs    - ema.gV);
-          const movementFast = (dOFF > MOVE_OFF) || (dAR > MOVE_AR) || (dYAW > MOVE_YAW) || (dPIT > MOVE_PITCH) || (dGH > MOVE_EYE) || (dGV > MOVE_EYE);
+
+          // Gating por parpadeo: si blink activo reciente, NO usamos ojos para "movementFast" ni para eyesAway
+          const allowEyeMotion = !blinkActive;
+
+          const movementFast = (dOFF > MOVE_OFF) || (dAR > MOVE_AR) || (dYAW > MOVE_YAW) || (dPIT > MOVE_PITCH) ||
+                               (allowEyeMotion && ((dGH > MOVE_EYE) || (dGV > MOVE_EYE)));
 
           // Calibración (frontal, boca cerrada)
           if (calibrating) {
@@ -477,11 +542,14 @@ function loop(){
           const poseAwayExit   = yawAwayExit  && pitchAwayExit  && (arRaw > thr.exit.ar);
           const transAwayEnter = (offRaw > thr.enter.off) && (yawRaw > thr.exit.yaw*0.7 || pitchRaw > thr.exit.pitch*0.7);
           const transAwayExit  = (offRaw < thr.exit.off);
+
+          // Ojos → suprimidos si hay blink
           const headFrontal = (yawRaw < thr.exit.yaw) && (pitchRaw < thr.exit.pitch);
-          const eyesAwayEnter = headFrontal && (ema.gH > thr.enter.gH || ema.gV > thr.enter.gV);
-          const eyesAwayExit  = (ema.gH < thr.exit.gH) && (ema.gV < thr.exit.gV);
-          const gazeAwayEnter  = (ema.gaze > thr.enter.gaze);
-          const gazeAwayExit   = (ema.gaze < thr.exit.gaze);
+          const eyesAwayEnter = allowEyeMotion && headFrontal && (ema.gH > thr.enter.gH || ema.gV > thr.enter.gV);
+          const eyesAwayExit  = allowEyeMotion ? ((ema.gH < thr.exit.gH) && (ema.gV < thr.exit.gV)) : true;
+
+          const gazeAwayEnter  = allowEyeMotion && (ema.gaze > thr.enter.gaze);
+          const gazeAwayExit   = allowEyeMotion ? (ema.gaze < thr.exit.gaze) : true;
 
           let enter = poseAwayEnter || transAwayEnter || eyesAwayEnter || gazeAwayEnter;
           let exit  = (poseAwayExit && transAwayExit && eyesAwayExit && gazeAwayExit);
@@ -495,12 +563,13 @@ function loop(){
             exit  = flippedExit;
           }
 
-          // LABIOS: “habla normal” = apertura moderada + actividad (velocidad)
+          // LABIOS: entrada por cualquiera de tres vías
           const lipsActivityHigh = (lipsVelEMA > LIPS_VEL_ENTER);
           const lipsActivityLow  = (lipsVelEMA < LIPS_VEL_EXIT);
+          const lipsOscOK        = (mouthOsc >= LIPS_OSC_MIN) && (mouthAmp > LIPS_MIN_AMP);
 
-          lipsNow  = (ema.mouth > thr.enter.mouth) || (lipsActivityHigh && ema.mouth > Math.max(0.12, thr.exit.mouth*0.9));
-          lipsBack = (ema.mouth < thr.exit.mouth) && lipsActivityLow;
+          lipsNow  = (ema.mouth > thr.enter.mouth) || lipsActivityHigh || lipsOscOK;
+          lipsBack = (ema.mouth < thr.exit.mouth) && lipsActivityLow && (mouthAmp < LIPS_MIN_AMP*0.6);
 
           if (!isOccluded) {
             awayNow = movementFast || enter;
@@ -515,6 +584,7 @@ function loop(){
             awayScore = 0;  isLookAway = false;
             lipsScore = 0;  lipsActive = false;
             lipsPrev = null; lipsVelEMA = 0;
+            blinkActive = false; blinkSince = null;
           }
         }
       }
@@ -584,6 +654,8 @@ btnStart?.addEventListener('click', ()=>{
   lipsScore = 0; lipsActive = false;
   isOccluded = false; occlSince = null; occlClearSince = null;
   lipsPrev = null; lipsVelEMA = 0;
+  mouthHist.length = 0;
+  blinkActive = false; blinkSince = null;
 
   calibrating = !!landmarker; calStart = performance.now();
   calAR.length=0; calOFF.length=0; calYAW.length=0; calPITCH.length=0; calGAZE.length=0;
