@@ -1,4 +1,4 @@
-// app.js — Detección estable con flag único (simétrico) + dwell, yaw column-major y autocalibración
+// app.js — Versión "cambia pero no se mantiene": yaw column-major + ojos + gaze + auto-flip, SIN dwell
 import { createMetrics } from './metrics.js';
 import { createTabLogger } from './tab-logger.js';
 import { FilesetResolver, FaceLandmarker } from "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.3";
@@ -37,7 +37,7 @@ const sections = {
   examen:  document.getElementById('examen') || document.getElementById('exam-root'),
 };
 
-/* ===== Parámetros ===== */
+/* ===== Parámetros (sin dwell) ===== */
 const DETECT_EVERY   = 2;
 const MIN_FACE_AREA  = 0.06;
 const CALIBRATION_MS = 1200;
@@ -45,22 +45,23 @@ const CALIBRATION_MS = 1200;
 const EMA_ALPHA = 0.30;
 const MOVE_OFF  = 0.085;
 const MOVE_AR   = 0.060;
-const MOVE_YAW  = 0.12;   // ~7°
+const MOVE_YAW  = 0.12;  // ~7°
 
-// dwell (rachas)
-const ENTER_FRAMES = 4;   // ~0.3–0.45 s
-const EXIT_FRAMES  = 6;   // ~0.45–0.7 s
+const SCORE_ENTER = 6;   // histéresis temporal simple: sube al entrar
+const SCORE_EXIT  = 2;   // baja al salir
 
 /* ===== Estado ===== */
+let awayScore   = 0;
 let isLookAway  = false;
+
 let stream = null;
 let running = false;
 let camRequested = false;
 let frameCount = 0;
 let sessionStart = 0;
 
-let landmarker = null;          // puede cargarse después de iniciar
-let modelReadyTs = 0;
+let landmarker = null;
+let lastVideoTime = -1;
 
 let offTabStart = null;
 let offTabEpisodes = 0;
@@ -73,20 +74,16 @@ const tabLogger = createTabLogger();
 let calibrating = false;
 let calStart = 0;
 let calAR = [], calOFF = [], calYAW = [], calGAZE = [];
-let invertSense = false; // si true, invertimos el flag away al final
+let invertSense = false; // si true, intercambia enter/exit
 
 // baseline y umbrales (se ajustan tras calibrar/adaptar)
 let base = { ar: 0.68, off: 0.18, yaw: 0.04, gaze: 0.05 };
 let thr  = {
-  enter: { ar: 0.58, off: 0.26, yaw: 0.22, gaze: 0.32 },
-  exit:  { ar: 0.62, off: 0.22, yaw: 0.15, gaze: 0.22 }
+  enter: { ar: 0.58, off: 0.28, yaw: 0.24, gaze: 0.35 },
+  exit:  { ar: 0.62, off: 0.24, yaw: 0.16, gaze: 0.25 }
 };
 
 let ema = { ar: null, off: null, yaw: null, gaze: null };
-
-/* Rachas (dwell) */
-let enterStreak = 0;
-let exitStreak  = 0;
 
 /* ===== Util ===== */
 const CONSENT_KEY = 'mvp.consent.v1';
@@ -164,34 +161,12 @@ function adaptBaseline(ar, off, yaw, gaze){
 
   thr.enter.ar  = Math.max(0.50, base.ar  - 0.10);
   thr.exit.ar   = Math.max(thr.enter.ar + 0.04, base.ar - 0.03);
-  thr.enter.off = Math.min(0.40, base.off + 0.08);
-  thr.exit.off  = Math.min(0.34, base.off + 0.05);
-  thr.enter.yaw = base.yaw + 0.18;
-  thr.exit.yaw  = base.yaw + 0.12;
-  thr.enter.gaze= base.gaze + 0.18;
-  thr.exit.gaze = base.gaze + 0.10;
-}
-
-/* ===== Modelo ===== */
-async function ensureModel(){
-  if (landmarker) return;
-  const wasmBase = "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.3/wasm";
-  const fileset = await FilesetResolver.forVisionTasks(wasmBase);
-  landmarker = await FaceLandmarker.createFromOptions(fileset, {
-    baseOptions: { modelAssetPath: "https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task" },
-    runningMode: "VIDEO",
-    numFaces: 1,
-    outputFaceBlendshapes: true,
-    outputFacialTransformationMatrixes: true
-  });
-  modelReadyTs = performance.now();
-  // si estás corriendo y aún no calibraste, arranca calibración al vuelo
-  if (running && !calibrating){
-    calibrating = true;
-    calStart = performance.now();
-    calAR.length=calOFF.length=calYAW.length=calGAZE.length=0;
-    invertSense = false;
-  }
+  thr.enter.off = Math.min(0.40, base.off + 0.10);
+  thr.exit.off  = Math.min(0.34, base.off + 0.06);
+  thr.enter.yaw = base.yaw + 0.20;
+  thr.exit.yaw  = base.yaw + 0.14;
+  thr.enter.gaze= base.gaze + 0.20;
+  thr.exit.gaze = base.gaze + 0.12;
 }
 
 /* ===== Cámara ===== */
@@ -199,6 +174,7 @@ async function startCamera() {
   if (insecureContext()) { setCamStatus('warn','HTTPS requerido','Abre la app en HTTPS o localhost.'); return; }
   try {
     if (stream) releaseStream();
+
     stream = await navigator.mediaDevices.getUserMedia({
       video: { width: { ideal: 1280 }, height: { ideal: 720 }, facingMode: { ideal: 'user' } },
       audio: false
@@ -210,7 +186,23 @@ async function startCamera() {
     else cam.addEventListener('loadedmetadata', syncCanvasToVideo, { once: true });
 
     setCamStatus('ok', `Listo (${cam.videoWidth||1280}x${cam.videoHeight||720})`, 'La cámara está activa. Puedes Iniciar.');
-    ensureModel().catch(err=>console.warn("FaceLandmarker no disponible:", err));
+
+    (async () => {
+      try {
+        if (!landmarker) {
+          const wasmBase = "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.3/wasm";
+          const fileset = await FilesetResolver.forVisionTasks(wasmBase);
+          landmarker = await FaceLandmarker.createFromOptions(fileset, {
+            baseOptions: { modelAssetPath: "https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task" },
+            runningMode: "VIDEO",
+            numFaces: 1,
+            outputFaceBlendshapes: true,
+            outputFacialTransformationMatrixes: true
+          });
+        }
+      } catch (err) { console.warn("FaceLandmarker no disponible:", err); }
+    })();
+
   } catch (e) {
     const n = e?.name || 'CameraError';
     if (n === 'NotAllowedError' || n === 'SecurityError') setCamStatus('err','Permiso denegado','Candado → Cámara: Permitir.');
@@ -233,19 +225,10 @@ function loop(){
 
   frameCount++;
   if (frameCount % 10 === 0){
-    const { fpsMed, latP95 } = metrics.read();
-    fpsEl && (fpsEl.textContent = fpsMed.toFixed(1));
-    p95El && (p95El.textContent = latP95.toFixed(1));
-    const lf=v=>v>=24?'ok':v>=18?'warn':'err';
-    const lp=v=>v<=200?'ok':v<=350?'warn':'err';
-    const worst=(a,b)=>({ok:0,warn:1,err:2}[a] >= {ok:0,warn:1,err:2}[b] ? a : b);
-    const lfL=lf(fpsMed), lpL=lp(latP95);
-    setPill(fpsPill,lfL,lfL==='ok'?'🟢':lfL==='warn'?'🟠':'🔴');
-    setPill(p95Pill,lpL,lpL==='ok'?'🟢':lpL==='warn'?'🟠':'🔴');
-    setPill(perfAll,worst(lfL,lpL), worst(lfL,lpL)==='ok'?'🟢 Óptimo': worst(lfL,lpL)==='warn'?'🟠 Atención':'🔴 Riesgo');
-
+    updatePerfUI();
     const ms = performance.now() - sessionStart;
     sessionTime && (sessionTime.textContent = fmtTime(ms));
+
     const nowVisible = (document.visibilityState === 'visible');
     tabState && (tabState.textContent = nowVisible ? 'En pestaña' : 'Fuera de pestaña');
 
@@ -260,105 +243,105 @@ function loop(){
     offCntEl  && (offCntEl.textContent  = String(offTabEpisodes));
   }
 
-  // ---- Detección: flag único (simétrico) + dwell ----
+  // ---- Detección (sin dwell; con histéresis de score) ----
   if (landmarker && frameCount % DETECT_EVERY === 0) {
-    const out = landmarker.detectForVideo(cam, performance.now());
-    const lm  = out?.faceLandmarks?.[0];
+    const ts = performance.now();
+    if (cam.currentTime !== lastVideoTime) {
+      lastVideoTime = cam.currentTime;
+      const out = landmarker.detectForVideo(cam, ts);
+      const lm  = out?.faceLandmarks?.[0];
 
-    if (lm) {
-      // bbox
-      let minx=1,maxx=0,miny=1,maxy=0;
-      for (const p of lm) { if(p.x<minx)minx=p.x; if(p.x>maxx)maxx=p.x; if(p.y<miny)miny=p.y; if(p.y>maxy)maxy=p.y; }
-      const w = maxx - minx, h = maxy - miny, area = w * h;
-      if (area >= MIN_FACE_AREA) {
-        const arRaw  = w / (h + 1e-6);
-        const offRaw = lateralOffset(lm, minx, maxx);
+      let awayNow = false, backNow = false;
 
-        // yaw por ojos + matriz (column-major)
-        const yawEyes = yawFromEyes(lm);
-        let yawRaw = yawEyes;
-        const M = out?.facialTransformationMatrixes?.[0];
-        if (M && typeof M[0] === 'number') {
-          const a = yawMatA_colMajor(M);
-          const b = yawMatB_colMajor(M);
-          yawRaw = (Math.abs(a - yawEyes) <= Math.abs(b - yawEyes)) ? a : b;
-        }
+      if (lm) {
+        // bbox
+        let minx=1,maxx=0,miny=1,maxy=0;
+        for (const p of lm) { if(p.x<minx)minx=p.x; if(p.x>maxx)maxx=p.x; if(p.y<miny)miny=p.y; if(p.y>maxy)maxy=p.y; }
+        const w = maxx - minx, h = maxy - miny, area = w * h;
+        if (area >= MIN_FACE_AREA) {
+          const arRaw  = w / (h + 1e-6);
+          const offRaw = lateralOffset(lm, minx, maxx);
 
-        // gaze desde blendshapes
-        const gazeRaw = gazeMagnitude(out?.faceBlendshapes?.[0]);
-
-        // EMA
-        ema.ar   = (ema.ar   == null) ? arRaw   : (1-EMA_ALPHA)*ema.ar   + EMA_ALPHA*arRaw;
-        ema.off  = (ema.off  == null) ? offRaw  : (1-EMA_ALPHA)*ema.off  + EMA_ALPHA*offRaw;
-        ema.yaw  = (ema.yaw  == null) ? yawRaw  : (1-EMA_ALPHA)*ema.yaw  + EMA_ALPHA*yawRaw;
-        ema.gaze = (ema.gaze == null) ? gazeRaw : (1-EMA_ALPHA)*ema.gaze + EMA_ALPHA*gazeRaw;
-
-        const dAR  = Math.abs(arRaw  - ema.ar);
-        const dOFF = Math.abs(offRaw - ema.off);
-        const dYAW = Math.abs(yawRaw - ema.yaw);
-        const movementFast = (dOFF > MOVE_OFF) || (dAR > MOVE_AR) || (dYAW > MOVE_YAW);
-
-        // arranca calibración si el modelo apareció tarde
-        if (!calibrating && modelReadyTs && running) {
-          calibrating = true;
-          calStart = performance.now();
-          calAR.length=calOFF.length=calYAW.length=calGAZE.length=0;
-          invertSense = false;
-        }
-
-        // Calibración (mirando al frente)
-        if (calibrating) {
-          calAR.push(arRaw); calOFF.push(offRaw); calYAW.push(yawRaw); calGAZE.push(gazeRaw);
-          if ((performance.now() - calStart) >= CALIBRATION_MS && calAR.length >= 6) {
-            const med = a => { const s=[...a].sort((x,y)=>x-y), m=Math.floor(s.length/2); return s.length%2?s[m]:(s[m-1]+s[m])/2; };
-            base.ar   = med(calAR);
-            base.off  = med(calOFF);
-            base.yaw  = med(calYAW);
-            base.gaze = med(calGAZE);
-            adaptBaseline(base.ar, base.off, base.yaw, base.gaze);
-            calibrating = false;
-
-            // auto-flip: si al terminar parecerías "away", invierte el flag
-            const yawAway0  = base.yaw  > thr.enter.yaw;
-            const arAway0   = base.ar   < thr.enter.ar;
-            const offAway0  = base.off  > thr.enter.off;
-            const gazeAway0 = base.gaze > thr.enter.gaze;
-            invertSense = !!(yawAway0 || arAway0 || (offAway0 && !yawAway0) || gazeAway0);
-            console.log('Calibrado:', { base, thr, invertSense });
+          // yaw por ojos y por matriz (column-major)
+          const yawEyes = yawFromEyes(lm);
+          let yawRaw = yawEyes;
+          const M = out?.facialTransformationMatrixes?.[0];
+          if (M && typeof M[0] === 'number') {
+            const a = yawMatA_colMajor(M);
+            const b = yawMatB_colMajor(M);
+            yawRaw = (Math.abs(a - yawEyes) <= Math.abs(b - yawEyes)) ? a : b;
           }
-        }
 
-        // ----- FLAG ÚNICO (SIMÉTRICO) -----
-        const yawAway  = yawRaw  > thr.enter.yaw;
-        const arAway   = arRaw   < thr.enter.ar;
-        const offAway  = (offRaw > thr.enter.off) && !(yawRaw < thr.exit.yaw); // offset cuenta sólo si no hay yaw frontal
-        const gazeAway = gazeRaw > thr.enter.gaze;
+          // gaze desde blendshapes
+          const gazeRaw = gazeMagnitude(out?.faceBlendshapes?.[0]);
 
-        let awayFlag = (yawAway || arAway || offAway || gazeAway);
-        if (invertSense) awayFlag = !awayFlag;
+          // EMA
+          ema.ar   = (ema.ar   == null) ? arRaw   : (1-EMA_ALPHA)*ema.ar   + EMA_ALPHA*arRaw;
+          ema.off  = (ema.off  == null) ? offRaw  : (1-EMA_ALPHA)*ema.off  + EMA_ALPHA*offRaw;
+          ema.yaw  = (ema.yaw  == null) ? yawRaw  : (1-EMA_ALPHA)*ema.yaw  + EMA_ALPHA*yawRaw;
+          ema.gaze = (ema.gaze == null) ? gazeRaw : (1-EMA_ALPHA)*ema.gaze + EMA_ALPHA*gazeRaw;
 
-        // —— dwell —— (simétrico: salir = !awayFlag por M frames)
-        if (!isLookAway) {
-          enterStreak = awayFlag ? (enterStreak + 1) : 0;
-          if (movementFast && awayFlag) enterStreak += 1; // acelera si hubo movimiento claro
-          if (enterStreak >= ENTER_FRAMES) {
-            isLookAway = true;
-            exitStreak = 0;
+          const dAR  = Math.abs(arRaw  - ema.ar);
+          const dOFF = Math.abs(offRaw - ema.off);
+          const dYAW = Math.abs(yawRaw - ema.yaw);
+          const movementFast = (dOFF > MOVE_OFF) || (dAR > MOVE_AR) || (dYAW > MOVE_YAW);
+
+          // Calibración inicial (mirando al frente)
+          if (calibrating) {
+            calAR.push(arRaw); calOFF.push(offRaw); calYAW.push(yawRaw); calGAZE.push(gazeRaw);
+            if ((performance.now() - calStart) >= CALIBRATION_MS && calAR.length >= 6) {
+              const med = a => { const s=[...a].sort((x,y)=>x-y), m=Math.floor(s.length/2); return s.length%2?s[m]:(s[m-1]+s[m])/2; };
+              base.ar   = med(calAR);
+              base.off  = med(calOFF);
+              base.yaw  = med(calYAW);
+              base.gaze = med(calGAZE);
+              adaptBaseline(base.ar, base.off, base.yaw, base.gaze);
+              calibrating = false;
+
+              // AUTO-FLIP: si al terminar “pareces” away, invierte la decisión
+              const poseAwayEnter = (base.ar < thr.enter.ar) || (base.yaw > thr.enter.yaw);
+              const transAwayEnter= (base.off > thr.enter.off) && (base.yaw > thr.exit.yaw * 0.7);
+              const gazeAwayEnter = (base.gaze > thr.enter.gaze);
+              invertSense = !!(poseAwayEnter || transAwayEnter || gazeAwayEnter);
+              console.log('Calibrado:', { base, thr, invertSense });
+            }
           }
-        } else {
-          exitStreak = awayFlag ? 0 : (exitStreak + 1);
-          if (!awayFlag && movementFast) exitStreak += 1; // si volviste rápido al centro, acelera salida
-          if (exitStreak >= EXIT_FRAMES) {
-            isLookAway = false;
-            enterStreak = 0;
-          }
-        }
 
-        // Adaptación lenta sólo cuando “atento”
-        if (!isLookAway && !movementFast) {
-          adaptBaseline(ema.ar, ema.off, ema.yaw, ema.gaze);
+          // Umbrales + gating (entrada/salida independientes)
+          const poseAwayEnter = (arRaw < thr.enter.ar) || (yawRaw > thr.enter.yaw);
+          const poseAwayExit  = (arRaw > thr.exit.ar)  && (yawRaw < thr.exit.yaw);
+
+          // offset sólo ayuda si hay indicio de pose desviada
+          const transAwayEnter= (offRaw > thr.enter.off) && (yawRaw > thr.exit.yaw * 0.7);
+          const transAwayExit = (offRaw < thr.exit.off);
+
+          // ojos (gaze) también pueden disparar away
+          const gazeAwayEnter = (gazeRaw > thr.enter.gaze);
+          const gazeAwayExit  = (gazeRaw < thr.exit.gaze);
+
+          let enter = poseAwayEnter || transAwayEnter || gazeAwayEnter;
+          let exit  = poseAwayExit  && transAwayExit  && gazeAwayExit;
+
+          // auto-flip (corrige inversión de frontalidad)
+          if (invertSense) { const tmp=enter; enter=exit; exit=tmp; }
+
+          awayNow = movementFast || enter;
+          backNow = !movementFast && exit;
+
+          // Adaptación lenta cuando “atento”
+          if (!isLookAway && !movementFast) {
+            adaptBaseline(ema.ar, ema.off, ema.yaw, ema.gaze);
+          }
         }
       }
+
+      // Histéresis temporal simple (sin dwell)
+      if (awayNow)      awayScore = Math.min(SCORE_ENTER, awayScore + 3);
+      else if (backNow) awayScore = Math.max(0, awayScore - 2);
+      else              awayScore = Math.max(0, awayScore - 1);
+
+      if (!isLookAway && awayScore >= SCORE_ENTER) isLookAway = true;
+      if (isLookAway  && awayScore <= SCORE_EXIT)  isLookAway = false;
     }
   }
 
@@ -394,16 +377,13 @@ btnRetry?.addEventListener('click', ()=>{
   setCamStatus('neutral','Permiso pendiente','Presiona “Permitir cámara”.');
 });
 
-btnStart?.addEventListener('click', async ()=>{
+btnStart?.addEventListener('click', ()=>{
   if (!hasConsent()){
     const mb=document.getElementById('consent-backdrop'), mm=document.getElementById('consent-modal');
     if (mb && mm){ mb.classList.remove('hidden'); mm.classList.remove('hidden'); }
     return;
   }
   if (!stream){ alert('Primero permite la cámara.'); return; }
-
-  await ensureModel().catch(()=>{});
-
   running = true;
   frameCount = 0;
   sessionStart = performance.now();
@@ -412,14 +392,12 @@ btnStart?.addEventListener('click', async ()=>{
   offTabEpisodes= 0;
   offTabAccumMs = 0;
 
-  // reset detección + calibración + dwell
-  isLookAway = false;
-  calibrating = !!landmarker; // si ya está, calibrar; si no, se iniciará al cargar
-  calStart = performance.now();
+  // reset detección + calibración
+  awayScore = 0; isLookAway = false;
+  calibrating = !!landmarker; calStart = performance.now();
   calAR.length=0; calOFF.length=0; calYAW.length=0; calGAZE.length=0;
   ema = { ar: null, off: null, yaw: null, gaze: null };
   invertSense = false;
-  enterStreak = 0; exitStreak = 0;
 
   metrics.start();
 
