@@ -1,4 +1,5 @@
-// app.js — Failsafe: sin chequeo de currentTime, con try/catch, pitch estricto + oclusión + gaze direccional
+// app.js — Failsafe + mirada (cabeza/ojos) + oclusión + LABIOS (posible habla)
+// No pide micrófono. Usa blendshapes (jawOpen & co) para detectar movimiento de labios sostenido.
 import { createMetrics } from './metrics.js';
 import { createTabLogger } from './tab-logger.js';
 import { FilesetResolver, FaceLandmarker } from "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.3";
@@ -21,6 +22,7 @@ const sessionTime   = document.getElementById('session-time');
 
 const tabState  = document.getElementById('tab-state');
 const attnEl    = document.getElementById('attn-state');
+const lipsEl    = document.getElementById('lips-state');   // ← NUEVO
 const offCntEl  = document.getElementById('offtab-count');
 const offTimeEl = document.getElementById('offtab-time');
 
@@ -39,7 +41,7 @@ const sections = {
 
 /* ===== Parámetros ===== */
 const DETECT_EVERY   = 2;
-const MIN_FACE_AREA  = 0.045; // un poco más permisivo
+const MIN_FACE_AREA  = 0.045; // algo permisivo si estás lejos
 const OCCL_AREA_MIN  = 0.018;
 const OCCL_ENTER_MS  = 700;
 const OCCL_EXIT_MS   = 400;
@@ -56,9 +58,16 @@ const MOVE_EYE   = 0.10;
 const SCORE_ENTER = 6;
 const SCORE_EXIT  = 2;
 
+/* LABIOS (posible habla): histéresis temporal */
+const LIPS_SCORE_ENTER = 6;
+const LIPS_SCORE_EXIT  = 2;
+
 /* ===== Estado ===== */
 let awayScore   = 0;
 let isLookAway  = false;
+
+let lipsScore   = 0;       // ← NUEVO
+let lipsActive  = false;   // ← NUEVO
 
 let isOccluded       = false;
 let occlSince        = null;
@@ -84,19 +93,21 @@ let calibrating = false;
 let calStart = 0;
 let calAR = [], calOFF = [], calYAW = [], calPITCH = [], calGAZE = [];
 let calGazeH = [], calGazeV = [];
+let calMouth = [];                       // ← NUEVO
 let invertSense = false;
 
-let base = { ar: 0.68, off: 0.18, yaw: 0.04, pitch: 0.04, gaze: 0.05, gH: 0.00, gV: 0.00 };
+let base = { ar: 0.68, off: 0.18, yaw: 0.04, pitch: 0.04, gaze: 0.05, gH: 0.00, gV: 0.00, mouth: 0.02 };
 let thr  = {
-  enter: { ar: 0.58, off: 0.28, yaw: 0.24, pitch: 0.12, gaze: 0.35, gH: 0.28, gV: 0.28 },
-  exit:  { ar: 0.62, off: 0.24, yaw: 0.16, pitch: 0.09, gaze: 0.25, gH: 0.20, gV: 0.20 }
+  enter: { ar: 0.58, off: 0.28, yaw: 0.24, pitch: 0.12, gaze: 0.35, gH: 0.28, gV: 0.28, mouth: 0.35 },
+  exit:  { ar: 0.62, off: 0.24, yaw: 0.16, pitch: 0.09, gaze: 0.25, gH: 0.20, gV: 0.20, mouth: 0.22 }
 };
-let ema = { ar: null, off: null, yaw: null, pitch: null, gaze: null, gH: null, gV: null };
+let ema = { ar: null, off: null, yaw: null, pitch: null, gaze: null, gH: null, gV: null, mouth: null };
 
 /* ===== Util ===== */
 const CONSENT_KEY = 'mvp.consent.v1';
 const hasConsent  = () => { try { return !!localStorage.getItem(CONSENT_KEY); } catch { return false; } };
 const insecureContext = () => !(location.protocol === 'https:' || location.hostname === 'localhost');
+const clamp01 = v => Math.max(0, Math.min(1, v));
 
 function setCamStatus(kind, msg, help=''){
   if(!camStatus) return;
@@ -127,13 +138,11 @@ function updatePerfUI(){
 }
 
 /* ===== Pose / Gaze helpers ===== */
-// Rotación 3×3 en matriz 4×4 COLUMN-MAJOR:
 function yawMatA_colMajor(m){ return Math.abs(Math.atan2(m[8],  m[10])); }
 function yawMatB_colMajor(m){ return Math.abs(Math.atan2(-m[2], m[0])); }
 function pitchMatA_colMajor(m){ return Math.abs(Math.atan2(-m[9], m[10])); }
 function pitchMatB_colMajor(m){ return Math.abs(Math.atan2(m[6],  m[5])); }
 
-// Ojos externos (33 y 263) → yaw por ojos
 function yawFromEyes(lm){
   const L = lm[33], R = lm[263];
   if (!L || !R) return 0;
@@ -141,8 +150,6 @@ function yawFromEyes(lm){
   const dx = (R.x - L.x) + 1e-6;
   return Math.abs(Math.atan2(dz, dx));
 }
-
-// Fallback de pitch por landmarks: nariz vs línea media de ojos
 function pitchFromFeatures(lm){
   const L = lm[33], R = lm[263], nose = lm[1] || lm[4] || lm[0];
   if (!L || !R || !nose) return 0;
@@ -151,16 +158,12 @@ function pitchFromFeatures(lm){
   const dy = (nose.y - eyeMidY);
   return Math.abs(Math.atan2(dy, eyeDist));
 }
-
-// Offset lateral: centroide vs centro del bbox
 function lateralOffset(lm, minx, maxx){
   const w = maxx - minx + 1e-6;
   const cx = (minx + maxx) / 2;
   let gx = 0; for (const p of lm) gx += p.x; gx /= lm.length;
   return Math.abs((gx - cx) / w);
 }
-
-// % de landmarks fuera de la caja [0..1]x[0..1]
 function fracOutOfBounds(lm){
   let oob = 0;
   for (const p of lm){
@@ -168,8 +171,6 @@ function fracOutOfBounds(lm){
   }
   return lm.length ? (oob / lm.length) : 1;
 }
-
-// Magnitud global de gaze
 function gazeMagnitude(bs){
   if (!bs?.categories?.length) return 0;
   const pick = (name) => bs.categories.find(c => c.categoryName === name)?.score ?? 0;
@@ -180,29 +181,36 @@ function gazeMagnitude(bs){
   const s = parts.reduce((a,n)=>a + pick(n), 0);
   return Math.min(1, s / parts.length);
 }
-
-// Gaze direccional H/V
 function gazeHV(bs){
   const pick = (name) => bs?.categories?.find(c => c.categoryName === name)?.score ?? 0;
   const inL  = pick('eyeLookInLeft'),   outL = pick('eyeLookOutLeft');
   const inR  = pick('eyeLookInRight'),  outR = pick('eyeLookOutRight');
   const upL  = pick('eyeLookUpLeft'),   upR  = pick('eyeLookUpRight');
   const dnL  = pick('eyeLookDownLeft'), dnR  = pick('eyeLookDownRight');
-
-  const hRight = outL + inR;
-  const hLeft  = inL  + outR;
-  const h = (hRight - hLeft) / 2;
-  const hAbs = Math.abs(h);
-
-  const vUp   = upL + upR;
-  const vDown = dnL + dnR;
-  const v = (vUp - vDown) / 2;
-  const vAbs = Math.abs(v);
-
+  const hRight = outL + inR, hLeft = inL + outR;
+  const h = (hRight - hLeft) / 2, hAbs = Math.abs(h);
+  const vUp = upL + upR, vDown = dnL + dnR;
+  const v = (vUp - vDown) / 2, vAbs = Math.abs(v);
   return { h, v, hAbs, vAbs };
 }
 
-function adaptBaseline(ar, off, yaw, pitch, gaze, gH, gV){
+/* ===== LABIOS (blendshapes) ===== */
+function pickBS(bs, name){ return bs?.categories?.find(c => c.categoryName === name)?.score ?? 0; }
+// Score de “boca abierta/ancha” con penalización a pucker/funnel para reducir falsos positivos
+function mouthOpenScore(bs){
+  if (!bs) return 0;
+  const jawOpen = pickBS(bs,'jawOpen');
+  const mLLD = pickBS(bs,'mouthLowerDownLeft');
+  const mLDR = pickBS(bs,'mouthLowerDownRight');
+  const mUUL = pickBS(bs,'mouthUpperUpLeft');
+  const mUUR = pickBS(bs,'mouthUpperUpRight');
+  const mPuck = pickBS(bs,'mouthPucker');
+  const mFun  = pickBS(bs,'mouthFunnel');
+  const raw = 0.70*jawOpen + 0.30*((mLLD+mLDR+mUUL+mUUR)/4) - 0.15*mPuck - 0.10*mFun;
+  return clamp01(raw);
+}
+
+function adaptBaseline(ar, off, yaw, pitch, gaze, gH, gV, mouth){
   const ALPHA = 0.02;
   base.ar    = (1-ALPHA)*base.ar    + ALPHA*ar;
   base.off   = (1-ALPHA)*base.off   + ALPHA*off;
@@ -211,6 +219,7 @@ function adaptBaseline(ar, off, yaw, pitch, gaze, gH, gV){
   base.gaze  = (1-ALPHA)*base.gaze  + ALPHA*gaze;
   base.gH    = (1-ALPHA)*base.gH    + ALPHA*gH;
   base.gV    = (1-ALPHA)*base.gV    + ALPHA*gV;
+  base.mouth = (1-ALPHA)*base.mouth + ALPHA*mouth;
 
   thr.enter.ar    = Math.max(0.50, base.ar  - 0.10);
   thr.exit.ar     = Math.max(thr.enter.ar + 0.04, base.ar - 0.03);
@@ -226,6 +235,9 @@ function adaptBaseline(ar, off, yaw, pitch, gaze, gH, gV){
   thr.exit.gV     = Math.max(0.16, base.gV + 0.12);
   thr.enter.gaze  = base.gaze + 0.20;
   thr.exit.gaze   = base.gaze + 0.12;
+  // Umbral de labios más alto para solo marcar habla sostenida
+  thr.enter.mouth = Math.max(0.28, base.mouth + 0.22);
+  thr.exit.mouth  = Math.max(0.18, base.mouth + 0.12);
 }
 
 /* ===== Cámara + Modelo ===== */
@@ -276,11 +288,9 @@ function loop(){
   if (!running) return;
   if (cam.readyState < 2){ requestAnimationFrame(loop); return; }
 
-  const t0 = performance.now();
   try{ ctx.drawImage(cam,0,0,canvas.width,canvas.height); }catch{}
-  const t1 = performance.now();
 
-  try { const m0=metrics.onFrameStart?.(); metrics.onFrameEnd?.(m0??t0); } catch {}
+  try { const m0=metrics.onFrameStart?.(); metrics.onFrameEnd?.(m0??performance.now()); } catch {}
 
   frameCount++;
   if (frameCount % 10 === 0){
@@ -303,17 +313,20 @@ function loop(){
     }
     attnEl && (attnEl.textContent = attnState);
 
+    lipsEl && (lipsEl.textContent = lipsActive ? 'movimiento (posible habla)' : '—');
+
     const accum = offTabAccumMs + (offTabStart ? (performance.now() - offTabStart) : 0);
     offTimeEl && (offTimeEl.textContent = fmtTime(accum));
     offCntEl  && (offCntEl.textContent  = String(offTabEpisodes));
   }
 
-  // ---- Detección robusta (siempre inferimos; con try/catch) ----
+  // ---- Detección robusta (try/catch) ----
   if (landmarker && frameCount % DETECT_EVERY === 0) {
     const ts = performance.now();
     try {
       const out = landmarker.detectForVideo(cam, ts);
       const lm  = out?.faceLandmarks?.[0];
+      const bs  = out?.faceBlendshapes?.[0];
 
       // ===== OCLUSIÓN / SIN CARA =====
       if (!lm) {
@@ -323,10 +336,13 @@ function loop(){
           isOccluded = true;
           awayScore = 0;
           isLookAway = false;
+          lipsScore = 0;
+          lipsActive = false;
         }
       }
 
       let awayNow = false, backNow = false;
+      let lipsNow = false, lipsBack = false;
 
       if (lm) {
         // bbox
@@ -334,7 +350,7 @@ function loop(){
         for (const p of lm) { if(p.x<minx)minx=p.x; if(p.x>maxx)maxx=p.x; if(p.y<miny)miny=p.y; if(p.y>maxy)maxy=p.y; }
         const w = maxx - minx, h = maxy - miny, area = w * h;
 
-        // oclusión por cara muy pequeña o landmarks fuera del cuadro
+        // oclusión
         const oobFrac = fracOutOfBounds(lm);
         const occlNow = (area < OCCL_AREA_MIN) || (oobFrac > 0.35);
         if (occlNow) {
@@ -342,8 +358,8 @@ function loop(){
           if (!occlSince) occlSince = ts;
           if (!isOccluded && (ts - occlSince) >= OCCL_ENTER_MS) {
             isOccluded = true;
-            awayScore = 0;
-            isLookAway = false;
+            awayScore = 0; isLookAway = false;
+            lipsScore = 0; lipsActive = false;
           }
         } else {
           occlSince = null;
@@ -371,9 +387,11 @@ function loop(){
           }
 
           // Gaze
-          const bs = out?.faceBlendshapes?.[0];
           const gazeRaw = gazeMagnitude(bs);
           const { h:_, v:__, hAbs, vAbs } = gazeHV(bs);
+
+          // LABIOS
+          const mouthRaw = mouthOpenScore(bs);
 
           // EMA
           ema.ar    = (ema.ar    == null) ? arRaw    : (1-EMA_ALPHA)*ema.ar    + EMA_ALPHA*arRaw;
@@ -383,6 +401,7 @@ function loop(){
           ema.gaze  = (ema.gaze  == null) ? gazeRaw  : (1-EMA_ALPHA)*ema.gaze  + EMA_ALPHA*gazeRaw;
           ema.gH    = (ema.gH    == null) ? hAbs     : (1-EMA_ALPHA)*ema.gH    + EMA_ALPHA*hAbs;
           ema.gV    = (ema.gV    == null) ? vAbs     : (1-EMA_ALPHA)*ema.gV    + EMA_ALPHA*vAbs;
+          ema.mouth = (ema.mouth == null) ? mouthRaw : (1-EMA_ALPHA)*ema.mouth + EMA_ALPHA*mouthRaw;
 
           const dAR  = Math.abs(arRaw  - ema.ar);
           const dOFF = Math.abs(offRaw - ema.off);
@@ -392,10 +411,10 @@ function loop(){
           const dGV  = Math.abs(vAbs    - ema.gV);
           const movementFast = (dOFF > MOVE_OFF) || (dAR > MOVE_AR) || (dYAW > MOVE_YAW) || (dPIT > MOVE_PITCH) || (dGH > MOVE_EYE) || (dGV > MOVE_EYE);
 
-          // Calibración (frontal)
+          // Calibración (frontal, boca cerrada)
           if (calibrating) {
             calAR.push(arRaw); calOFF.push(offRaw); calYAW.push(yawRaw); calPITCH.push(pitchRaw); calGAZE.push(gazeRaw);
-            calGazeH.push(hAbs); calGazeV.push(vAbs);
+            calGazeH.push(hAbs); calGazeV.push(vAbs); calMouth.push(mouthRaw);
             if ((performance.now() - calStart) >= CALIBRATION_MS && calAR.length >= 6) {
               const med = a => { const s=[...a].sort((x,y)=>x-y), m=Math.floor(s.length/2); return s.length%2?s[m]:(s[m-1]+s[m])/2; };
               base.ar    = med(calAR);
@@ -405,7 +424,8 @@ function loop(){
               base.gaze  = med(calGAZE);
               base.gH    = med(calGazeH);
               base.gV    = med(calGazeV);
-              adaptBaseline(base.ar, base.off, base.yaw, base.pitch, base.gaze, base.gH, base.gV);
+              base.mouth = med(calMouth);
+              adaptBaseline(base.ar, base.off, base.yaw, base.pitch, base.gaze, base.gH, base.gV, base.mouth);
               calibrating = false;
 
               const poseAwayEnter = (base.ar < thr.enter.ar) || (base.yaw > thr.enter.yaw) || (base.pitch > thr.enter.pitch);
@@ -415,29 +435,25 @@ function loop(){
             }
           }
 
-          // Umbrales
+          // Umbrales para "mirada desviada"
           const yawAwayEnter   = (yawRaw   > thr.enter.yaw);
           const yawAwayExit    = (yawRaw   < thr.exit.yaw);
           const pitchAwayEnter = (pitchRaw > thr.enter.pitch);
           const pitchAwayExit  = (pitchRaw < thr.exit.pitch);
-
           const poseAwayEnter  = yawAwayEnter || pitchAwayEnter || (arRaw < thr.enter.ar);
           const poseAwayExit   = yawAwayExit  && pitchAwayExit  && (arRaw > thr.exit.ar);
-
           const transAwayEnter = (offRaw > thr.enter.off) && (yawRaw > thr.exit.yaw*0.7 || pitchRaw > thr.exit.pitch*0.7);
           const transAwayExit  = (offRaw < thr.exit.off);
 
           const headFrontal = (yawRaw < thr.exit.yaw) && (pitchRaw < thr.exit.pitch);
           const eyesAwayEnter = headFrontal && (ema.gH > thr.enter.gH || ema.gV > thr.enter.gV);
           const eyesAwayExit  = (ema.gH < thr.exit.gH) && (ema.gV < thr.exit.gV);
-
           const gazeAwayEnter  = (ema.gaze > thr.enter.gaze);
           const gazeAwayExit   = (ema.gaze < thr.exit.gaze);
 
           let enter = poseAwayEnter || transAwayEnter || eyesAwayEnter || gazeAwayEnter;
           let exit  = (poseAwayExit && transAwayExit && eyesAwayExit && gazeAwayExit);
 
-          // auto-flip sólo para pose
           if (invertSense) {
             const poseEnter = poseAwayEnter || transAwayEnter;
             const poseExit  = poseAwayExit  && transAwayExit;
@@ -447,23 +463,27 @@ function loop(){
             exit  = flippedExit;
           }
 
+          // LABIOS (posible habla) — independiente de atención
+          lipsNow  = (ema.mouth > thr.enter.mouth);
+          lipsBack = (ema.mouth < thr.exit.mouth);
+
           if (!isOccluded) {
             awayNow = movementFast || enter;
             backNow = !movementFast && exit;
 
             if (!isLookAway && !movementFast) {
-              adaptBaseline(ema.ar, ema.off, ema.yaw, ema.pitch, ema.gaze, ema.gH, ema.gV);
+              adaptBaseline(ema.ar, ema.off, ema.yaw, ema.pitch, ema.gaze, ema.gH, ema.gV, ema.mouth);
             }
           } else {
             awayNow = false;
             backNow = true;
-            awayScore = 0;
-            isLookAway = false;
+            awayScore = 0;  isLookAway = false;
+            lipsScore = 0;  lipsActive = false;
           }
         }
       }
 
-      // Histéresis temporal (sin dwell)
+      // Histéresis temporal (mirada)
       if (!isOccluded) {
         if (awayNow)      awayScore = Math.min(SCORE_ENTER, awayScore + 3);
         else if (backNow) awayScore = Math.max(0, awayScore - 2);
@@ -472,10 +492,19 @@ function loop(){
         if (!isLookAway && awayScore >= SCORE_ENTER) isLookAway = true;
         if (isLookAway  && awayScore <= SCORE_EXIT)  isLookAway = false;
       }
+
+      // Histéresis temporal (labios)
+      if (!isOccluded) {
+        if (lipsNow)        lipsScore = Math.min(LIPS_SCORE_ENTER, lipsScore + 3);
+        else if (lipsBack)  lipsScore = Math.max(0, lipsScore - 2);
+        else                lipsScore = Math.max(0, lipsScore - 1);
+
+        if (!lipsActive && lipsScore >= LIPS_SCORE_ENTER) lipsActive = true;
+        if (lipsActive  && lipsScore <= LIPS_SCORE_EXIT)  lipsActive = false;
+      }
+
     } catch (err) {
-      // Si MediaPipe lanza algo inesperado, no rompemos el loop
-      // Opcional: muestra un aviso suave una sola vez
-      // console.warn('Detect error:', err);
+      // no romper el loop si detect falla
     }
   }
 
@@ -498,7 +527,6 @@ document.addEventListener('visibilitychange', () => {
 
 /* ===== Handlers ===== */
 btnPermitir?.addEventListener('click', async ()=>{
-  // Si no hay consentimiento en localStorage, simplemente seguimos como venías usando (asumes que ya lo tienes).
   camRequested = true;
   await startCamera();
 });
@@ -517,14 +545,15 @@ btnStart?.addEventListener('click', ()=>{
   offTabEpisodes= 0;
   offTabAccumMs = 0;
 
-  // reset detección + calibración + oclusión
+  // reset detección + calibración + oclusión + labios
   awayScore = 0; isLookAway = false;
+  lipsScore = 0; lipsActive = false;
   isOccluded = false; occlSince = null; occlClearSince = null;
 
   calibrating = !!landmarker; calStart = performance.now();
   calAR.length=0; calOFF.length=0; calYAW.length=0; calPITCH.length=0; calGAZE.length=0;
-  calGazeH.length=0; calGazeV.length=0;
-  ema = { ar: null, off: null, yaw: null, pitch: null, gaze: null, gH: null, gV: null };
+  calGazeH.length=0; calGazeV.length=0; calMouth.length=0;
+  ema = { ar: null, off: null, yaw: null, pitch: null, gaze: null, gH: null, gV: null, mouth: null };
   invertSense = false;
 
   metrics.start();
@@ -575,6 +604,7 @@ showSection(tabButtons.find(b=>b.classList.contains('active'))?.dataset.t || 'le
   sessionTime && (sessionTime.textContent = '00:00');
   fpsEl&&(fpsEl.textContent='0'); p95El&&(p95El.textContent='0.0');
   tabState&&(tabState.textContent='—'); attnEl&&(attnEl.textContent='—');
+  lipsEl&&(lipsEl.textContent='—');
   offCntEl&&(offCntEl.textContent='0'); offTimeEl&&(offTimeEl.textContent='00:00');
 
   document.getElementById('open-privacy')

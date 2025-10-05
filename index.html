@@ -4,7 +4,6 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>MVP Atención</title>
-  <!-- Deja un SOLO link al CSS -->
   <link rel="stylesheet" href="./src/styles.css" />
 </head>
 <body>
@@ -20,78 +19,69 @@
         <button class="tab" data-t="video">Video</button>
         <button class="tab" data-t="examen">Examen</button>
       </div>
+
       <article id="lectura">
         <h2>Hábitos de estudio eficaces para Ingeniería</h2>
         <p>En carreras como Ingeniería de Computación y Sistemas, el estudio efectivo combina
-          <strong>planificación</strong>, <strong>práctica deliberada</strong> y <strong>descanso controlado</strong>.El objetivo no es estudiar más horas, sino estudiar mejor.</p>
-          <h3>1) Plan de bloques cortos</h3>
-          <ul>
-            <li>Define sesiones de 25–40 min de concentración y 5–10 min de pausa breve.</li>
-            <li>Comienza por 1–2 objetivos muy concretos (p. ej., “resolver 4 ejercicios de recursividad”).</li>
-          </ul>
-          <h3>2) Práctica activa</h3>
-          <ul>
-            <li>Alterna entre <em>leer</em> y <em>hacer</em>: implementa pequeños fragmentos de código o resuelve
-              un ejercicio similar tras cada sección teórica.</li>
-              <li>Explícale el concepto a otra persona (o a ti mismo en voz alta) para detectar lagunas.</li>
-            </ul>
-            <h3>3) Gestión de distracciones</h3>
-            <ul>
-              <li>Estudia con una sola pestaña principal y desactiva notificaciones durante el bloque.</li>
-              <li>Si aparecen interrupciones, anótalas y retómalas en la pausa.</li>
-            </ul>
-            <h3>4) Espaciado y repasos</h3>
-            <ul>
-              <li>Usa repasos espaciados (1–2–4 días) con tarjetas o resúmenes breves.</li>
-              <li>Prioriza errores: vuelve sobre los ejercicios en los que fallaste.</li>
-            </ul>
-            <h3>5) Cuidado personal</h3>
-            <ul>
-              <li>Sueño, hidratación y pausas activas mejoran la atención sostenida.</li>
-            </ul>
-            <blockquote>
-              <strong>Consejo:</strong> para temas complejos (p. ej., complejidad algorítmica),
-              alterna 1 bloque de lectura con 1 bloque de implementación de un caso mínimo.
-            </blockquote>
-          </article>
+          <strong>planificación</strong>, <strong>práctica deliberada</strong> y <strong>descanso controlado</strong>. El objetivo no es estudiar más horas, sino estudiar mejor.</p>
+        <h3>1) Plan de bloques cortos</h3>
+        <ul>
+          <li>Define sesiones de 25–40 min de concentración y 5–10 min de pausa breve.</li>
+          <li>Comienza por 1–2 objetivos muy concretos (p. ej., “resolver 4 ejercicios de recursividad”).</li>
+        </ul>
+        <h3>2) Práctica activa</h3>
+        <ul>
+          <li>Alterna entre <em>leer</em> y <em>hacer</em>: implementa pequeños fragmentos tras cada sección teórica.</li>
+          <li>Explícale el concepto a otra persona o a ti mismo en voz alta.</li>
+        </ul>
+        <h3>3) Gestión de distracciones</h3>
+        <ul>
+          <li>Estudia con una sola pestaña principal y desactiva notificaciones durante el bloque.</li>
+          <li>Si aparecen interrupciones, anótalas y retómalas en la pausa.</li>
+        </ul>
+        <h3>4) Espaciado y repasos</h3>
+        <ul>
+          <li>Usa repasos espaciados (1–2–4 días) con tarjetas o resúmenes breves.</li>
+          <li>Prioriza errores: vuelve sobre los ejercicios en los que fallaste.</li>
+        </ul>
+        <h3>5) Cuidado personal</h3>
+        <ul>
+          <li>Sueño, hidratación y pausas activas mejoran la atención sostenida.</li>
+        </ul>
+      </article>
 
       <div id="video" class="hidden">
         <div class="video-container">
           <iframe
-          title="Recurso en video"
-          src="https://www.youtube-nocookie.com/embed/_tA5cinv0U8?rel=0&modestbranding=1&playsinline=1"
-          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
-          allowfullscreen>
-        </iframe>
+            title="Recurso en video"
+            src="https://www.youtube-nocookie.com/embed/_tA5cinv0U8?rel=0&modestbranding=1&playsinline=1"
+            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+            allowfullscreen>
+          </iframe>
+        </div>
       </div>
 
-    </div>
-    
-    <section id="examen" class="hidden">
-      <h2>Test de Prueba</h2>
-      <p id="exam-instr">
-        Responde las siguientes preguntas por favor. Los resultados se guardarán de manera anónima.
-      </p>
-      <div id="exam-ui" class="quiz">
-        <div id="exam-meta" class="quiz-meta">
-          Pregunta <span id="exam-idx">0</span>/<span id="exam-total">0</span>
-          · RT: <span id="exam-rt">0.0</span>s
+      <section id="examen" class="hidden">
+        <h2>Test de Prueba</h2>
+        <p id="exam-instr">Responde las siguientes preguntas por favor. Los resultados se guardarán de manera anónima.</p>
+        <div id="exam-ui" class="quiz">
+          <div id="exam-meta" class="quiz-meta">
+            Pregunta <span id="exam-idx">0</span>/<span id="exam-total">0</span>
+            · RT: <span id="exam-rt">0.0</span>s
+          </div>
+          <div id="q-text" class="q-text">—</div>
+          <div id="q-options" class="q-options"></div>
+          <div class="exam-actions">
+            <button id="btn-exam-start">Iniciar test</button>
+            <button id="btn-exam-next" class="hidden">Siguiente</button>
+            <button id="btn-exam-finish" class="hidden">Finalizar</button>
+          </div>
+          <div id="exam-result" class="hidden"></div>
         </div>
-        <div id="q-text" class="q-text">—</div>
-        <div id="q-options" class="q-options"></div>
-        
-        <div class="exam-actions">
-          <button id="btn-exam-start">Iniciar test</button>
-          <button id="btn-exam-next" class="hidden">Siguiente</button>
-          <button id="btn-exam-finish" class="hidden">Finalizar</button>
-        </div>
-        
-        <div id="exam-result" class="hidden"></div>
-      </div>
+      </section>
     </section>
 
     <aside class="right">
-      <!-- ⬇️ CARD DE CÁMARA: aquí están los cambios de HU-002 -->
       <div class="card">
         <h3>Cámara</h3>
         <p>Estado:
@@ -106,7 +96,7 @@
           <video id="cam" autoplay playsinline muted></video>
           <canvas id="canvas"></canvas>
         </div>
-
+      </div>
 
       <div class="card">
         <h3>Estado</h3>
@@ -114,6 +104,7 @@
         <p>Tiempo: <span id="session-time" aria-live="polite">00:00</span></p>
         <p>Pestaña: <span id="tab-state">—</span></p>
         <p>Atención: <span id="attn-state">—</span></p>
+        <p>Labios: <span id="lips-state">—</span></p><!-- ← NUEVO -->
         <p>FPS: <span id="fps">—</span>
           <span id="fps-pill" class="pill pill-neutral" aria-live="polite">—</span>
           &nbsp;|&nbsp;
@@ -132,38 +123,33 @@
     </aside>
   </main>
 
-<!-- BACKDROP + MODAL DE CONSENTIMIENTO (UN SOLO CUADRO) -->
-<div id="consent-backdrop" class="modal-backdrop hidden" aria-hidden="true"></div>
-<div id="consent-modal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="consent-title">
-  <div class="modal-card">
-    <h3 id="consent-title">Consentimiento para Modo Estudio</h3>
-
-    <p>Para iniciar el “Modo Estudio” esta aplicación necesita usar tu cámara y registrar eventos
-       de atención (pestaña activa/inactiva, parpadeo/ojos cerrados, giro de cabeza) y métricas de
-       rendimiento (FPS/latencia). <strong>No se guarda video crudo</strong>; sólo señales y conteos
-       para generar un resumen de sesión.</p>
-
-    <ul>
-      <li>Uso de cámara (preview local en el navegador).</li>
-      <li>Detección de pestaña activa/inactiva (on/off-tab).</li>
-      <li>Cómputo de eventos (ojos cerrados, giro de cabeza), FPS y p95.</li>
-      <li>Exportación local de CSV/JSON bajo tu control.</li>
-    </ul>
-
-    <label class="consent-check">
-      <input type="checkbox" id="consent-check" />
-      He leído y acepto las condiciones del Modo Estudio.
-    </label>
-
-    <div class="modal-actions">
-      <a href="/privacidad.html" target="_blank" rel="noopener">Ver política completa</a>
-      <span class="spacer"></span>
-      <button id="consent-cancel" class="secondary">Cancelar</button>
-      <button id="consent-accept" disabled>Acepto</button>
+  <!-- Modal de consentimiento (sin cambios funcionales, no pedimos audio) -->
+  <div id="consent-backdrop" class="modal-backdrop hidden" aria-hidden="true"></div>
+  <div id="consent-modal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="consent-title">
+    <div class="modal-card">
+      <h3 id="consent-title">Consentimiento para Modo Estudio</h3>
+      <p>Para iniciar el “Modo Estudio” esta aplicación necesita usar tu cámara y registrar eventos
+        de atención (pestaña activa/inactiva, <strong>ojos/labios</strong>, giro de cabeza) y métricas de
+        rendimiento (FPS/latencia). <strong>No se guarda video crudo</strong>; sólo señales y conteos
+        para generar un resumen de sesión.</p>
+      <ul>
+        <li>Uso de cámara (preview local en el navegador).</li>
+        <li>Detección de pestaña activa/inactiva (on/off-tab).</li>
+        <li>Cómputo de eventos (ojos/labios, giro de cabeza), FPS y p95.</li>
+        <li>Exportación local de CSV/JSON bajo tu control.</li>
+      </ul>
+      <label class="consent-check">
+        <input type="checkbox" id="consent-check" />
+        He leído y acepto las condiciones del Modo Estudio.
+      </label>
+      <div class="modal-actions">
+        <a href="/privacidad.html" target="_blank" rel="noopener">Ver política completa</a>
+        <span class="spacer"></span>
+        <button id="consent-cancel" class="secondary">Cancelar</button>
+        <button id="consent-accept" disabled>Acepto</button>
+      </div>
     </div>
   </div>
-</div>
-
 
   <script type="module" src="./src/metrics.js"></script>
   <script type="module" src="./src/tab-logger.js"></script>
