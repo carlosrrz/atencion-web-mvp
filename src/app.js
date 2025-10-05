@@ -1,4 +1,4 @@
-// app.js — Atención robusta: yaw column-major + ojos + auto-flip si la lógica está invertida
+// app.js — Detección robusta con dwell (rachas) + yaw column-major + ojos + gaze + auto-flip
 import { createMetrics } from './metrics.js';
 import { createTabLogger } from './tab-logger.js';
 import { FilesetResolver, FaceLandmarker } from "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.3";
@@ -45,15 +45,14 @@ const CALIBRATION_MS = 1200;
 const EMA_ALPHA = 0.30;
 const MOVE_OFF  = 0.085;
 const MOVE_AR   = 0.060;
-const MOVE_YAW  = 0.12;  // ~7°
+const MOVE_YAW  = 0.12;   // ~7°
 
-const SCORE_ENTER = 6;
-const SCORE_EXIT  = 2;
+/* —— dwell (rachas) —— */
+const ENTER_FRAMES = 5;   // ~0.35–0.5 s según FPS
+const EXIT_FRAMES  = 6;   // ~0.45–0.7 s
 
 /* ===== Estado ===== */
-let awayScore   = 0;
 let isLookAway  = false;
-
 let stream = null;
 let running = false;
 let camRequested = false;
@@ -74,7 +73,7 @@ const tabLogger = createTabLogger();
 let calibrating = false;
 let calStart = 0;
 let calAR = [], calOFF = [], calYAW = [], calGAZE = [];
-let invertSense = false; // ← si true, invierte away/back detectados
+let invertSense = false; // si true, invierte enter/exit
 
 // baseline y umbrales (se ajustan tras calibrar/adaptar)
 let base = { ar: 0.68, off: 0.18, yaw: 0.04, gaze: 0.05 };
@@ -84,6 +83,10 @@ let thr  = {
 };
 
 let ema = { ar: null, off: null, yaw: null, gaze: null };
+
+/* Rachas (dwell) */
+let enterStreak = 0;
+let exitStreak  = 0;
 
 /* ===== Util ===== */
 const CONSENT_KEY = 'mvp.consent.v1';
@@ -140,7 +143,7 @@ function lateralOffset(lm, minx, maxx){
   return Math.abs((gx - cx) / w);
 }
 
-// Gaze desde blendshapes: suma de magnitudes “look” (clipeado 0..1)
+// Gaze desde blendshapes: promedio de magnitudes “look” (0..1)
 function gazeMagnitude(bs){
   if (!bs?.categories?.length) return 0;
   const pick = (name) => bs.categories.find(c => c.categoryName === name)?.score ?? 0;
@@ -149,7 +152,7 @@ function gazeMagnitude(bs){
     'eyeLookInLeft','eyeLookInRight','eyeLookOutLeft','eyeLookOutRight'
   ];
   const s = parts.reduce((a,n)=>a + pick(n), 0);
-  return Math.min(1, s / parts.length); // promedio 0..1
+  return Math.min(1, s / parts.length);
 }
 
 function adaptBaseline(ar, off, yaw, gaze){
@@ -243,15 +246,13 @@ function loop(){
     offCntEl  && (offCntEl.textContent  = String(offTabEpisodes));
   }
 
-  // ---- Detección con yaw correcto + blendshapes + auto-flip ----
+  // ---- Detección con dwell (rachas) ----
   if (landmarker && frameCount % DETECT_EVERY === 0) {
     const ts = performance.now();
     if (cam.currentTime !== lastVideoTime) {
       lastVideoTime = cam.currentTime;
       const out = landmarker.detectForVideo(cam, ts);
       const lm  = out?.faceLandmarks?.[0];
-
-      let awayNow = false, backNow = false;
 
       if (lm) {
         // bbox
@@ -262,7 +263,7 @@ function loop(){
           const arRaw  = w / (h + 1e-6);
           const offRaw = lateralOffset(lm, minx, maxx);
 
-          // yaw por ojos y matriz (column-major)
+          // yaw por ojos y por matriz (column-major)
           const yawEyes = yawFromEyes(lm);
           let yawRaw = yawEyes;
           const M = out?.facialTransformationMatrixes?.[0];
@@ -298,55 +299,53 @@ function loop(){
               adaptBaseline(base.ar, base.off, base.yaw, base.gaze);
               calibrating = false;
 
-              // --- AUTO-FLIP: si en el final de la calibración el sistema diría "away", invertimos
+              // auto-flip si al terminar “pareces” away
               const poseAwayEnter = (base.ar < thr.enter.ar) || (base.yaw > thr.enter.yaw);
               const transAwayEnter= (base.off > thr.enter.off) && (base.yaw > thr.exit.yaw * 0.7);
               const gazeAwayEnter = (base.gaze > thr.enter.gaze);
-              const wouldBeAway   = poseAwayEnter || transAwayEnter || gazeAwayEnter;
-              invertSense = !!wouldBeAway;
+              invertSense = !!(poseAwayEnter || transAwayEnter || gazeAwayEnter);
               console.log('Calibrado:', { base, thr, invertSense });
             }
           }
 
-          // Umbrales vigentes + gating:
+          // Umbrales + gating
           const poseAwayEnter = (arRaw < thr.enter.ar) || (yawRaw > thr.enter.yaw);
           const poseAwayExit  = (arRaw > thr.exit.ar)  && (yawRaw < thr.exit.yaw);
-
-          // offset solo ayuda si la pose sugiere desvío
           const transAwayEnter= (offRaw > thr.enter.off) && (yawRaw > thr.exit.yaw * 0.7);
           const transAwayExit = (offRaw < thr.exit.off);
-
-          // ojos (gaze) también pueden disparar away
           const gazeAwayEnter = (gazeRaw > thr.enter.gaze);
           const gazeAwayExit  = (gazeRaw < thr.exit.gaze);
 
-          let enter = poseAwayEnter || transAwayEnter || gazeAwayEnter;
-          let exit  = poseAwayExit  && transAwayExit  && gazeAwayExit;
+          let enter = (poseAwayEnter || transAwayEnter || gazeAwayEnter);
+          let exit  = (poseAwayExit  && transAwayExit  && gazeAwayExit);
 
-          // AUTO-FLIP (si la cámara/SDK invierten la “frontalidad”, corrije la decisión)
-          if (invertSense) {
-            const tmpEnter = enter;
-            enter = exit;
-            exit  = tmpEnter;
+          // auto-flip si hace falta
+          if (invertSense) { const tmp=enter; enter=exit; exit=tmp; }
+
+          // —— lógica de rachas (sticky) ——
+          if (!isLookAway) {
+            // acelerar entrada si hubo movimiento claro
+            if (movementFast && (poseAwayEnter || gazeAwayEnter)) enterStreak += 2;
+            enterStreak = enter ? (enterStreak + 1) : 0;
+            if (enterStreak >= ENTER_FRAMES) {
+              isLookAway = true;
+              exitStreak = 0;               // resetea salida
+            }
+          } else {
+            // cuando ya estás en away, NO decae por frames “neutros”
+            exitStreak = exit ? (exitStreak + 1) : 0;
+            if (exitStreak >= EXIT_FRAMES) {
+              isLookAway = false;
+              enterStreak = 0;              // resetea entrada
+            }
           }
 
-          awayNow = movementFast || enter;
-          backNow = !movementFast && exit;
-
-          // Adaptación lenta cuando “atento”
+          // Adaptación lenta solo cuando “atento” (evita que el baseline se mueva estando away)
           if (!isLookAway && !movementFast) {
             adaptBaseline(ema.ar, ema.off, ema.yaw, ema.gaze);
           }
         }
       }
-
-      // Histéresis temporal
-      if (awayNow)      awayScore = Math.min(SCORE_ENTER, awayScore + 3);
-      else if (backNow) awayScore = Math.max(0, awayScore - 2);
-      else              awayScore = Math.max(0, awayScore - 1);
-
-      if (!isLookAway && awayScore >= SCORE_ENTER) isLookAway = true;
-      if (isLookAway  && awayScore <= SCORE_EXIT)  isLookAway = false;
     }
   }
 
@@ -397,12 +396,13 @@ btnStart?.addEventListener('click', ()=>{
   offTabEpisodes= 0;
   offTabAccumMs = 0;
 
-  // reset detección + calibración
-  awayScore = 0; isLookAway = false;
+  // reset detección + calibración + dwell
+  isLookAway = false;
   calibrating = !!landmarker; calStart = performance.now();
   calAR.length=0; calOFF.length=0; calYAW.length=0; calGAZE.length=0;
   ema = { ar: null, off: null, yaw: null, gaze: null };
   invertSense = false;
+  enterStreak = 0; exitStreak = 0;
 
   metrics.start();
 
