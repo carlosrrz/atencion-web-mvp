@@ -1,4 +1,4 @@
-// app.js — Mirada + Oclusión + Labios (habla normal) + Anti-blink + Off-tab por visibilidad O foco
+// app.js — Mirada + Oclusión + Labios + Anti-blink + Off-tab (foco/visibilidad) + Resumen modal
 import { createMetrics } from './metrics.js';
 import { createTabLogger } from './tab-logger.js';
 import { FilesetResolver, FaceLandmarker } from "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.3";
@@ -30,6 +30,14 @@ const p95El   = document.getElementById('p95');
 const fpsPill = document.getElementById('fps-pill');
 const p95Pill = document.getElementById('p95-pill');
 const perfAll = document.getElementById('perf-overall');
+
+/* Modal resumen */
+const summaryBackdrop = document.getElementById('summary-backdrop');
+const summaryModal    = document.getElementById('summary-modal');
+const summaryBody     = document.getElementById('summary-body');
+const btnSumJSON      = document.getElementById('summary-download-json');
+const btnSumCSV       = document.getElementById('summary-download-csv');
+const btnSumClose     = document.getElementById('summary-close');
 
 const tabButtons = Array.from(document.querySelectorAll('.tab'));
 const sections = {
@@ -67,7 +75,7 @@ const LIPS_WIN_MS    = 900;
 const LIPS_OSC_MIN   = 2;
 const LIPS_MIN_AMP   = 0.060;
 
-/* ===== BLINK (anti “mirada desviada” por parpadeo) ===== */
+/* ===== BLINK ===== */
 const BLINK_ENTER = 0.55;
 const BLINK_EXIT  = 0.35;
 const BLINK_MAX_MS = 280;
@@ -95,13 +103,14 @@ let sessionStart = 0;
 
 let landmarker = null;
 
-// Off-tab (cuenta por visibilidad O foco)
+// Off-tab (visibilidad O foco)
 let offTabStart = null;
 let offTabEpisodes = 0;
 let offTabAccumMs = 0;
 
 const metrics = createMetrics();
-const tabLogger = createTabLogger();
+// Unificamos el umbral con la UI: 1500 ms
+const tabLogger = createTabLogger({ offTabThresholdMs: 1500 });
 
 /* Calibración / baseline / auto-flip */
 let calibrating = false;
@@ -123,12 +132,17 @@ let lipsPrev = null;    // { jaw, upper, lower, stretch, funnel, pucker, smile }
 let lipsVelEMA = 0;
 let mouthHist = [];     // [{t, v}] v = mouthRaw (pre-EMA)
 
+/* Episodios/tiempos adicionales */
+let lookAwayStart = null, lookAwayEpisodes = 0, lookAwayAccumMs = 0, lookAwayLongestMs = 0;
+let lipsStart     = null, lipsEpisodes     = 0, lipsAccumMs     = 0, lipsLongestMs     = 0;
+let occlEpStart   = null, occlEpisodes     = 0, occlAccumMs     = 0, occlLongestMs     = 0;
+
 /* ===== Util ===== */
 const CONSENT_KEY = 'mvp.consent.v1';
 const hasConsent  = () => { try { return !!localStorage.getItem(CONSENT_KEY); } catch { return false; } };
 const insecureContext = () => !(location.protocol === 'https:' || location.hostname === 'localhost');
 const clamp01 = v => Math.max(0, Math.min(1, v));
-const isInTab = () => (document.visibilityState === 'visible') && document.hasFocus();  // ← NUEVO
+const isInTab = () => (document.visibilityState === 'visible') && document.hasFocus();
 
 function setCamStatus(kind, msg, help=''){
   if(!camStatus) return;
@@ -380,8 +394,8 @@ function loop(){
     const ms = performance.now() - sessionStart;
     sessionTime && (sessionTime.textContent = fmtTime(ms));
 
-    const inTab = isInTab();                                         // ← NUEVO
-    tabState && (tabState.textContent = inTab ? 'En pestaña' : 'Fuera de pestaña'); // ← NUEVO
+    const inTab = isInTab();
+    tabState && (tabState.textContent = inTab ? 'En pestaña' : 'Fuera de pestaña');
 
     let attnState = 'atento';
     if (!inTab) {
@@ -404,6 +418,8 @@ function loop(){
   // ---- Detección robusta (try/catch) ----
   if (landmarker && frameCount % DETECT_EVERY === 0) {
     const ts = performance.now();
+    let prevLook = isLookAway, prevLips = lipsActive, prevOcc = isOccluded;
+
     try {
       const out = landmarker.detectForVideo(cam, ts);
       const lm  = out?.faceLandmarks?.[0];
@@ -603,6 +619,38 @@ function loop(){
     } catch (err) {
       // no romper el loop si detect falla
     }
+
+    // ===== Episodios (transiciones) =====
+    // Mirada
+    if (!prevLook && isLookAway) {
+      lookAwayStart = ts;
+    } else if (prevLook && !isLookAway) {
+      if (lookAwayStart != null) {
+        const d = ts - lookAwayStart;
+        lookAwayAccumMs += d; lookAwayEpisodes += 1; if (d > lookAwayLongestMs) lookAwayLongestMs = d;
+        lookAwayStart = null;
+      }
+    }
+    // Labios
+    if (!prevLips && lipsActive) {
+      lipsStart = ts;
+    } else if (prevLips && !lipsActive) {
+      if (lipsStart != null) {
+        const d = ts - lipsStart;
+        lipsAccumMs += d; lipsEpisodes += 1; if (d > lipsLongestMs) lipsLongestMs = d;
+        lipsStart = null;
+      }
+    }
+    // Oclusión
+    if (!prevOcc && isOccluded) {
+      occlEpStart = ts;
+    } else if (prevOcc && !isOccluded) {
+      if (occlEpStart != null) {
+        const d = ts - occlEpStart;
+        occlAccumMs += d; occlEpisodes += 1; if (d > occlLongestMs) occlLongestMs = d;
+        occlEpStart = null;
+      }
+    }
   }
 
   requestAnimationFrame(loop);
@@ -614,7 +662,7 @@ function handleTabStateChange(){
   const now = performance.now();
   const inTab = isInTab();
   if (!inTab) {
-    if (offTabStart == null) offTabStart = now; // inicia episodio si no estaba ya
+    if (offTabStart == null) offTabStart = now;
   } else if (offTabStart != null) {
     const dur = now - offTabStart;
     if (dur >= 1500) offTabEpisodes += 1;
@@ -636,23 +684,180 @@ btnRetry?.addEventListener('click', ()=>{
   setCamStatus('neutral','Permiso pendiente','Presiona “Permitir cámara”.');
 });
 
+function closeOpenEpisodes(nowTs){
+  // mirada
+  if (lookAwayStart != null){
+    const d = nowTs - lookAwayStart;
+    lookAwayAccumMs += d; lookAwayEpisodes += 1; if (d > lookAwayLongestMs) lookAwayLongestMs = d;
+    lookAwayStart = null;
+  }
+  // labios
+  if (lipsStart != null){
+    const d = nowTs - lipsStart;
+    lipsAccumMs += d; lipsEpisodes += 1; if (d > lipsLongestMs) lipsLongestMs = d;
+    lipsStart = null;
+  }
+  // oclusión
+  if (occlEpStart != null){
+    const d = nowTs - occlEpStart;
+    occlAccumMs += d; occlEpisodes += 1; if (d > occlLongestMs) occlLongestMs = d;
+    occlEpStart = null;
+  }
+  // off-tab
+  if (offTabStart != null){
+    const d = nowTs - offTabStart;
+    if (d >= 1500) offTabEpisodes += 1;
+    offTabAccumMs += d;
+    offTabStart = null;
+  }
+}
+
+function buildSummaryObject(){
+  const { fpsMed, latP95 } = metrics.read();
+  const tabSum = tabLogger.getSummary?.() || {
+    durationMs: performance.now() - sessionStart,
+    offEpisodes: offTabEpisodes,
+    offTotalMs: offTabAccumMs,
+    onTotalMs: 0,
+    longestOffMs: 0,
+    offThresholdMs: 1500
+  };
+  const durationMs = Math.max(0, performance.now() - sessionStart);
+
+  return {
+    duration_ms: Math.round(durationMs),
+    performance: {
+      fps_median: Number(fpsMed.toFixed(1)),
+      latency_p95_ms: Number(latP95.toFixed(1)),
+      overall: perfAll?.textContent || ''
+    },
+    tab_activity: {
+      off_episodes: tabSum.offEpisodes,
+      off_total_ms: Math.round(tabSum.offTotalMs),
+      on_total_ms: Math.round(tabSum.onTotalMs),
+      longest_off_ms: Math.round(tabSum.longestOffMs),
+      threshold_ms: tabSum.offThresholdMs
+    },
+    attention: {
+      lookaway_episodes: lookAwayEpisodes,
+      lookaway_total_ms: Math.round(lookAwayAccumMs),
+      lookaway_longest_ms: Math.round(lookAwayLongestMs)
+    },
+    occlusion: {
+      episodes: occlEpisodes,
+      total_ms: Math.round(occlAccumMs),
+      longest_ms: Math.round(occlLongestMs)
+    },
+    lips: {
+      speak_episodes: lipsEpisodes,
+      speak_total_ms: Math.round(lipsAccumMs),
+      speak_longest_ms: Math.round(lipsLongestMs)
+    }
+  };
+}
+
+function showSummaryModal(summary){
+  if (!summaryBody) return;
+  const fmt = (ms)=>fmtTime(ms);
+  summaryBody.innerHTML = `
+    <p><strong>Duración:</strong> ${fmt(summary.duration_ms)}</p>
+    <h4>Actividad de pestaña</h4>
+    <ul>
+      <li>Cambios fuera de pestaña (≥ ${summary.tab_activity.threshold_ms/1000}s): <strong>${summary.tab_activity.off_episodes}</strong></li>
+      <li>Tiempo fuera: <strong>${fmt(summary.tab_activity.off_total_ms)}</strong></li>
+    </ul>
+
+    <h4>Desatención por mirada</h4>
+    <ul>
+      <li>Episodios: <strong>${summary.attention.lookaway_episodes}</strong></li>
+      <li>Tiempo total: <strong>${fmt(summary.attention.lookaway_total_ms)}</strong></li>
+      <li>Episodio más largo: <strong>${fmt(summary.attention.lookaway_longest_ms)}</strong></li>
+    </ul>
+
+    <h4>Rostro cubierto</h4>
+    <ul>
+      <li>Episodios: <strong>${summary.occlusion.episodes}</strong></li>
+      <li>Tiempo total: <strong>${fmt(summary.occlusion.total_ms)}</strong></li>
+    </ul>
+
+    <h4>Posible habla</h4>
+    <ul>
+      <li>Episodios: <strong>${summary.lips.speak_episodes}</strong></li>
+      <li>Tiempo total: <strong>${fmt(summary.lips.speak_total_ms)}</strong></li>
+    </ul>
+
+    <h4>Rendimiento</h4>
+    <ul>
+      <li>FPS mediana: <strong>${summary.performance.fps_median}</strong></li>
+      <li>Latencia p95: <strong>${summary.performance.latency_p95_ms}</strong> ms</li>
+      <li>Estado: <strong>${summary.performance.overall}</strong></li>
+    </ul>
+  `;
+  summaryBackdrop?.classList.remove('hidden');
+  summaryModal?.classList.remove('hidden');
+
+  // Descargas
+  btnSumJSON?.addEventListener('click', ()=>{
+    const blob = new Blob([JSON.stringify(summary, null, 2)], { type: 'application/json' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = 'resumen_sesion_total.json';
+    a.click();
+    URL.revokeObjectURL(a.href);
+  }, { once:true });
+
+  btnSumCSV?.addEventListener('click', ()=>{
+    const rows = [
+      ['duration_ms', summary.duration_ms],
+      ['fps_median', summary.performance.fps_median],
+      ['latency_p95_ms', summary.performance.latency_p95_ms],
+      [],
+      ['offtab_threshold_ms', summary.tab_activity.threshold_ms],
+      ['offtab_episodes', summary.tab_activity.off_episodes],
+      ['offtab_total_ms', summary.tab_activity.off_total_ms],
+      ['offtab_longest_ms', summary.tab_activity.longest_off_ms],
+      [],
+      ['lookaway_episodes', summary.attention.lookaway_episodes],
+      ['lookaway_total_ms', summary.attention.lookaway_total_ms],
+      ['lookaway_longest_ms', summary.attention.lookaway_longest_ms],
+      [],
+      ['occlusion_episodes', summary.occlusion.episodes],
+      ['occlusion_total_ms', summary.occlusion.total_ms],
+      [],
+      ['speak_episodes', summary.lips.speak_episodes],
+      ['speak_total_ms', summary.lips.speak_total_ms],
+    ];
+    const csv = rows.map(r => (Array.isArray(r)? r.join(',') : '')).join('\n');
+    const blob = new Blob([csv], { type: 'text/csv' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = 'resumen_sesion_total.csv';
+    a.click();
+    URL.revokeObjectURL(a.href);
+  }, { once:true });
+
+  btnSumClose?.addEventListener('click', ()=>{
+    summaryBackdrop?.classList.add('hidden');
+    summaryModal?.classList.add('hidden');
+  }, { once:true });
+}
+
 btnStart?.addEventListener('click', ()=>{
   if (!stream){ alert('Primero permite la cámara.'); return; }
   running = true;
   frameCount = 0;
   sessionStart = performance.now();
 
-  // Off-tab: arranca según estado actual (visibilidad O foco)
+  // Off-tab: arranca según estado actual
   offTabStart   = isInTab() ? null : performance.now();
   offTabEpisodes= 0;
   offTabAccumMs = 0;
 
-  // reset detección
-  awayScore = 0; isLookAway = false;
-  lipsScore = 0; lipsActive = false;
-  isOccluded = false; occlSince = null; occlClearSince = null;
-  lipsPrev = null; lipsVelEMA = 0;
-  mouthHist.length = 0;
+  // reset detección y episodios
+  awayScore = 0; isLookAway = false; lookAwayStart = null; lookAwayEpisodes = 0; lookAwayAccumMs = 0; lookAwayLongestMs = 0;
+  lipsScore = 0; lipsActive = false; lipsStart = null; lipsEpisodes = 0; lipsAccumMs = 0; lipsLongestMs = 0;
+  isOccluded = false; occlSince = null; occlClearSince = null; occlEpStart = null; occlEpisodes = 0; occlAccumMs = 0; occlLongestMs = 0;
+  lipsPrev = null; lipsVelEMA = 0; mouthHist.length = 0;
   blinkActive = false; blinkSince = null;
 
   calibrating = !!landmarker; calStart = performance.now();
@@ -669,18 +874,21 @@ btnStart?.addEventListener('click', ()=>{
 });
 
 btnStop?.addEventListener('click', ()=>{
-  // cierra episodio si sigue fuera
-  if (offTabStart != null){
-    const now = performance.now();
-    const dur = now - offTabStart;
-    if (dur >= 1500) offTabEpisodes += 1;
-    offTabAccumMs += dur;
-    offTabStart = null;
-  }
+  const now = performance.now();
+  // cierra episodios abiertos
+  closeOpenEpisodes(now);
+
+  // detener pipeline/UI
   running = false;
   metrics.stop();
   sessionStatus && (sessionStatus.textContent = 'Detenida');
+
+  // export de actividad de pestaña (se mantiene)
   tabLogger.stopAndDownloadCSV?.();
+
+  // construir resumen y mostrar modal
+  const summary = buildSummaryObject();
+  showSummaryModal(summary);
 });
 
 // Re-apertura / dispositivos
