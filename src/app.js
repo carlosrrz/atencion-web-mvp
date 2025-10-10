@@ -1,4 +1,4 @@
-// app.js — Mirada + Oclusión + Labios + Anti-blink + Off-tab (foco/visibilidad) + Resumen modal
+// app.js — Mirada + Oclusión + Labios + Anti-blink + Off-tab + Resumen modal + Modal de Privacidad
 import { createMetrics } from './metrics.js';
 import { createTabLogger } from './tab-logger.js';
 import { FilesetResolver, FaceLandmarker } from "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.3";
@@ -38,6 +38,12 @@ const summaryBody     = document.getElementById('summary-body');
 const btnSumJSON      = document.getElementById('summary-download-json');
 const btnSumCSV       = document.getElementById('summary-download-csv');
 const btnSumClose     = document.getElementById('summary-close');
+
+/* Modal privacidad */
+const btnPrivacyOpen  = document.getElementById('open-privacy');
+const privacyBackdrop = document.getElementById('privacy-backdrop');
+const privacyModal    = document.getElementById('privacy-modal');
+const btnPrivacyClose = document.getElementById('privacy-close');
 
 const tabButtons = Array.from(document.querySelectorAll('.tab'));
 const sections = {
@@ -91,7 +97,6 @@ let isOccluded       = false;
 let occlSince        = null;
 let occlClearSince   = null;
 
-// Blink state
 let blinkActive = false;
 let blinkSince  = null;
 
@@ -103,13 +108,12 @@ let sessionStart = 0;
 
 let landmarker = null;
 
-// Off-tab (visibilidad O foco)
+// Off-tab
 let offTabStart = null;
 let offTabEpisodes = 0;
 let offTabAccumMs = 0;
 
 const metrics = createMetrics();
-// Unificamos el umbral con la UI: 1500 ms
 const tabLogger = createTabLogger({ offTabThresholdMs: 1500 });
 
 /* Calibración / baseline / auto-flip */
@@ -128,9 +132,9 @@ let thr  = {
 let ema = { ar:null, off:null, yaw:null, pitch:null, gaze:null, gH:null, gV:null, mouth:null };
 
 /* Velocidad & ventana de labios */
-let lipsPrev = null;    // { jaw, upper, lower, stretch, funnel, pucker, smile }
+let lipsPrev = null;
 let lipsVelEMA = 0;
-let mouthHist = [];     // [{t, v}] v = mouthRaw (pre-EMA)
+let mouthHist = [];
 
 /* Episodios/tiempos adicionales */
 let lookAwayStart = null, lookAwayEpisodes = 0, lookAwayAccumMs = 0, lookAwayLongestMs = 0;
@@ -218,7 +222,7 @@ function gazeMagnitude(bs){
 function gazeHV(bs){
   const pick = (name) => bs?.categories?.find(c => c.categoryName === name)?.score ?? 0;
   const inL  = pick('eyeLookInLeft'),   outL = pick('eyeLookOutLeft');
-  const inR  = pick('eyeLookInRight'),  outR = pick('eyeLookOutRight');
+  const inR  = pick('eyeLookInRight'),  outR  = pick('eyeLookOutRight');
   const upL  = pick('eyeLookUpLeft'),   upR  = pick('eyeLookUpRight');
   const dnL  = pick('eyeLookDownLeft'), dnR  = pick('eyeLookDownRight');
   const hRight = outL + inR, hLeft = inL + outR;
@@ -415,7 +419,6 @@ function loop(){
     offCntEl  && (offCntEl.textContent  = String(offTabEpisodes));
   }
 
-  // ---- Detección robusta (try/catch) ----
   if (landmarker && frameCount % DETECT_EVERY === 0) {
     const ts = performance.now();
     let prevLook = isLookAway, prevLips = lipsActive, prevOcc = isOccluded;
@@ -427,7 +430,6 @@ function loop(){
 
       if (bs) updateBlink(bs, ts);
 
-      // ===== OCLUSIÓN / SIN CARA =====
       if (!lm) {
         occlClearSince = null;
         if (!occlSince) occlSince = ts;
@@ -444,12 +446,10 @@ function loop(){
       let lipsNow = false, lipsBack = false;
 
       if (lm) {
-        // bbox
         let minx=1,maxx=0,miny=1,maxy=0;
         for (const p of lm) { if(p.x<minx)minx=p.x; if(p.x>maxx)maxx=p.x; if(p.y<miny)miny=p.y; if(p.y>maxy)maxy=p.y; }
         const w = maxx - minx, h = maxy - miny, area = w * h;
 
-        // oclusión
         const oobFrac = fracOutOfBounds(lm);
         const occlNow = (area < OCCL_AREA_MIN) || (oobFrac > 0.35);
         if (occlNow) {
@@ -474,7 +474,6 @@ function loop(){
           const arRaw  = w / (h + 1e-6);
           const offRaw = lateralOffset(lm, minx, maxx);
 
-          // yaw/pitch por ojos + matriz (si hay)
           const yawEyes = yawFromEyes(lm);
           let yawRaw = yawEyes;
           let pitchRaw = pitchFromFeatures(lm);
@@ -487,18 +486,15 @@ function loop(){
             pitchRaw = (Math.abs(pA - pitchRaw)  <= Math.abs(pB - pitchRaw))  ? pA : pB;
           }
 
-          // Gaze
           const gazeRaw = gazeMagnitude(bs);
           const { h:_, v:__, hAbs, vAbs } = gazeHV(bs);
 
-          // LABIOS
           const comp     = lipsComponents(bs);
           const mouthRaw = mouthOpenScore(comp);
           updateLipsVelocity(comp);
           pushMouthHist(ts, mouthRaw);
           const { amp: mouthAmp, osc: mouthOsc } = lipsOscillationFeatures();
 
-          // EMA
           ema.ar    = (ema.ar    == null) ? arRaw    : (1-EMA_ALPHA)*ema.ar    + EMA_ALPHA*arRaw;
           ema.off   = (ema.off   == null) ? offRaw   : (1-EMA_ALPHA)*ema.off   + EMA_ALPHA*offRaw;
           ema.yaw   = (ema.yaw   == null) ? yawRaw   : (1-EMA_ALPHA)*ema.yaw   + EMA_ALPHA*yawRaw;
@@ -519,7 +515,6 @@ function loop(){
           const movementFast = (dOFF > MOVE_OFF) || (dAR > MOVE_AR) || (dYAW > MOVE_YAW) || (dPIT > MOVE_PITCH) ||
                                (allowEyeMotion && ((dGH > MOVE_EYE) || (dGV > MOVE_EYE)));
 
-          // Calibración
           if (calibrating) {
             calAR.push(arRaw); calOFF.push(offRaw); calYAW.push(yawRaw); calPITCH.push(pitchRaw); calGAZE.push(gazeRaw);
             calGazeH.push(hAbs); calGazeV.push(vAbs); calMouth.push(mouthRaw);
@@ -543,7 +538,6 @@ function loop(){
             }
           }
 
-          // Umbrales “mirada desviada”
           const yawAwayEnter   = (yawRaw   > thr.enter.yaw);
           const yawAwayExit    = (yawRaw   < thr.exit.yaw);
           const pitchAwayEnter = (pitchRaw > thr.enter.pitch);
@@ -572,7 +566,6 @@ function loop(){
             exit  = flippedExit;
           }
 
-          // LABIOS
           const lipsActivityHigh = (lipsVelEMA > LIPS_VEL_ENTER);
           const lipsActivityLow  = (lipsVelEMA < LIPS_VEL_EXIT);
           const lipsOscOK        = (mouthOsc >= LIPS_OSC_MIN) && (mouthAmp > LIPS_MIN_AMP);
@@ -598,7 +591,6 @@ function loop(){
         }
       }
 
-      // Histéresis temporal (mirada)
       if (!isOccluded) {
         if (awayNow)      awayScore = Math.min(SCORE_ENTER, awayScore + 3);
         else if (backNow) awayScore = Math.max(0, awayScore - 2);
@@ -607,7 +599,6 @@ function loop(){
         if (isLookAway  && awayScore <= SCORE_EXIT)  isLookAway = false;
       }
 
-      // Histéresis temporal (labios)
       if (!isOccluded) {
         if (lipsNow)        lipsScore = Math.min(LIPS_SCORE_ENTER, lipsScore + 3);
         else if (lipsBack)  lipsScore = Math.max(0, lipsScore - 2);
@@ -616,12 +607,9 @@ function loop(){
         if (lipsActive  && lipsScore <= LIPS_SCORE_EXIT)  lipsActive = false;
       }
 
-    } catch (err) {
-      // no romper el loop si detect falla
-    }
+    } catch (err) {}
 
-    // ===== Episodios (transiciones) =====
-    // Mirada
+    // Episodios (transiciones)
     if (!prevLook && isLookAway) {
       lookAwayStart = ts;
     } else if (prevLook && !isLookAway) {
@@ -631,7 +619,6 @@ function loop(){
         lookAwayStart = null;
       }
     }
-    // Labios
     if (!prevLips && lipsActive) {
       lipsStart = ts;
     } else if (prevLips && !lipsActive) {
@@ -641,7 +628,6 @@ function loop(){
         lipsStart = null;
       }
     }
-    // Oclusión
     if (!prevOcc && isOccluded) {
       occlEpStart = ts;
     } else if (prevOcc && !isOccluded) {
@@ -656,7 +642,7 @@ function loop(){
   requestAnimationFrame(loop);
 }
 
-/* ===== Off-tab: visibilidad O foco ===== */
+/* ===== Off-tab ===== */
 function handleTabStateChange(){
   if (!running) return;
   const now = performance.now();
@@ -685,25 +671,21 @@ btnRetry?.addEventListener('click', ()=>{
 });
 
 function closeOpenEpisodes(nowTs){
-  // mirada
   if (lookAwayStart != null){
     const d = nowTs - lookAwayStart;
     lookAwayAccumMs += d; lookAwayEpisodes += 1; if (d > lookAwayLongestMs) lookAwayLongestMs = d;
     lookAwayStart = null;
   }
-  // labios
   if (lipsStart != null){
     const d = nowTs - lipsStart;
     lipsAccumMs += d; lipsEpisodes += 1; if (d > lipsLongestMs) lipsLongestMs = d;
     lipsStart = null;
   }
-  // oclusión
   if (occlEpStart != null){
     const d = nowTs - occlEpStart;
     occlAccumMs += d; occlEpisodes += 1; if (d > occlLongestMs) occlLongestMs = d;
     occlEpStart = null;
   }
-  // off-tab
   if (offTabStart != null){
     const d = nowTs - offTabStart;
     if (d >= 1500) offTabEpisodes += 1;
@@ -796,7 +778,6 @@ function showSummaryModal(summary){
   summaryBackdrop?.classList.remove('hidden');
   summaryModal?.classList.remove('hidden');
 
-  // Descargas
   btnSumJSON?.addEventListener('click', ()=>{
     const blob = new Blob([JSON.stringify(summary, null, 2)], { type: 'application/json' });
     const a = document.createElement('a');
@@ -842,18 +823,17 @@ function showSummaryModal(summary){
   }, { once:true });
 }
 
+/* ===== Start/Stop ===== */
 btnStart?.addEventListener('click', ()=>{
   if (!stream){ alert('Primero permite la cámara.'); return; }
   running = true;
   frameCount = 0;
   sessionStart = performance.now();
 
-  // Off-tab: arranca según estado actual
   offTabStart   = isInTab() ? null : performance.now();
   offTabEpisodes= 0;
   offTabAccumMs = 0;
 
-  // reset detección y episodios
   awayScore = 0; isLookAway = false; lookAwayStart = null; lookAwayEpisodes = 0; lookAwayAccumMs = 0; lookAwayLongestMs = 0;
   lipsScore = 0; lipsActive = false; lipsStart = null; lipsEpisodes = 0; lipsAccumMs = 0; lipsLongestMs = 0;
   isOccluded = false; occlSince = null; occlClearSince = null; occlEpStart = null; occlEpisodes = 0; occlAccumMs = 0; occlLongestMs = 0;
@@ -875,23 +855,19 @@ btnStart?.addEventListener('click', ()=>{
 
 btnStop?.addEventListener('click', ()=>{
   const now = performance.now();
-  // cierra episodios abiertos
   closeOpenEpisodes(now);
 
-  // detener pipeline/UI
   running = false;
   metrics.stop();
   sessionStatus && (sessionStatus.textContent = 'Detenida');
 
-  // export de actividad de pestaña (se mantiene)
   tabLogger.stopAndDownloadCSV?.();
 
-  // construir resumen y mostrar modal
   const summary = buildSummaryObject();
   showSummaryModal(summary);
 });
 
-// Re-apertura / dispositivos
+/* ===== Re-apertura / dispositivos ===== */
 document.addEventListener('visibilitychange', async ()=>{
   if (document.visibilityState==='visible' && !stream && camRequested){
     await startCamera();
@@ -909,7 +885,7 @@ function showSection(key){
 tabButtons.forEach(btn=>btn.addEventListener('click', ()=>{ const k=btn.dataset.t; if(k) showSection(k); }));
 showSection(tabButtons.find(b=>b.classList.contains('active'))?.dataset.t || 'lectura');
 
-/* ===== Init ===== */
+/* ===== Init + modal Privacidad ===== */
 (function init(){
   if (!navigator.mediaDevices?.getUserMedia){ setCamStatus('err','No soportado','Usa Chrome/Edge.'); return; }
   if (insecureContext()){ setCamStatus('warn','HTTPS requerido','Abre con candado (HTTPS) o localhost.'); return; }
@@ -921,6 +897,13 @@ showSection(tabButtons.find(b=>b.classList.contains('active'))?.dataset.t || 'le
   lipsEl&&(lipsEl.textContent='—');
   offCntEl&&(offCntEl.textContent='0'); offTimeEl&&(offTimeEl.textContent='00:00');
 
-  document.getElementById('open-privacy')
-    ?.addEventListener('click', (e)=>{ e.preventDefault(); window.open('/privacidad.html','_blank','noopener'); });
+  // Modal de Privacidad
+  const openPrivacy = (e)=>{ e?.preventDefault?.(); privacyBackdrop?.classList.remove('hidden'); privacyModal?.classList.remove('hidden'); };
+  const closePrivacy = ()=>{ privacyBackdrop?.classList.add('hidden'); privacyModal?.classList.add('hidden'); };
+
+  btnPrivacyOpen?.addEventListener('click', openPrivacy);
+  btnPrivacyClose?.addEventListener('click', closePrivacy);
+  privacyBackdrop?.addEventListener('click', closePrivacy);
+  document.addEventListener('keydown', (ev)=>{ if (ev.key === 'Escape' && !privacyModal?.classList.contains('hidden')) closePrivacy(); });
+
 })();
