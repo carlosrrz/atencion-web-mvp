@@ -1,38 +1,60 @@
+/* Reset y tema */
+*{ box-sizing:border-box; }
 :root{
-  --bg:#f7f9fc; --card:#fff; --ink:#0f172a; --muted:#64748b;
-  --brand:#4aa3ff; --ok:#16a34a; --warn:#f59e0b; --err:#dc2626; --ring:#e2e8f0;
-  --radius:12px;
+  --bg:#f6f7fb; --surface:#fff; --text:#0f172a; --muted:#64748b;
+  --primary:#3b82f6; --primary-700:#2563eb; --border:#e5e7eb;
+  --shadow:0 10px 30px rgba(2,8,23,.06); --radius:14px;
 }
-*{box-sizing:border-box}
 html,body{height:100%}
-body{margin:0;font-family:ui-sans-serif,system-ui,Segoe UI,Roboto,Arial;background:var(--bg);color:var(--ink)}
-header{display:block;margin:0 0 16px 0;padding:0}
-header h1{margin:0;padding:16px 24px;background:linear-gradient(90deg,var(--brand),#7cc7ff);color:#fff;border-radius:12px}
-header nav{padding:6px 24px;text-align:right}
-main{max-width:1200px;margin:0 auto;padding:16px;display:grid;grid-template-columns:1.6fr 1fr;gap:16px}
-.card{background:var(--card);border:1px solid var(--ring);border-radius:var(--radius);box-shadow:0 8px 24px rgba(15,23,42,.06);padding:14px}
-.tabs{display:flex;gap:8px;margin-bottom:10px}
-.tab{padding:8px 12px;border:1px solid var(--ring);border-radius:999px;background:#fff;cursor:pointer}
-.tab.active{background:#eef6ff;border-color:#cfe5ff;font-weight:600}
-.video-wrap { position: relative; width: 100%; background:#000; overflow:hidden; }
-#cam, #canvas { width:100%; aspect-ratio:16/9; max-height:360px; object-fit:cover; border-radius:8px; }
-#canvas { position:absolute; inset:0; pointer-events:none; background:transparent !important; }
-.pill{display:inline-block;padding:2px 8px;border-radius:999px;border:1px solid #e5e7eb;font-size:12px}
-.pill-neutral{background:#f1f5f9;color:#334155}
-.pill-ok{background:#e7f8ee;color:#065f46;border-color:#c7edd6}
-.pill-warn{background:#fff4e5;color:#8a6d3b;border-color:#ffe0a6}
-.pill-err{background:#ffe5e5;color:#7f1d1d;border-color:#f3b6b6}
-.help{font-size:.95rem;color:var(--muted);margin:8px 0}
-button{appearance:none;border:1px solid var(--ring);background:#fff;border-radius:10px;padding:8px 12px;cursor:pointer}
-button.secondary{background:#f8fafc}
+body{margin:0; font-family:ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Inter, Arial; background:var(--bg); color:var(--text);}
+
+/* Header */
+header{
+  background:linear-gradient(90deg,#4aa3ff,#60a5fa); color:#fff;
+  padding:16px 22px; display:flex; align-items:center; justify-content:space-between;
+  position:sticky; top:0; z-index:100; box-shadow:var(--shadow);
+}
+header h1{margin:0; font-weight:800;}
+header nav a{color:#fff; text-decoration:underline;}
+
+/* Layout */
+main{max-width:1200px; margin:20px auto; padding:0 16px; display:grid; grid-template-columns:1.3fr .9fr; gap:18px;}
+.card{background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); padding:14px; box-shadow:var(--shadow);}
+.card h3{margin:0 0 10px}
+
+/* Cámara */
+.video-wrap{position:relative; width:100%; background:#000; overflow:hidden; border-radius:12px;}
+#cam,#canvas{width:100%; aspect-ratio:16/9; max-height:360px; object-fit:cover; display:block; border-radius:12px;}
+#canvas{position:absolute; inset:0; pointer-events:none; background:transparent !important;}
+
+/* Pills y texto */
+.pill{display:inline-flex; align-items:center; gap:6px; padding:2px 10px; border-radius:999px; font-size:12px; border:1px solid var(--border); background:#f8fafc;}
+.pill-neutral{background:#f3f4f6; color:#374151;}
+.pill-ok{background:#eafaf0; color:#0f5132; border-color:#a7e1bf;}
+.pill-warn{background:#fff7e6; color:#8a6d3b; border-color:#ffe0a6;}
+.pill-err{background:#fde7e7; color:#842029; border-color:#f5b5b8;}
+
+.help{font-size:.92rem; color:var(--muted);}
+#session-status{font-weight:700;}
+#session-time{font-variant-numeric:tabular-nums; font-weight:600;}
+
+/* Botones */
+button{appearance:none; border:none; cursor:pointer; padding:8px 12px; border-radius:10px; font-weight:600; background:#111827; color:#fff;}
+button.secondary{background:#f3f4f6; color:#111827; border:1px solid var(--border);}
+button.primary{background:var(--primary);}
+button.primary:hover{background:var(--primary-700);}
+.actions{display:flex; gap:8px; flex-wrap:wrap;}
+
 .hidden{display:none}
-.quiz{margin-top:8px}
-.quiz-meta{font-size:.95rem;opacity:.9;margin-bottom:8px}
-.q-text{font-weight:600;margin:8px 0}
-.q-options{display:grid;gap:6px;margin-bottom:10px}
-.q-options label{display:flex;gap:8px;align-items:flex-start;padding:8px;border:1px solid var(--ring);border-radius:10px;background:#fafafa}
-.modal-backdrop{position:fixed;inset:0;background:rgba(15,23,42,.45);z-index:50}
-.modal{position:fixed;inset:0;display:grid;place-items:center;z-index:51}
-.modal.hidden,.modal-backdrop.hidden{display:none}
-.modal-card{width:min(760px,92vw);background:#fff;color:var(--ink);border:1px solid var(--ring);border-radius:14px;padding:18px 20px;box-shadow:0 24px 60px rgba(15,23,42,.18)}
-.modal-card h3{margin:0 0 10px}
+
+/* Modal genérico (funciona para evidencias y resumen) */
+.modal-backdrop{position:fixed; inset:0; background:rgba(0,0,0,.45); z-index:300;}
+.modal{position:fixed; inset:0; display:grid; place-items:center; z-index:301;}
+.modal.hidden, .modal-backdrop.hidden{display:none;}
+.modal-card{width:min(860px,92vw); background:#fff; color:#111; border:1px solid var(--border); border-radius:14px; padding:18px; box-shadow:var(--shadow);}
+
+/* Evidencias */
+#evidence-grid{display:grid; grid-template-columns:repeat(auto-fill,minmax(180px,1fr)); gap:12px;}
+.ev-card{border:1px solid var(--border); border-radius:12px; padding:8px; background:#fff; box-shadow:0 2px 10px rgba(2,8,23,.05);}
+.ev-card img{width:100%; border-radius:8px; display:block;}
+.ev-note{font-size:.85rem; color:var(--muted); margin-top:6px;}
