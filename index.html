@@ -134,7 +134,6 @@
       <div class="card">
         <button id="btn-start">Iniciar</button>
         <button id="btn-stop">Finalizar y exportar</button>
-        <button id="btn-evidencias">Evidencias</button>
       </div>
     </aside>
   </main>
@@ -182,24 +181,9 @@
     </div>
   </div>
 
-  <div id="evidence-backdrop" class="modal-backdrop hidden" aria-hidden="true"></div>
-<div id="evidence-modal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="evid-title">
-  <div class="modal-card">
-    <h3 id="evid-title">Evidencias (capturas en alertas)</h3>
-    <div id="evidence-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:8px;"></div>
-    <div class="modal-actions">
-      <button id="btn-evid-download" class="secondary">Descargar JSON</button>
-      <span class="spacer"></span>
-      <button id="btn-evid-close">Cerrar</button>
-    </div>
-  </div>
-</div>
-
   <script type="module" src="./src/metrics.js"></script>
   <script type="module" src="./src/tab-logger.js"></script>
   <script type="module" src="./src/app.js"></script>
   <script type="module" src="./src/exam.js"></script>
-  <script type="module" src="./src/evidence.js"></script>
-
 </body>
 </html>
