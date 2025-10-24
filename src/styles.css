@@ -14,8 +14,9 @@ main{max-width:1200px;margin:0 auto;padding:16px;display:grid;grid-template-colu
 .tabs{display:flex;gap:8px;margin-bottom:10px}
 .tab{padding:8px 12px;border:1px solid var(--ring);border-radius:999px;background:#fff;cursor:pointer}
 .tab.active{background:#eef6ff;border-color:#cfe5ff;font-weight:600}
-.video-wrap{position:relative;width:100%;background:#000;border-radius:12px;overflow:hidden}
-#cam,#canvas{width:100%;aspect-ratio:16/9;max-height:360px;object-fit:cover;background:#000;display:block}
+.video-wrap { position: relative; width: 100%; background:#000; overflow:hidden; }
+#cam, #canvas { width:100%; aspect-ratio:16/9; max-height:360px; object-fit:cover; border-radius:8px; }
+#canvas { position:absolute; inset:0; pointer-events:none; background:transparent !important; }
 .pill{display:inline-block;padding:2px 8px;border-radius:999px;border:1px solid #e5e7eb;font-size:12px}
 .pill-neutral{background:#f1f5f9;color:#334155}
 .pill-ok{background:#e7f8ee;color:#065f46;border-color:#c7edd6}
