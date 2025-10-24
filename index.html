@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Modo Estudio – Monitoreo</title>
+  <title>MVP Atención</title>
   <link rel="stylesheet" href="./src/styles.css" />
 </head>
 <body>
@@ -20,7 +20,7 @@
         <button class="tab" data-t="examen">Examen</button>
       </div>
 
-      <article id="lectura" class="card">
+      <article id="lectura">
         <h2>Hábitos de estudio eficaces para Ingeniería</h2>
         <p>En carreras como Ingeniería de Computación y Sistemas, el estudio efectivo combina
           <strong>planificación</strong>, <strong>práctica deliberada</strong> y <strong>descanso controlado</strong>.
@@ -29,49 +29,55 @@
         <h3>1) Plan de bloques cortos</h3>
         <ul>
           <li>Define sesiones de 25–40 min de concentración y 5–10 min de pausa breve.</li>
-          <li>Comienza por 1–2 objetivos muy concretos.</li>
+          <li>Comienza por 1–2 objetivos muy concretos (p. ej., “resolver 4 ejercicios de recursividad”).</li>
         </ul>
 
         <h3>2) Práctica activa</h3>
         <ul>
-          <li>Alterna <em>leer</em> y <em>hacer</em>: implementa pequeños fragmentos tras cada sección.</li>
-          <li>Explícale el concepto a alguien para detectar lagunas.</li>
+          <li>Alterna entre <em>leer</em> y <em>hacer</em>: implementa pequeños fragmentos de código o resuelve
+            un ejercicio similar tras cada sección teórica.</li>
+          <li>Explícale el concepto a otra persona (o a ti mismo en voz alta) para detectar lagunas.</li>
         </ul>
 
         <h3>3) Gestión de distracciones</h3>
         <ul>
-          <li>Trabaja con una sola pestaña principal y notificaciones desactivadas.</li>
-          <li>Anota interrupciones y retómalas en la pausa.</li>
+          <li>Estudia con una sola pestaña principal y desactiva notificaciones durante el bloque.</li>
+          <li>Si aparecen interrupciones, anótalas y retómalas en la pausa.</li>
         </ul>
 
         <h3>4) Espaciado y repasos</h3>
         <ul>
           <li>Usa repasos espaciados (1–2–4 días) con tarjetas o resúmenes breves.</li>
-          <li>Prioriza errores: vuelve sobre lo que fallaste.</li>
+          <li>Prioriza errores: vuelve sobre los ejercicios en los que fallaste.</li>
         </ul>
 
         <h3>5) Cuidado personal</h3>
         <ul>
           <li>Sueño, hidratación y pausas activas mejoran la atención sostenida.</li>
         </ul>
+
+        <blockquote>
+          <strong>Consejo:</strong> para temas complejos (p. ej., complejidad algorítmica),
+          alterna 1 bloque de lectura con 1 bloque de implementación de un caso mínimo.
+        </blockquote>
       </article>
 
-      <div id="video" class="card hidden">
-        <h3>Recurso en video</h3>
-        <div class="video-container" style="position:relative;padding-bottom:56.25%;height:0;overflow:hidden;border-radius:12px;">
+      <div id="video" class="hidden">
+        <div class="video-container">
           <iframe
             title="Recurso en video"
             src="https://www.youtube-nocookie.com/embed/_tA5cinv0U8?rel=0&modestbranding=1&playsinline=1"
             allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
-            allowfullscreen
-            style="position:absolute;inset:0;width:100%;height:100%;border:0">
+            allowfullscreen>
           </iframe>
         </div>
       </div>
 
-      <section id="examen" class="card hidden">
+      <section id="examen" class="hidden">
         <h2>Test de Prueba</h2>
-        <p id="exam-instr">Responde las siguientes preguntas por favor. Los resultados se guardarán de manera anónima.</p>
+        <p id="exam-instr">
+          Responde las siguientes preguntas por favor. Los resultados se guardarán de manera anónima.
+        </p>
         <div id="exam-ui" class="quiz">
           <div id="exam-meta" class="quiz-meta">
             Pregunta <span id="exam-idx">0</span>/<span id="exam-total">0</span>
@@ -81,7 +87,7 @@
           <div id="q-options" class="q-options"></div>
 
           <div class="exam-actions">
-            <button id="btn-exam-start" class="primary">Iniciar test</button>
+            <button id="btn-exam-start">Iniciar test</button>
             <button id="btn-exam-next" class="hidden">Siguiente</button>
             <button id="btn-exam-finish" class="hidden">Finalizar</button>
           </div>
@@ -94,25 +100,19 @@
     <aside class="right">
       <div class="card">
         <h3>Cámara</h3>
-        <p>Estado: <span id="cam-status" class="pill pill-neutral">Permiso pendiente</span></p>
+        <p>Estado:
+          <span id="cam-status" class="pill pill-neutral">Permiso pendiente</span>
+        </p>
         <div id="cam-help" class="help hidden"></div>
 
-        <div class="actions" style="margin-bottom:10px;">
-          <button id="btn-permitir" class="primary">Permitir cámara</button>
-          <button id="btn-reintentar" class="secondary">Reintentar</button>
-        </div>
+        <button id="btn-permitir">Permitir cámara</button>
+        <button id="btn-reintentar" class="secondary">Reintentar</button>
 
-        <div class="video-wrap" style="margin-bottom:10px;">
+        <div class="video-wrap">
           <video id="cam" autoplay playsinline muted></video>
-          <canvas id="canvas"></canvas>
+          <canvas id="canvas" style="position:absolute; inset:0; pointer-events:none;"></canvas>
         </div>
 
-        <div class="actions">
-          <button id="btn-start" class="primary">Iniciar</button>
-          <button id="btn-stop" class="secondary">Finalizar y exportar</button>
-          <button id="btn-evidencias" class="secondary">Evidencias</button>
-        </div>
-      </div>
 
       <div class="card">
         <h3>Estado</h3>
@@ -123,33 +123,83 @@
         <p>Labios: <span id="lips-state">—</span></p>
         <p>FPS: <span id="fps">—</span>
           <span id="fps-pill" class="pill pill-neutral" aria-live="polite">—</span>
-          &nbsp;|&nbsp; Latencia p95: <span id="p95">—</span> ms
+          &nbsp;|&nbsp;
+          Latencia p95: <span id="p95">—</span> ms
           <span id="p95-pill" class="pill pill-neutral" aria-live="polite">—</span>
         </p>
         <p>Rendimiento: <span id="perf-overall" class="pill pill-neutral" aria-live="polite">—</span></p>
         <p>Off-tab (episodios): <span id="offtab-count">0</span> | Tiempo fuera: <span id="offtab-time">00:00</span></p>
       </div>
+
+      <div class="card">
+        <button id="btn-start">Iniciar</button>
+        <button id="btn-stop">Finalizar y exportar</button>
+        <button id="btn-evidencias">Evidencias</button>
+      </div>
     </aside>
   </main>
 
-  <!-- Modal de evidencias -->
-  <div id="evidence-backdrop" class="modal-backdrop hidden" aria-hidden="true"></div>
-  <div id="evidence-modal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="ev-title">
+  <!-- BACKDROP + MODAL DE CONSENTIMIENTO -->
+  <div id="consent-backdrop" class="modal-backdrop hidden" aria-hidden="true"></div>
+  <div id="consent-modal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="consent-title">
     <div class="modal-card">
-      <div style="display:flex;align-items:center;gap:10px;">
-        <h3 id="ev-title" style="margin:0;">Evidencias capturadas</h3>
-        <span class="spacer" style="flex:1"></span>
-        <button id="btn-evid-download" class="secondary">Descargar JSON</button>
-        <button id="btn-evid-close" class="secondary">Cerrar</button>
+      <h3 id="consent-title">Consentimiento para Modo Estudio</h3>
+      <p>Para iniciar el “Modo Estudio” esta aplicación necesita usar tu cámara y registrar eventos
+        de atención (pestaña activa/inactiva, parpadeo/ojos cerrados, giro de cabeza) y métricas de
+        rendimiento (FPS/latencia). <strong>No se guarda video crudo</strong>; sólo señales y conteos
+        para generar un resumen de sesión.</p>
+      <ul>
+        <li>Uso de cámara (preview local en el navegador).</li>
+        <li>Detección de pestaña activa/inactiva (on/off-tab).</li>
+        <li>Cómputo de eventos (ojos cerrados, giro de cabeza), FPS y p95.</li>
+        <li>Exportación local de CSV/JSON bajo tu control.</li>
+      </ul>
+      <label class="consent-check">
+        <input type="checkbox" id="consent-check" />
+        He leído y acepto las condiciones del Modo Estudio.
+      </label>
+      <div class="modal-actions">
+        <a href="/privacidad.html" target="_blank" rel="noopener">Ver política completa</a>
+        <span class="spacer"></span>
+        <button id="consent-cancel" class="secondary">Cancelar</button>
+        <button id="consent-accept" disabled>Acepto</button>
       </div>
-      <div id="evidence-grid" style="margin-top:12px;"></div>
     </div>
   </div>
 
-  <!-- scripts -->
+  <!-- BACKDROP + MODAL DE RESUMEN DE SESIÓN -->
+  <div id="summary-backdrop" class="modal-backdrop hidden" aria-hidden="true"></div>
+  <div id="summary-modal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="summary-title">
+    <div class="modal-card">
+      <h3 id="summary-title">Resumen de sesión</h3>
+      <div id="summary-body">Cargando…</div>
+      <div class="modal-actions">
+        <button id="summary-download-json">Descargar JSON</button>
+        <button id="summary-download-csv" class="secondary">Descargar CSV</button>
+        <span class="spacer"></span>
+        <button id="summary-close">Cerrar</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="evidence-backdrop" class="modal-backdrop hidden" aria-hidden="true"></div>
+<div id="evidence-modal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="evid-title">
+  <div class="modal-card">
+    <h3 id="evid-title">Evidencias (capturas en alertas)</h3>
+    <div id="evidence-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:8px;"></div>
+    <div class="modal-actions">
+      <button id="btn-evid-download" class="secondary">Descargar JSON</button>
+      <span class="spacer"></span>
+      <button id="btn-evid-close">Cerrar</button>
+    </div>
+  </div>
+</div>
+
   <script type="module" src="./src/metrics.js"></script>
   <script type="module" src="./src/tab-logger.js"></script>
   <script type="module" src="./src/app.js"></script>
   <script type="module" src="./src/exam.js"></script>
+  <script type="module" src="./src/evidence.js"></script>
+
 </body>
 </html>
