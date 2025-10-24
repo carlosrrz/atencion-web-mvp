@@ -14,13 +14,34 @@
 
   <main>
     <section class="left">
+      <!-- EXAMEN -->
+      <div class="card">
+        <h3>Evaluación (Examen)</h3>
+        <p id="exam-instr">Inicia el test cuando el docente lo indique. El monitoreo por cámara estará activo durante todo el intento.</p>
+        <div id="exam-ui" class="quiz">
+          <div id="exam-meta" class="quiz-meta">
+            Pregunta <span id="exam-idx">0</span>/<span id="exam-total">0</span>
+            · RT: <span id="exam-rt">0.0</span>s
+          </div>
+          <div id="q-text" class="q-text">—</div>
+          <div id="q-options" class="q-options"></div>
+          <div class="exam-actions">
+            <button id="btn-exam-start" class="primary">Iniciar test</button>
+            <button id="btn-exam-next"  class="secondary hidden">Siguiente</button>
+            <button id="btn-exam-finish" class="secondary hidden">Finalizar</button>
+          </div>
+          <div id="exam-result" class="hidden"></div>
+        </div>
+      </div>
+
+      <!-- CÁMARA -->
       <div class="card">
         <h3>Cámara</h3>
         <p>Estado: <span id="cam-status" class="pill pill-neutral">Permiso pendiente</span></p>
         <div id="cam-help" class="help hidden"></div>
 
         <div class="actions" style="margin-bottom:10px;">
-          <button id="btn-permitir" class="primary">Permitir cámara</button>
+          <button id="btn-permitir"  class="primary">Permitir cámara</button>
           <button id="btn-reintentar" class="secondary">Reintentar</button>
         </div>
 
@@ -30,8 +51,8 @@
         </div>
 
         <div class="actions" style="margin-top:10px;">
-          <button id="btn-start" class="primary">Iniciar</button>
-          <button id="btn-stop" class="secondary">Finalizar y exportar</button>
+          <button id="btn-start" class="primary">Iniciar monitoreo</button>
+          <button id="btn-stop"  class="secondary">Finalizar y exportar</button>
           <button id="btn-evidencias" class="secondary">Evidencias</button>
         </div>
       </div>
@@ -56,7 +77,7 @@
     </aside>
   </main>
 
-  <!-- Modal: Evidencias -->
+  <!-- Modal Evidencias -->
   <div id="evidence-backdrop" class="modal-backdrop hidden" aria-hidden="true"></div>
   <div id="evidence-modal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="ev-title">
     <div class="modal-card">
@@ -70,7 +91,7 @@
     </div>
   </div>
 
-  <!-- Modal: Resumen de sesión -->
+  <!-- Modal Resumen -->
   <div id="summary-backdrop" class="modal-backdrop hidden" aria-hidden="true"></div>
   <div id="summary-modal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="sum-title">
     <div class="modal-card">
@@ -87,6 +108,7 @@
 
   <script type="module" src="./src/metrics.js"></script>
   <script type="module" src="./src/tab-logger.js"></script>
+  <script type="module" src="./src/exam.js"></script>
   <script type="module" src="./src/app.js"></script>
 </body>
 </html>
