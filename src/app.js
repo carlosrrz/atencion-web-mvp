@@ -160,7 +160,7 @@ let occlEpStart   = null, occlEpisodes     = 0, occlAccumMs     = 0, occlLongest
 /* ===== Util ===== */
 const insecureContext = () => !(location.protocol === 'https:' || location.hostname === 'localhost');
 const clamp01 = v => Math.max(0, Math.min(1, v));
-const isInTab = () => (document.visibilityState === 'visible') && document.hasFocus();
+const isInTab = () => (document.visibilityState === 'visible') && document.hasFocus(); // ← única definición
 
 function setCamStatus(kind, msg, help=''){
   camStatus?.classList.remove('pill-neutral','pill-ok','pill-warn','pill-err');
@@ -463,11 +463,11 @@ function loop(){
           const transExit  = (offRaw < thr.exit.off);
 
           const headFrontal = (yawRaw < thr.exit.yaw) && (pitchRaw < thr.exit.pitch);
-          const eyesEnter   = allowEye && headFrontal && (ema.gH > thr.enter.gH || ema.gV > thr.enter.gV);
-          const eyesExit    = allowEye ? ((ema.gH < thr.exit.gH) && (ema.gV < thr.exit.gV)) : true;
+          const eyesEnter   = !blinkActive && headFrontal && (ema.gH > thr.enter.gH || ema.gV > thr.enter.gV);
+          const eyesExit    = !blinkActive ? ((ema.gH < thr.exit.gH) && (ema.gV < thr.exit.gV)) : true;
 
-          const gazeEnter   = allowEye && (ema.gaze > thr.enter.gaze);
-          const gazeExit    = allowEye ? (ema.gaze < thr.exit.gaze) : true;
+          const gazeEnter   = !blinkActive && (ema.gaze > thr.enter.gaze);
+          const gazeExit    = !blinkActive ? (ema.gaze < thr.exit.gaze) : true;
 
           let enter = poseEnter || transEnter || eyesEnter || gazeEnter;
           let exit  = (poseExit && transExit && eyesExit && gazeExit);
@@ -534,7 +534,7 @@ function loop(){
 }
 
 /* ===== Off-tab ===== */
-function isInTab(){ return (document.visibilityState==='visible') && document.hasFocus(); }
+// (Usamos la única isInTab definida arriba)
 function handleTabStateChange(){
   if (!running) return;
   const now = performance.now();
@@ -683,7 +683,7 @@ btnStart?.addEventListener('click', ()=>{
   sessionStatus && (sessionStatus.textContent='Monitoreando');
   tabLogger.start?.();
 
-  requestAnimationFrame(loop);   // ← corregido (sin paréntesis extra)
+  requestAnimationFrame(loop);   // ← sin paréntesis extra
 });
 
 btnStop?.addEventListener('click', ()=>{
