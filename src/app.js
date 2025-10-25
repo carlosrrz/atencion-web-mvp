@@ -1,4 +1,4 @@
-// app.js — Mirada + Oclusión + Labios + Anti-blink + Off-tab (foco/visibilidad) + Resumen modal
+// app.js — Mirada + Oclusión + Labios + Anti-blink + Off-tab + Resumen modal + Episodios en vivo
 import { createMetrics } from './metrics.js';
 import { createTabLogger } from './tab-logger.js';
 import { FilesetResolver, FaceLandmarker } from "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.3";
@@ -39,14 +39,38 @@ const btnSumJSON      = document.getElementById('summary-download-json');
 const btnSumCSV       = document.getElementById('summary-download-csv');
 const btnSumClose     = document.getElementById('summary-close');
 
-const tabButtons = Array.from(document.querySelectorAll('.tab'));
-const sections = {
-  lectura: document.getElementById('lectura'),
-  video:   document.getElementById('video'),
-  examen:  document.getElementById('examen') || document.getElementById('exam-root'),
-};
+/* Modal evidencias (opcional) */
+const evBackdrop   = document.getElementById('evidence-backdrop');
+const evModal      = document.getElementById('evidence-modal');
+const evGrid       = document.getElementById('evidence-grid');
+const btnEvid      = document.getElementById('btn-evidencias');
+const btnEvidClose = document.getElementById('btn-evid-close');
+const btnEvidDl    = document.getElementById('btn-evid-download');
 
-/* ===== Parámetros ===== */
+/* ===== Evidencias ===== */
+function createEvidence(){
+  const items = []; // {t, kind, note, data}
+  function snap(kind, note){
+    try{
+      const off = document.createElement('canvas');
+      off.width = 320; off.height = 180;
+      off.getContext('2d').drawImage(cam,0,0,off.width,off.height);
+      items.push({ t: Date.now(), kind, note, data: off.toDataURL('image/jpeg',0.9) });
+      if (items.length > 80) items.shift();
+    }catch(e){}
+  }
+  function list(){ return items.slice(); }
+  function clear(){ items.length=0; }
+  function downloadJSON(){
+    const blob = new Blob([JSON.stringify(items,null,2)],{type:'application/json'});
+    const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'evidencias.json'; a.click();
+    URL.revokeObjectURL(a.href);
+  }
+  return { snap, list, clear, downloadJSON };
+}
+const evidence = createEvidence();
+
+/* ===== Parámetros (TU CONFIG “PRECISA”) ===== */
 const DETECT_EVERY   = 2;
 const MIN_FACE_AREA  = 0.045;
 const OCCL_AREA_MIN  = 0.018;
@@ -65,7 +89,7 @@ const MOVE_EYE   = 0.10;
 const SCORE_ENTER = 6;
 const SCORE_EXIT  = 2;
 
-/* ===== LABIOS (habla) ===== */
+/* ===== LABIOS (habla) — iguales a tu versión ===== */
 const LIPS_SCORE_ENTER = 6;
 const LIPS_SCORE_EXIT  = 2;
 const LIPS_VEL_ALPHA = 0.5;
@@ -91,7 +115,6 @@ let isOccluded       = false;
 let occlSince        = null;
 let occlClearSince   = null;
 
-// Blink state
 let blinkActive = false;
 let blinkSince  = null;
 
@@ -109,7 +132,6 @@ let offTabEpisodes = 0;
 let offTabAccumMs = 0;
 
 const metrics = createMetrics();
-// Unificamos el umbral con la UI: 1500 ms
 const tabLogger = createTabLogger({ offTabThresholdMs: 1500 });
 
 /* Calibración / baseline / auto-flip */
@@ -128,21 +150,17 @@ let thr  = {
 let ema = { ar:null, off:null, yaw:null, pitch:null, gaze:null, gH:null, gV:null, mouth:null };
 
 /* Velocidad & ventana de labios */
-let lipsPrev = null;    // { jaw, upper, lower, stretch, funnel, pucker, smile }
+let lipsPrev = null;    
 let lipsVelEMA = 0;
-let mouthHist = [];     // [{t, v}] v = mouthRaw (pre-EMA)
+let mouthHist = [];     
 
-/* Episodios/tiempos adicionales */
+/* Episodios/tiempos (en vivo) */
 let lookAwayStart = null, lookAwayEpisodes = 0, lookAwayAccumMs = 0, lookAwayLongestMs = 0;
 let lipsStart     = null, lipsEpisodes     = 0, lipsAccumMs     = 0, lipsLongestMs     = 0;
 let occlEpStart   = null, occlEpisodes     = 0, occlAccumMs     = 0, occlLongestMs     = 0;
 
 /* ===== Util ===== */
-const CONSENT_KEY = 'mvp.consent.v1';
-const hasConsent  = () => { try { return !!localStorage.getItem(CONSENT_KEY); } catch { return false; } };
-
 const insecureContext = () => !(location.protocol === 'https:' || location.hostname === 'localhost');
-
 const clamp01 = v => Math.max(0, Math.min(1, v));
 const isInTab = () => (document.visibilityState === 'visible') && document.hasFocus();
 
@@ -381,6 +399,48 @@ async function startCamera() {
   }
 }
 
+/* ===== UI en vivo de episodios ===== */
+let lookCntEl, lookTimeEl, occlCntEl, occlTimeEl, lipsCntEl, lipsTimeEl;
+function ensureLiveEpisodeUI(){
+  // intenta ubicar la card "Estado"
+  const cards = Array.from(document.querySelectorAll('aside .card'));
+  const estadoCard = cards.find(c => c.querySelector('h3')?.textContent?.trim().toLowerCase() === 'estado') || cards[1] || document.body;
+
+  function ensureRow(html, id1, id2){
+    if (!document.getElementById(id1) || !document.getElementById(id2)){
+      const p = document.createElement('p');
+      p.innerHTML = html;
+      estadoCard.appendChild(p);
+    }
+  }
+
+  ensureRow('Desatención (mirada): <span id="lookaway-count">0</span> episodios · <span id="lookaway-time">00:00</span>', 'lookaway-count','lookaway-time');
+  ensureRow('Rostro cubierto: <span id="occl-count">0</span> episodios · <span id="occl-time">00:00</span>', 'occl-count','occl-time');
+  ensureRow('Posible habla: <span id="lips-count">0</span> episodios · <span id="lips-time">00:00</span>', 'lips-count','lips-time');
+
+  lookCntEl  = document.getElementById('lookaway-count');
+  lookTimeEl = document.getElementById('lookaway-time');
+  occlCntEl  = document.getElementById('occl-count');
+  occlTimeEl = document.getElementById('occl-time');
+  lipsCntEl  = document.getElementById('lips-count');
+  lipsTimeEl = document.getElementById('lips-time');
+}
+function updateLiveEpisodeUI(nowTs){
+  if (!nowTs) nowTs = performance.now();
+  const lookMs = lookAwayAccumMs + (lookAwayStart ? (nowTs - lookAwayStart) : 0);
+  const occlMs = occlAccumMs     + (occlEpStart   ? (nowTs - occlEpStart)   : 0);
+  const lipsMs = lipsAccumMs     + (lipsStart     ? (nowTs - lipsStart)     : 0);
+
+  lookCntEl  && (lookCntEl.textContent  = String(lookAwayEpisodes));
+  lookTimeEl && (lookTimeEl.textContent = fmtTime(lookMs));
+
+  occlCntEl  && (occlCntEl.textContent  = String(occlEpisodes));
+  occlTimeEl && (occlTimeEl.textContent = fmtTime(occlMs));
+
+  lipsCntEl  && (lipsCntEl.textContent  = String(lipsEpisodes));
+  lipsTimeEl && (lipsTimeEl.textContent = fmtTime(lipsMs));
+}
+
 /* ===== Loop ===== */
 function loop(){
   if (!running) return;
@@ -394,7 +454,8 @@ function loop(){
   if (frameCount % 10 === 0){
     updatePerfUI();
 
-    const ms = performance.now() - sessionStart;
+    const now = performance.now();
+    const ms = now - sessionStart;
     sessionTime && (sessionTime.textContent = fmtTime(ms));
 
     const inTab = isInTab();
@@ -402,7 +463,7 @@ function loop(){
 
     let attnState = 'atento';
     if (!inTab) {
-      const hiddenFor = offTabStart ? (performance.now() - offTabStart) : 0;
+      const hiddenFor = offTabStart ? (now - offTabStart) : 0;
       attnState = hiddenFor >= 2000 ? 'distracción (fuera de pestaña)' : 'intermitente';
     } else if (isOccluded) {
       attnState = 'posible desconcentración/desatención (rostro cubierto)';
@@ -413,9 +474,12 @@ function loop(){
 
     lipsEl && (lipsEl.textContent = lipsActive ? 'movimiento (posible habla)' : '—');
 
-    const accum = offTabAccumMs + (offTabStart ? (performance.now() - offTabStart) : 0);
+    const accum = offTabAccumMs + (offTabStart ? (now - offTabStart) : 0);
     offTimeEl && (offTimeEl.textContent = fmtTime(accum));
     offCntEl  && (offCntEl.textContent  = String(offTabEpisodes));
+
+    // ← actualización en vivo de episodios
+    updateLiveEpisodeUI(now);
   }
 
   // ---- Detección robusta (try/catch) ----
@@ -566,15 +630,6 @@ function loop(){
           let enter = poseAwayEnter || transAwayEnter || eyesAwayEnter || gazeAwayEnter;
           let exit  = (poseAwayExit && transAwayExit && eyesAwayExit && gazeAwayExit);
 
-          if (invertSense) {
-            const poseEnter = poseAwayEnter || transAwayEnter;
-            const poseExit  = poseAwayExit  && transAwayExit;
-            const flippedEnter = poseExit  || eyesAwayEnter || gazeAwayEnter;
-            const flippedExit  = poseEnter && eyesAwayExit  && gazeAwayExit;
-            enter = flippedEnter;
-            exit  = flippedExit;
-          }
-
           // LABIOS
           const lipsActivityHigh = (lipsVelEMA > LIPS_VEL_ENTER);
           const lipsActivityLow  = (lipsVelEMA < LIPS_VEL_EXIT);
@@ -606,7 +661,10 @@ function loop(){
         if (awayNow)      awayScore = Math.min(SCORE_ENTER, awayScore + 3);
         else if (backNow) awayScore = Math.max(0, awayScore - 2);
         else              awayScore = Math.max(0, awayScore - 1);
-        if (!isLookAway && awayScore >= SCORE_ENTER) isLookAway = true;
+        if (!isLookAway && awayScore >= SCORE_ENTER){ 
+          isLookAway = true; 
+          evidence.snap?.('alert/lookAway','Mirada desviada'); 
+        }
         if (isLookAway  && awayScore <= SCORE_EXIT)  isLookAway = false;
       }
 
@@ -615,7 +673,10 @@ function loop(){
         if (lipsNow)        lipsScore = Math.min(LIPS_SCORE_ENTER, lipsScore + 3);
         else if (lipsBack)  lipsScore = Math.max(0, lipsScore - 2);
         else                lipsScore = Math.max(0, lipsScore - 1);
-        if (!lipsActive && lipsScore >= LIPS_SCORE_ENTER) lipsActive = true;
+        if (!lipsActive && lipsScore >= LIPS_SCORE_ENTER){ 
+          lipsActive = true; 
+          evidence.snap?.('alert/speech','Posible habla'); 
+        }
         if (lipsActive  && lipsScore <= LIPS_SCORE_EXIT)  lipsActive = false;
       }
 
@@ -647,6 +708,7 @@ function loop(){
     // Oclusión
     if (!prevOcc && isOccluded) {
       occlEpStart = ts;
+      evidence.snap?.('alert/occlusion','Rostro cubierto/fuera');
     } else if (prevOcc && !isOccluded) {
       if (occlEpStart != null) {
         const d = ts - occlEpStart;
@@ -676,6 +738,7 @@ function handleTabStateChange(){
 document.addEventListener('visibilitychange', handleTabStateChange);
 window.addEventListener('blur', handleTabStateChange);
 window.addEventListener('focus', handleTabStateChange);
+tabLogger.setOnAlert?.((type)=>{ if (type==='off_tab') evidence.snap?.('alert/off_tab','Fuera de pestaña ≥ umbral'); });
 
 /* ===== Botones ===== */
 btnPermitir?.addEventListener('click', async ()=>{
@@ -845,13 +908,36 @@ function showSummaryModal(summary){
   }, { once:true });
 }
 
+/* Evidencias UI (si existen en el HTML) */
+btnEvid?.addEventListener('click', ()=>{
+  if (!evGrid) return;
+  evGrid.innerHTML = '';
+  const items = evidence.list();
+  if (!items.length){
+    evGrid.innerHTML = `<div class="help">Aún no hay evidencias capturadas.</div>`;
+  } else {
+    for (const it of items){
+      const card = document.createElement('div');
+      card.className='ev-card';
+      card.innerHTML = `<div class="pill pill-warn">${it.kind}</div>
+        <img src="${it.data}" alt="${it.kind}"/>
+        <div class="ev-note">${new Date(it.t).toLocaleTimeString()} — ${it.note||''}</div>`;
+      evGrid.appendChild(card);
+    }
+  }
+  evBackdrop?.classList.remove('hidden'); evModal?.classList.remove('hidden');
+});
+btnEvidClose?.addEventListener('click', ()=>{ evBackdrop?.classList.add('hidden'); evModal?.classList.add('hidden'); });
+btnEvidDl?.addEventListener('click', ()=> evidence.downloadJSON() );
+
+/* Start/Stop */
 btnStart?.addEventListener('click', ()=>{
   if (!stream){ alert('Primero permite la cámara.'); return; }
   running = true;
   frameCount = 0;
   sessionStart = performance.now();
 
-  // Off-tab: arranca según estado actual
+  // Off-tab
   offTabStart   = isInTab() ? null : performance.now();
   offTabEpisodes= 0;
   offTabAccumMs = 0;
@@ -869,10 +955,15 @@ btnStart?.addEventListener('click', ()=>{
   ema = { ar: null, off: null, yaw: null, pitch: null, gaze: null, gH: null, gV: null, mouth: null };
   invertSense = false;
 
+  evidence.clear();
   metrics.start();
 
   sessionStatus && (sessionStatus.textContent = 'Monitoreando');
   tabLogger.start?.();
+
+  ensureLiveEpisodeUI();          // ← crea los spans si no existen
+  updateLiveEpisodeUI(performance.now());
+
   requestAnimationFrame(loop);
 });
 
@@ -886,10 +977,10 @@ btnStop?.addEventListener('click', ()=>{
   metrics.stop();
   sessionStatus && (sessionStatus.textContent = 'Detenida');
 
-  // export de actividad de pestaña (se mantiene)
+  // export de actividad de pestaña
   tabLogger.stopAndDownloadCSV?.();
 
-  // construir resumen y mostrar modal
+  // resumen + modal
   const summary = buildSummaryObject();
   showSummaryModal(summary);
 });
@@ -904,14 +995,6 @@ navigator.mediaDevices?.addEventListener?.('devicechange', async ()=>{
   if (!stream && camRequested) await startCamera();
 });
 
-/* ===== Tabs ===== */
-function showSection(key){
-  for (const k of Object.keys(sections)){ const el=sections[k]; if(!el) continue; (k===key)?el.classList.remove('hidden'):el.classList.add('hidden'); }
-  tabButtons.forEach(b => b.classList.toggle('active', b.dataset.t===key));
-}
-tabButtons.forEach(btn=>btn.addEventListener('click', ()=>{ const k=btn.dataset.t; if(k) showSection(k); }));
-showSection(tabButtons.find(b=>b.classList.contains('active'))?.dataset.t || 'lectura');
-
 /* ===== Init ===== */
 (function init(){
   if (!navigator.mediaDevices?.getUserMedia){ setCamStatus('err','No soportado','Usa Chrome/Edge.'); return; }
@@ -924,6 +1007,10 @@ showSection(tabButtons.find(b=>b.classList.contains('active'))?.dataset.t || 'le
   lipsEl&&(lipsEl.textContent='—');
   offCntEl&&(offCntEl.textContent='0'); offTimeEl&&(offTimeEl.textContent='00:00');
 
+  // Prepara los contadores en vivo si aún no existen
+  ensureLiveEpisodeUI();
+
+  // Enlace de privacidad (si mantienes esa opción)
   document.getElementById('open-privacy')
     ?.addEventListener('click', (e)=>{ e.preventDefault(); window.open('/privacidad.html','_blank','noopener'); });
 })();
