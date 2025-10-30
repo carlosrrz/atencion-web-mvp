@@ -1,114 +1,69 @@
 <!doctype html>
 <html lang="es">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Proctoring – Evaluación</title>
-  <link rel="stylesheet" href="./src/styles.css" />
+  <meta charset="utf-8"/>
+  <title>Proctoring – Entrada</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <style>
+    :root{ --b:#2563eb; --bg:#f6f7fb; }
+    html,body{height:100%} body{margin:0;background:var(--bg);font-family:system-ui,Segoe UI,Roboto}
+    header{background:linear-gradient(90deg,#60a5fa,#3b82f6);color:#fff;padding:16px 22px;font-weight:700}
+    main{max-width:900px;margin:24px auto;padding:0 16px}
+    .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:18px}
+    .card{background:#fff;border-radius:16px;box-shadow:0 10px 30px #0001;border:1px solid #e5e7eb;padding:18px}
+    h2{margin:0 0 8px}
+    p{color:#4b5563;margin:8px 0 16px}
+    button{border:0;border-radius:12px;padding:10px 14px;cursor:pointer;font-weight:600}
+    .btn{background:var(--b);color:#fff}
+    .btn-lite{background:#eef2ff}
+    .row{display:flex;gap:8px;flex-wrap:wrap}
+    .help{font-size:12px;color:#6b7280;margin-top:6px}
+  </style>
 </head>
 <body>
-  <header>
-    <h1>Proctoring – Evaluación</h1>
-    <nav><a href="/privacidad.html" target="_blank" rel="noopener">Privacidad</a></nav>
-  </header>
-
+  <header>Proctoring – Evaluación</header>
   <main>
-    <section class="left">
-      <!-- EXAMEN -->
-      <div class="card">
-        <h3>Evaluación (Examen)</h3>
-        <p id="exam-instr">Inicia el test cuando el docente lo indique. El monitoreo por cámara estará activo durante todo el intento.</p>
-        <div id="exam-ui" class="quiz">
-          <div id="exam-meta" class="quiz-meta">
-            Pregunta <span id="exam-idx">0</span>/<span id="exam-total">0</span>
-            · RT: <span id="exam-rt">0.0</span>s
-          </div>
-          <div id="q-text" class="q-text">—</div>
-          <div id="q-options" class="q-options"></div>
-          <div class="exam-actions">
-            <button id="btn-exam-start" class="primary">Iniciar test</button>
-            <button id="btn-exam-next"  class="secondary hidden">Siguiente</button>
-            <button id="btn-exam-finish" class="secondary hidden">Finalizar</button>
-          </div>
-          <div id="exam-result" class="hidden"></div>
+    <div class="grid">
+      <section class="card">
+        <h2>Entrar como estudiante</h2>
+        <p>Podrás registrar tus datos, activar la cámara y rendir el examen. No verás telemetría del monitoreo.</p>
+        <div class="row">
+          <button id="btn-student" class="btn">Soy estudiante</button>
         </div>
-      </div>
+        <div class="help">Se guarda localmente quién eres (rol) para dirigir la vista adecuada.</div>
+      </section>
 
-      <!-- CÁMARA -->
-      <div class="card">
-        <h3>Cámara</h3>
-        <p>Estado: <span id="cam-status" class="pill pill-neutral">Permiso pendiente</span></p>
-        <div id="cam-help" class="help hidden"></div>
-
-        <div class="actions" style="margin-bottom:10px;">
-          <button id="btn-permitir"  class="primary">Permitir cámara</button>
-          <button id="btn-reintentar" class="secondary">Reintentar</button>
+      <section class="card">
+        <h2>Entrar como encargado</h2>
+        <p>Verás la lista de intentos, resúmenes, capturas y podrás exportar a CSV.</p>
+        <div class="row">
+          <button id="btn-staff" class="btn-lite">Soy encargado</button>
         </div>
-
-        <div class="video-wrap">
-          <video id="cam" autoplay playsinline muted></video>
-          <canvas id="canvas"></canvas>
-        </div>
-
-        <div class="actions" style="margin-top:10px;">
-          <button id="btn-start" class="primary">Iniciar monitoreo</button>
-          <button id="btn-stop"  class="secondary">Finalizar y exportar</button>
-          <button id="btn-evidencias" class="secondary">Evidencias</button>
-        </div>
-      </div>
-    </section>
-
-    <aside class="right">
-      <div class="card">
-        <h3>Monitoreo en vivo</h3>
-        <p>Sesión: <span id="session-status" aria-live="polite">Detenida</span></p>
-        <p>Tiempo: <span id="session-time" aria-live="polite">00:00</span></p>
-        <p>Pestaña: <span id="tab-state">—</span></p>
-        <p>Atención: <span id="attn-state">—</span></p>
-        <p>Labios: <span id="lips-state">—</span></p>
-        <p>FPS: <span id="fps">—</span>
-          <span id="fps-pill" class="pill pill-neutral" aria-live="polite">—</span>
-          &nbsp;|&nbsp; Latencia p95: <span id="p95">—</span> ms
-          <span id="p95-pill" class="pill pill-neutral" aria-live="polite">—</span>
-        </p>
-        <p>Rendimiento: <span id="perf-overall" class="pill pill-neutral" aria-live="polite">—</span></p>
-        <p>Off-tab (episodios): <span id="offtab-count">0</span> | Tiempo fuera: <span id="offtab-time">00:00</span></p>
-      </div>
-    </aside>
+        <div class="help">Se usa un código simple (no es seguro) para evitar accesos accidentales.</div>
+      </section>
+    </div>
   </main>
 
-  <!-- Modal Evidencias -->
-  <div id="evidence-backdrop" class="modal-backdrop hidden" aria-hidden="true"></div>
-  <div id="evidence-modal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="ev-title">
-    <div class="modal-card">
-      <div style="display:flex;align-items:center;gap:10px;">
-        <h3 id="ev-title" style="margin:0;">Evidencias capturadas</h3>
-        <span class="spacer" style="flex:1"></span>
-        <button id="btn-evid-download" class="secondary">Descargar JSON</button>
-        <button id="btn-evid-close" class="secondary">Cerrar</button>
-      </div>
-      <div id="evidence-grid" style="margin-top:12px;"></div>
-    </div>
-  </div>
+  <script type="module">
+    import { setRole } from './roles.js';
 
-  <!-- Modal Resumen -->
-  <div id="summary-backdrop" class="modal-backdrop hidden" aria-hidden="true"></div>
-  <div id="summary-modal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="sum-title">
-    <div class="modal-card">
-      <div style="display:flex;align-items:center;gap:10px;">
-        <h3 id="sum-title" style="margin:0;">Resumen de la sesión</h3>
-        <span class="spacer" style="flex:1"></span>
-        <button id="summary-download-json" class="secondary">Descargar JSON</button>
-        <button id="summary-download-csv" class="secondary">Descargar CSV</button>
-        <button id="summary-close" class="secondary">Cerrar</button>
-      </div>
-      <div id="summary-body" style="margin-top:12px;"></div>
-    </div>
-  </div>
+    // CAMBIA ESTE CÓDIGO si quieres otro
+    const PROCTOR_KEY = 'encargado2025';
 
-  <script type="module" src="./src/metrics.js"></script>
-  <script type="module" src="./src/tab-logger.js"></script>
-  <script type="module" src="./src/exam.js"></script>
-  <script type="module" src="./src/app.js"></script>
+    document.getElementById('btn-student')?.addEventListener('click', ()=>{
+      setRole('estudiante');
+      location.href = 'estudiante.html';
+    });
+
+    document.getElementById('btn-staff')?.addEventListener('click', ()=>{
+      const v = prompt('Código del encargado:');
+      if (v === PROCTOR_KEY){
+        setRole('encargado');
+        location.href = 'encargado.html';
+      } else if (v != null){
+        alert('Código incorrecto');
+      }
+    });
+  </script>
 </body>
 </html>
