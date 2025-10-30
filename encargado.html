@@ -2,101 +2,101 @@
 <html lang="es">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Encargado – Proctoring</title>
-  <style>
-    body{font-family:system-ui,Segoe UI,Roboto,Arial;background:#f6f7fb;margin:0;color:#0f172a}
-    header{display:flex;justify-content:space-between;align-items:center;background:#3b82f6;color:#fff;padding:14px 20px}
-    header a{color:#e5edff;text-decoration:underline;cursor:pointer}
-    main{max-width:1100px;margin:24px auto;padding:0 14px}
-    .card{background:#fff;border-radius:16px;box-shadow:0 8px 30px rgba(2,6,23,.08);padding:20px;margin-bottom:18px}
-    .btn{padding:10px 14px;border-radius:8px;border:none;cursor:pointer;margin-right:8px}
-    .btn-primary{background:#3b82f6;color:#fff}
-    table{width:100%;border-collapse:collapse}
-    th,td{border-bottom:1px solid #e2e8f0;padding:10px;text-align:left;font-size:14px}
-    .pill{display:inline-block;padding:4px 10px;border-radius:999px;background:#eef;color:#223;font-size:12px}
-  </style>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Evaluación — Encargado</title>
+  <link rel="stylesheet" href="./src/src/styles.css" />
 </head>
 <body>
-  <header>
-    <div>Encargado</div>
-    <a href="/index.html">Volver</a>
+  <header class="topbar">
+    <div class="wrap">
+      <h1>Panel del encargado</h1>
+      <nav>
+        <a href="index.html">Volver</a>
+      </nav>
+    </div>
   </header>
 
-  <main>
-    <section class="card" id="login-card">
+  <main class="wrap">
+    <div class="card" id="gate">
       <h2>Acceso</h2>
-      <p>Ingresa el código del encargado.</p>
-      <input id="admin-code" placeholder="Código" style="padding:10px;border:1px solid #cbd5e1;border-radius:8px">
-      <button class="btn btn-primary" id="btn-admin-go">Entrar</button>
-      <div id="code-msg" class="pill" style="display:none;margin-left:8px">Código incorrecto</div>
-    </section>
+      <p>Ingresa el código:</p>
+      <input id="admin-code" class="input" placeholder="Código" />
+      <button id="btn-enter" class="btn btn-primary">Entrar</button>
+      <p class="help">Este código es sólo para evitar accesos accidentales.</p>
+    </div>
 
-    <section class="card" id="list-card" style="display:none">
-      <h2>Intentos</h2>
-      <div style="margin-bottom:10px">
-        <button class="btn btn-primary" id="btn-export-csv">Exportar CSV</button>
+    <div class="card hidden" id="panel">
+      <h2>Intentos registrados</h2>
+      <div class="row">
+        <button id="btn-export" class="btn btn-ghost">Exportar CSV</button>
+        <button id="btn-clear"  class="btn btn-danger">Limpiar</button>
       </div>
-      <table id="tbl">
+      <table class="table" id="tbl">
         <thead>
-          <tr><th>Alumno</th><th>Código</th><th>Duración</th><th>Resumen</th></tr>
+          <tr><th>#</th><th>Inicio</th><th>Fin</th><th>Correctas</th><th>Total</th></tr>
         </thead>
         <tbody></tbody>
       </table>
-    </section>
+    </div>
   </main>
 
   <script type="module">
-    const ADMIN_CODE = '7777'; // cambia si quieres
+    const ADMIN_CODE = '7777';
 
-    const $ = s => document.querySelector(s);
-    const loginCard = $('#login-card');
-    const listCard  = $('#list-card');
-    const msg = $('#code-msg');
+    const gate   = document.getElementById('gate');
+    const panel  = document.getElementById('panel');
+    const input  = document.getElementById('admin-code');
+    const enter  = document.getElementById('btn-enter');
+    const tbl    = document.getElementById('tbl').querySelector('tbody');
+    const btnCSV = document.getElementById('btn-export');
+    const btnClr = document.getElementById('btn-clear');
 
-    $('#btn-admin-go').addEventListener('click', ()=>{
-      if ($('#admin-code').value.trim() === ADMIN_CODE){
-        loginCard.style.display='none';
-        listCard.style.display='block';
-        render();
-      } else {
-        msg.style.display='inline-block';
-        setTimeout(()=>msg.style.display='none', 2000);
-      }
+    const KEY = 'mvp.exam.attempts';
+
+    function fmt(ts){
+      try{ return new Date(ts).toLocaleString(); }catch{ return '—'; }
+    }
+
+    function load(){
+      let arr = [];
+      try{ arr = JSON.parse(localStorage.getItem(KEY) || '[]'); }catch{}
+      tbl.innerHTML = arr.map((r,i)=>`
+        <tr>
+          <td>${i+1}</td>
+          <td>${fmt(r.startedAt)}</td>
+          <td>${fmt(r.finishedAt)}</td>
+          <td>${r.correct}</td>
+          <td>${r.total}</td>
+        </tr>
+      `).join('');
+    }
+
+    function toCSV(){
+      let arr = [];
+      try{ arr = JSON.parse(localStorage.getItem(KEY) || '[]'); }catch{}
+      const rows = [['#','inicio','fin','correctas','total']];
+      arr.forEach((r,i)=> rows.push([i+1, fmt(r.startedAt), fmt(r.finishedAt), r.correct, r.total]));
+      const csv = rows.map(r=>r.join(',')).join('\n');
+      const blob = new Blob([csv], { type:'text/csv' });
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = 'intentos.csv';
+      a.click();
+      URL.revokeObjectURL(a.href);
+    }
+
+    enter.addEventListener('click', ()=>{
+      if (input.value.trim() !== ADMIN_CODE){ alert('Código incorrecto'); return; }
+      gate.classList.add('hidden');
+      panel.classList.remove('hidden');
+      load();
     });
 
-    function getAttempts(){
-      try{ return JSON.parse(localStorage.getItem('exam_attempts')||'[]'); }catch{ return []; }
-    }
-    function render(){
-      const tbody = $('#tbl tbody'); tbody.innerHTML='';
-      for (const it of getAttempts()){
-        const tr = document.createElement('tr');
-        tr.innerHTML = `
-          <td>${it.student?.name||'-'}</td>
-          <td>${it.student?.id||'-'}</td>
-          <td>${fmt(it.session?.duration_ms||0)}</td>
-          <td><pre style="white-space:pre-wrap;margin:0">${JSON.stringify(it.summary||{},null,2)}</pre></td>`;
-        tbody.appendChild(tr);
-      }
-    }
-    function fmt(ms){ const s=Math.floor(ms/1000); const mm=String(Math.floor(s/60)).padStart(2,'0'); const ss=String(s%60).padStart(2,'0'); return `${mm}:${ss}`; }
-
-    // CSV
-    $('#btn-export-csv').addEventListener('click', ()=>{
-      const rows = [['nombre','codigo','duracion_ms','resumen_json']];
-      for (const it of getAttempts()){
-        rows.push([
-          it.student?.name||'',
-          it.student?.id||'',
-          String(it.session?.duration_ms||0),
-          JSON.stringify(it.summary||{})
-        ]);
-      }
-      const csv = rows.map(r=>r.map(v=>`"${String(v).replace(/"/g,'""')}"`).join(',')).join('\n');
-      const blob = new Blob([csv],{type:'text/csv'});
-      const a = Object.assign(document.createElement('a'), { href: URL.createObjectURL(blob), download: 'intentos.csv' });
-      a.click(); URL.revokeObjectURL(a.href);
+    btnCSV.addEventListener('click', toCSV);
+    btnClr.addEventListener('click', ()=>{
+      if (!confirm('¿Borrar todos los intentos guardados en este navegador?')) return;
+      localStorage.removeItem(KEY);
+      load();
     });
   </script>
 </body>

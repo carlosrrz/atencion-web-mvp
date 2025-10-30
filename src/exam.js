@@ -1,40 +1,82 @@
-// public/js/exam.js
-const root = document.getElementById('exam-root');
-const startBtn = document.getElementById('btn-exam-start');
-
+// src/src/exam.js
 const QUESTIONS = [
-  { q:'¿2 + 2 = ?', opts:['3','4','5'], a:1 },
-  { q:'Capital de Francia', opts:['Roma','Madrid','París'], a:2 },
-  { q:'Color del cielo despejado', opts:['Verde','Azul','Rojo'], a:1 },
+  {
+    q: "¿Cuál es la capital de Francia?",
+    a: ["Madrid", "Roma", "París", "Berlín"],
+    ok: 2
+  },
+  {
+    q: "2 + 2 × 3 =",
+    a: ["8", "12", "10", "6"],
+    ok: 0
+  },
+  {
+    q: "¿Qué significa 'CPU'?",
+    a: ["Central Process Unit", "Central Processing Unit", "Computer Personal Unit", "Core Processing Utility"],
+    ok: 1
+  }
 ];
 
-startBtn?.addEventListener('click', ()=>renderExam());
+function el(html){ const d=document.createElement('div'); d.innerHTML=html.trim(); return d.firstElementChild; }
 
-function renderExam(){
-  if (!root) return;
-  let html = '<ul class="q">';
-  QUESTIONS.forEach((it,idx)=>{
-    html += `<li style="margin-bottom:10px">
-      <div>${it.q}</div>
-      ${it.opts.map((o,i)=>`
-        <label style="display:block;margin:4px 0">
-          <input type="radio" name="q${idx}" value="${i}"> ${o}
-        </label>`).join('')}
-    </li>`;
+function renderExam(root){
+  const form = el(`<form class="exam-form"></form>`);
+  QUESTIONS.forEach((it, idx)=>{
+    const block = el(`<fieldset class="q">
+      <legend>${idx+1}. ${it.q}</legend>
+      ${it.a.map((opt,i)=>`
+        <label class="opt">
+          <input type="radio" name="q${idx}" value="${i}" required/>
+          <span>${opt}</span>
+        </label>
+      `).join('')}
+    </fieldset>`);
+    form.appendChild(block);
   });
-  html += '</ul><button id="btn-exam-send" class="btn btn-primary">Enviar</button>';
-  root.innerHTML = html;
+  const actions = el(`<div class="row end">
+    <button type="submit" class="btn btn-primary">Enviar</button>
+  </div>`);
+  form.appendChild(actions);
 
-  document.getElementById('btn-exam-send')?.addEventListener('click', ()=>{
-    let score=0, total=QUESTIONS.length;
-    QUESTIONS.forEach((it,i)=>{
-      const v = Number((document.querySelector(`input[name="q${i}"]:checked`)||{}).value);
-      if (v===it.a) score++;
+  form.addEventListener('submit', (e)=>{
+    e.preventDefault();
+    let score = 0;
+    QUESTIONS.forEach((it, idx)=>{
+      const v = form.querySelector(`input[name="q${idx}"]:checked`)?.value;
+      if (Number(v) === it.ok) score++;
     });
-    // guardamos resultado básico junto con el alumno para que el encargado lo vea
-    const res = { when: Date.now(), score, total };
-    const arr = JSON.parse(localStorage.getItem('exam_results')||'[]'); arr.push(res);
-    localStorage.setItem('exam_results', JSON.stringify(arr));
-    alert(`Enviado. Puntaje: ${score}/${total}`);
+    const result = {
+      startedAt: window.__examStartedAt || Date.now(),
+      finishedAt: Date.now(),
+      total: QUESTIONS.length,
+      correct: score
+    };
+
+    // Guarda intento simple en localStorage
+    try{
+      const key = 'mvp.exam.attempts';
+      const prev = JSON.parse(localStorage.getItem(key) || '[]');
+      prev.push(result);
+      localStorage.setItem(key, JSON.stringify(prev));
+    }catch{}
+
+    alert(`Tu puntaje: ${score}/${QUESTIONS.length}`);
   });
+
+  root.innerHTML = "";
+  root.appendChild(form);
+  window.__examStartedAt = Date.now();
 }
+
+function boot(){
+  const root = document.getElementById('exam-root');
+  if (!root) return;
+  const btn = root.querySelector('#start-test');
+  if (btn){
+    btn.addEventListener('click', ()=> renderExam(root), { once:true });
+  } else {
+    renderExam(root);
+  }
+}
+
+document.addEventListener('DOMContentLoaded', boot);
