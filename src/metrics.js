@@ -1,89 +1,20 @@
-// src/metrics.js
-export function createMetrics() {
-  let running = false;
-  let lastFrameTs = null;
-
-  // Guardamos por frame: timestamp, delta entre frames (dt) y tiempo de paso/procesamiento (step)
-  const frames = [];
-
-  /* Utilidades estadísticas */
-  function median(arr) {
-    if (!arr.length) return 0;
-    const a = arr.slice().sort((x,y)=>x-y);
-    const m = Math.floor(a.length/2);
-    return a.length % 2 ? a[m] : (a[m-1] + a[m]) / 2;
+// public/js/metrics.js
+export function createMetrics(){
+  let running=false, last=0;
+  const fpsArr=[], latArr=[];
+  function start(){ running=true; last=performance.now(); fpsArr.length=0; latArr.length=0; }
+  function stop(){ running=false; }
+  function onFrameStart(){ return performance.now(); }
+  function onFrameEnd(t0){
+    if(!running) return;
+    const t1=performance.now();
+    const dt=t1-(last||t1); last=t1;
+    fpsArr.push(1000/dt); if(fpsArr.length>120) fpsArr.shift();
+    latArr.push(t1-(t0||t1)); if(latArr.length>120) latArr.shift();
   }
-  function p95(arr) {
-    if (!arr.length) return 0;
-    const a = arr.slice().sort((x,y)=>x-y);
-    const idx = Math.floor(0.95 * (a.length - 1));
-    return a[idx];
-  }
-
-  /* API pública */
-  function start() {
-    running = true;
-    frames.length = 0;
-    lastFrameTs = performance.now();
-  }
-
-  function stop() {
-    running = false;
-  }
-
-  // Llama esto al inicio de CADA frame; devuelve ts para medir el paso
-  function onFrameStart() {
-    const now = performance.now();
-    if (running) {
-      const dt = lastFrameTs != null ? (now - lastFrameTs) : 0;
-      frames.push({ t: now, dt, step: null });
-    }
-    lastFrameTs = now;
-    return performance.now(); // ts para medir el paso (step)
-  }
-
-  // Llama esto al final del procesamiento del frame, pasando el ts de inicio
-  function onFrameEnd(tsStart) {
-    if (!running || !frames.length) return;
-    frames[frames.length - 1].step = performance.now() - tsStart;
-  }
-
-  // Lectura rápida para HUD (UI)
-  // Dentro de createMetrics(), reemplaza read() por esto:
-  function read() {
-  const dts   = frames.map(f => f.dt).filter(v => v > 0);
-  const steps = frames.map(f => f.step).filter(v => v != null);
-  const fpsMed = dts.length ? (1000 / median(dts)) : 0;   // ← sin Math.round
-  const latP95 = steps.length ? p95(steps) : 0;           // ← sin Math.round
-  return { fpsMed, latP95 };
+  function read(){ return { fpsMed: median(fpsArr), latP95: percentile(latArr,95) }; }
+  return { start, stop, onFrameStart, onFrameEnd, read };
 }
 
-
-  // Exporta CSV con detalle por frame y resumen al final
-  function downloadCSV(filename = 'rendimiento.csv') {
-    const rows = [];
-    rows.push(['timestamp_ms','delta_frame_ms','step_ms'].join(','));
-    for (const f of frames) {
-      rows.push([
-        Math.round(f.t),
-        Math.round(f.dt ?? 0),
-        Math.round(f.step ?? 0)
-      ].join(','));
-    }
-    const { fpsMed, latP95 } = read();
-    rows.push('');
-    rows.push(['fps_median', fpsMed].join(','));
-    rows.push(['latency_p95_ms', latP95].join(','));
-
-    const csv = rows.join('\n');
-    const blob = new Blob([csv], { type: 'text/csv' });
-    const a = document.createElement('a');
-    a.href = URL.createObjectURL(blob);
-    a.download = filename;
-    a.click();
-    URL.revokeObjectURL(a.href);
-  }
-
-  return { start, stop, onFrameStart, onFrameEnd, read, downloadCSV };
-}
-
+function median(a){ if(!a.length) return 0; const b=[...a].sort((x,y)=>x-y), m=Math.floor(b.length/2); return b.length%2?b[m]:(b[m-1]+b[m])/2; }
+function percentile(a,p){ if(!a.length) return 0; const b=[...a].sort((x,y)=>x-y); const i=Math.min(b.length-1, Math.floor(p/100*(b.length-1))); return b[i]; }

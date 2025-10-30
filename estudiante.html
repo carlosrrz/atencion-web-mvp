@@ -5,49 +5,90 @@
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>Estudiante – Proctoring</title>
   <style>
-    .cam-card { max-width: 980px; margin: 24px auto; padding: 16px; background:#fff; border-radius:12px; box-shadow:0 6px 24px rgba(0,0,0,.06);}
-    .row { margin: 12px 0; }
-    .pill { display:inline-block; padding:4px 10px; border-radius:999px; background:#eef; color:#223; font-size:12px; }
-    .btn { padding:10px 14px; border-radius:8px; border:none; cursor:pointer; margin-right:8px; }
-    .btn-primary { background:#3b82f6; color:#fff; }
-    .btn-warn { background:#e11d48; color:#fff; }
-    .btn-ghost { background:#eef; color:#111; }
-    .cam-wrap { position: relative; width: 100%; max-width: 980px; aspect-ratio: 16 / 9; background:#000; border-radius:12px; overflow:hidden; }
-    #cam { width:100%; height:100%; object-fit:cover; display:block; }
-    #canvas { position:absolute; inset:0; width:100%; height:100%; pointer-events:none; }
-    /* evita la “doble cámara”: solo existe este bloque */
+    body{font-family:system-ui,Segoe UI,Roboto,Arial;background:#f6f7fb;margin:0;color:#0f172a}
+    header{display:flex;justify-content:space-between;align-items:center;background:#3b82f6;color:#fff;padding:14px 20px}
+    header a{color:#e5edff;text-decoration:underline;cursor:pointer}
+    main{max-width:1100px;margin:24px auto;padding:0 14px;display:grid;gap:20px;grid-template-columns:1fr}
+    .card{background:#fff;border-radius:16px;box-shadow:0 8px 30px rgba(2,6,23,.08);padding:20px}
+    h2{margin:0 0 10px}
+    .row{margin:10px 0}
+    label{display:block;margin:8px 0 4px}
+    input{width:100%;padding:10px;border:1px solid #cbd5e1;border-radius:10px}
+    .btn{padding:10px 14px;border-radius:8px;border:none;cursor:pointer;margin-right:8px}
+    .btn-primary{background:#3b82f6;color:#fff}
+    .btn-warn{background:#e11d48;color:#fff}
+    .btn-ghost{background:#eef;color:#111}
+    .pill{display:inline-block;padding:4px 10px;border-radius:999px;background:#eef;color:#223;font-size:12px}
+    .cam-wrap{position:relative;width:100%;max-width:980px;aspect-ratio:16/9;background:#000;border-radius:12px;overflow:hidden}
+    #cam{width:100%;height:100%;object-fit:cover;display:block}
+    #canvas{position:absolute;inset:0;width:100%;height:100%;pointer-events:none}
+    ul.q{list-style:decimal;margin-left:20px}
   </style>
 </head>
 <body>
+  <header>
+    <div>Estudiante</div>
+    <a href="/index.html" id="btn-salir">Salir</a>
+  </header>
 
-  <div class="cam-card">
-    <h2>Cámara</h2>
-    <div class="row">
-      Estado: <span id="cam-status" class="pill">Permiso pendiente</span>
-      <span id="cam-help" class="pill" style="margin-left:6px; display:none;"></span>
-    </div>
+  <main>
+    <!-- Datos -->
+    <section class="card" id="datos-card">
+      <h2>Datos del estudiante</h2>
+      <div class="row">
+        <label>Nombre y apellidos</label>
+        <input id="st-name" placeholder="Juan Pérez">
+      </div>
+      <div class="row">
+        <label>Código / DNI</label>
+        <input id="st-id" placeholder="2023xxxxx">
+      </div>
+      <div class="row">
+        <button class="btn btn-primary" id="btn-save-data">Guardar</button>
+        <span class="pill" id="save-msg" style="display:none">Guardado</span>
+      </div>
+    </section>
 
-    <div class="row">
-      <button id="btn-permitir"  class="btn btn-primary">Permitir cámara</button>
-      <button id="btn-reintentar" class="btn btn-ghost">Reintentar</button>
-    </div>
+    <!-- Examen -->
+    <section class="card">
+      <h2>Evaluación (examen)</h2>
+      <p>Cuando indiques “Iniciar test” aparecerán las preguntas.</p>
+      <div class="row">
+        <button class="btn btn-primary" id="btn-exam-start">Iniciar test</button>
+      </div>
+      <div id="exam-root" class="row"></div>
+    </section>
 
-    <div class="cam-wrap">
-      <video id="cam" playsinline autoplay muted></video>
-      <canvas id="canvas"></canvas>
-    </div>
+    <!-- Cámara -->
+    <section class="card">
+      <h2>Cámara</h2>
+      <div class="row">
+        Estado: <span id="cam-status" class="pill">Permiso pendiente</span>
+        <span id="cam-help" class="pill" style="display:none;margin-left:6px"></span>
+      </div>
+      <div class="row">
+        <button id="btn-permitir"   class="btn btn-primary">Permitir cámara</button>
+        <button id="btn-reintentar" class="btn btn-ghost">Reintentar</button>
+      </div>
 
-    <div class="row" style="margin-top:14px;">
-      <button id="btn-start" class="btn btn-primary">Iniciar monitoreo</button>
-      <button id="btn-stop"  class="btn btn-warn">Finalizar y exportar</button>
+      <div class="cam-wrap">
+        <video id="cam" playsinline autoplay muted></video>
+        <canvas id="canvas"></canvas>
+      </div>
 
-      <span class="pill" id="session-status" style="margin-left:12px;">Detenida</span>
-      <span class="pill" id="session-time" style="margin-left:6px;">00:00</span>
-    </div>
-  </div>
+      <div class="row" style="margin-top:12px">
+        <button id="btn-start" class="btn btn-primary">Iniciar monitoreo</button>
+        <button id="btn-stop"  class="btn btn-warn">Finalizar y exportar</button>
 
-  <!-- Carga de scripts (asegúrate de que las rutas EXISTAN) -->
-  <script type="module" src="/js/app.js" defer></script>
-  <script type="module" src="/js/exam.js" defer></script>
+        <span class="pill" id="session-status" style="margin-left:12px">Detenida</span>
+        <span class="pill" id="session-time"   style="margin-left:6px">00:00</span>
+      </div>
+    </section>
+  </main>
+
+  <!-- Scripts (MÓDULOS) -->
+  <script type="module" src="./src/src/app.js" defer></script>
+<script type="module" src="./src/src/exam.js" defer></script>
+
 </body>
 </html>
