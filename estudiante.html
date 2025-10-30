@@ -1,160 +1,53 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="es">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Evaluación – Estudiante</title>
-  <link rel="stylesheet" href="./styles.css" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Estudiante – Proctoring</title>
   <style>
-    .hidden{display:none !important;}
-    .wrap{max-width:1200px;margin:24px auto;padding:0 16px;}
-    header{background:#5ca2ff;color:#fff;padding:12px 16px;font-weight:700}
-    .grid{display:grid;grid-template-columns:1fr 360px;gap:22px}
-    .card{background:#fff;border-radius:12px;box-shadow:0 10px 30px rgba(0,0,0,.07);padding:18px}
-    .row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
-    .pill{display:inline-block;border-radius:999px;padding:4px 10px;font-size:12px;background:#eef}
-    video,canvas{width:100%;max-height:340px;background:#000;border-radius:12px}
-    .btn{background:#3b82f6;border:none;color:#fff;border-radius:8px;padding:8px 12px;cursor:pointer}
-    .btn.out{background:#ef4444}
+    .cam-card { max-width: 980px; margin: 24px auto; padding: 16px; background:#fff; border-radius:12px; box-shadow:0 6px 24px rgba(0,0,0,.06);}
+    .row { margin: 12px 0; }
+    .pill { display:inline-block; padding:4px 10px; border-radius:999px; background:#eef; color:#223; font-size:12px; }
+    .btn { padding:10px 14px; border-radius:8px; border:none; cursor:pointer; margin-right:8px; }
+    .btn-primary { background:#3b82f6; color:#fff; }
+    .btn-warn { background:#e11d48; color:#fff; }
+    .btn-ghost { background:#eef; color:#111; }
+    .cam-wrap { position: relative; width: 100%; max-width: 980px; aspect-ratio: 16 / 9; background:#000; border-radius:12px; overflow:hidden; }
+    #cam { width:100%; height:100%; object-fit:cover; display:block; }
+    #canvas { position:absolute; inset:0; width:100%; height:100%; pointer-events:none; }
+    /* evita la “doble cámara”: solo existe este bloque */
   </style>
 </head>
 <body>
-<header>Proctoring – Estudiante</header>
-<div class="wrap">
 
-  <!-- Datos del estudiante -->
-  <section class="card">
-    <h3>Mis datos</h3>
-    <form id="form-student" class="row">
-      <input id="stu-name"  class="pill" placeholder="Nombre y apellidos" required>
-      <input id="stu-code"  class="pill" placeholder="Código/Documento" required>
-      <input id="stu-mail"  class="pill" placeholder="Correo" type="email">
-      <button class="btn" type="submit">Guardar</button>
-      <button id="btn-logout" class="btn out" type="button">Salir</button>
-      <span id="save-hint" class="pill">—</span>
-    </form>
-  </section>
+  <div class="cam-card">
+    <h2>Cámara</h2>
+    <div class="row">
+      Estado: <span id="cam-status" class="pill">Permiso pendiente</span>
+      <span id="cam-help" class="pill" style="margin-left:6px; display:none;"></span>
+    </div>
 
-  <div class="grid">
-    <!-- Columna izquierda: examen + cámara -->
-    <main class="col">
-      <section class="card">
-        <h3>Evaluación (Examen)</h3>
-        <p>Tu cámara estará activa durante todo el intento.</p>
-        <div class="row">
-          <button id="exam-start" class="btn" type="button">Iniciar test</button>
-          <span id="exam-state" class="pill">Sin iniciar</span>
-        </div>
-      </section>
+    <div class="row">
+      <button id="btn-permitir"  class="btn btn-primary">Permitir cámara</button>
+      <button id="btn-reintentar" class="btn btn-ghost">Reintentar</button>
+    </div>
 
-      <section class="card">
-        <h3>Cámara</h3>
-        <p>Estado: <span id="cam-status" class="pill">Permiso pendiente</span> <span id="cam-help" class="pill hidden"></span></p>
+    <div class="cam-wrap">
+      <video id="cam" playsinline autoplay muted></video>
+      <canvas id="canvas"></canvas>
+    </div>
 
-        <div class="row">
-          <button id="btn-permitir"   class="btn" type="button">Permitir cámara</button>
-          <button id="btn-reintentar" class="btn" type="button">Reintentar</button>
-        </div>
+    <div class="row" style="margin-top:14px;">
+      <button id="btn-start" class="btn btn-primary">Iniciar monitoreo</button>
+      <button id="btn-stop"  class="btn btn-warn">Finalizar y exportar</button>
 
-        <video id="cam" playsinline muted></video>
-        <canvas id="canvas"></canvas>
-
-        <div class="row" style="margin-top:10px">
-          <button id="btn-start"      class="btn" type="button">Iniciar monitoreo</button>
-          <button id="btn-stop"       class="btn out" type="button">Finalizar y exportar</button>
-          <button id="btn-evidencias" class="btn" type="button">Evidencias</button>
-          <span class="pill">Sesión: <b id="session-status">Detenida</b></span>
-          <span class="pill">Tiempo: <b id="session-time">00:00</b></span>
-        </div>
-      </section>
-    </main>
-
-    <!-- Columna derecha: telemetría (OCULTA al estudiante) -->
-    <aside class="card hidden">
-      <h3>Monitoreo en vivo</h3>
-      <p>Pestaña: <span id="tab-state">—</span></p>
-      <p>Atención: <span id="attn-state">—</span></p>
-      <p>Labios: <span id="lips-state">—</span></p>
-      <p>FPS: <span id="fps">0</span> | Latencia p95: <span id="p95">0.0</span> ms</p>
-      <p>Rendimiento: <span id="perf-overall" class="pill">—</span></p>
-      <p>Off-tab: <span id="offtab-count">0</span> | Tiempo fuera: <span id="offtab-time">00:00</span></p>
-    </aside>
+      <span class="pill" id="session-status" style="margin-left:12px;">Detenida</span>
+      <span class="pill" id="session-time" style="margin-left:6px;">00:00</span>
+    </div>
   </div>
-</div>
 
-<!-- Modal Resumen -->
-<div id="summary-backdrop" class="hidden" style="position:fixed;inset:0;background:#0008"></div>
-<div id="summary-modal" class="hidden" style="position:fixed;inset:10% 20%;background:#fff;border-radius:12px;padding:16px;overflow:auto">
-  <h3>Resumen del monitoreo</h3>
-  <div id="summary-body">—</div>
-  <div class="row" style="margin-top:10px">
-    <button id="summary-download-json" class="btn" type="button">Descargar JSON</button>
-    <button id="summary-download-csv"  class="btn" type="button">Descargar CSV</button>
-    <button id="summary-close"         class="btn out" type="button">Cerrar</button>
-  </div>
-</div>
-
-<!-- Modal Evidencias -->
-<div id="evidence-backdrop" class="hidden" style="position:fixed;inset:0;background:#0008"></div>
-<div id="evidence-modal" class="hidden" style="position:fixed;inset:10% 10%;background:#fff;border-radius:12px;padding:16px;overflow:auto">
-  <h3>Evidencias capturadas</h3>
-  <div id="evidence-grid" class="row"></div>
-  <div class="row" style="margin-top:10px">
-    <button id="btn-evid-download" class="btn" type="button">Descargar JSON</button>
-    <button id="btn-evid-close"    class="btn out" type="button">Cerrar</button>
-  </div>
-</div>
-
-<!-- Tu detector (usa módulos) -->
-<script type="module" src="/js/app.js" defer></script>
-
-
-<!-- Pegamos aquí lógica NO-módulo para datos y navegación -->
-<script>
-(function(){
-  const ROLE_KEY='proctor.role.v1';
-  const STUDENT_KEY='proctor.student';
-  const setHint = (t)=>{ const h=document.getElementById('save-hint'); if(h) h.textContent=t||'—'; };
-
-  // Bloquear acceso si no es estudiante
-  try{
-    const r = localStorage.getItem(ROLE_KEY);
-    if (r !== 'estudiante') location.href = './index.html';
-  }catch{}
-
-  // Cargar datos guardados
-  try{
-    const st = JSON.parse(localStorage.getItem(STUDENT_KEY)||'{}');
-    if(st.name) document.getElementById('stu-name').value = st.name || '';
-    if(st.code) document.getElementById('stu-code').value = st.code || '';
-    if(st.mail) document.getElementById('stu-mail').value = st.mail || '';
-  }catch{}
-
-  // Guardar datos
-  document.getElementById('form-student')?.addEventListener('submit',(e)=>{
-    e.preventDefault();
-    const data={
-      name:document.getElementById('stu-name').value.trim(),
-      code:document.getElementById('stu-code').value.trim(),
-      mail:document.getElementById('stu-mail').value.trim()
-    };
-    try{ localStorage.setItem(STUDENT_KEY, JSON.stringify(data)); }catch{}
-    setHint('Guardado ✓');
-    setTimeout(()=>setHint('—'), 1500);
-  });
-
-  // Simular examen simple
-  document.getElementById('exam-start')?.addEventListener('click', ()=>{
-    document.getElementById('exam-state').textContent='En curso…';
-    alert('Ejemplo: aquí va tu examen.');
-  });
-
-  // Salir
-  document.getElementById('btn-logout')?.addEventListener('click', ()=>{
-    try{ localStorage.removeItem(ROLE_KEY); }catch{}
-    location.href='./index.html';
-  });
-})();
-</script>
+  <!-- Carga de scripts (asegúrate de que las rutas EXISTAN) -->
+  <script type="module" src="/js/app.js" defer></script>
+  <script type="module" src="/js/exam.js" defer></script>
 </body>
 </html>
