@@ -414,9 +414,6 @@ function ensureLiveEpisodeUI(){
     }
   }
 
-  ensureRow('Desatención (mirada): <span id="lookaway-count">0</span> episodios · <span id="lookaway-time">00:00</span>', 'lookaway-count','lookaway-time');
-  ensureRow('Rostro cubierto: <span id="occl-count">0</span> episodios · <span id="occl-time">00:00</span>', 'occl-count','occl-time');
-  ensureRow('Posible habla: <span id="lips-count">0</span> episodios · <span id="lips-time">00:00</span>', 'lips-count','lips-time');
 
   lookCntEl  = document.getElementById('lookaway-count');
   lookTimeEl = document.getElementById('lookaway-time');
