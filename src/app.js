@@ -627,6 +627,17 @@ function loop(){
           let enter = poseAwayEnter || transAwayEnter || eyesAwayEnter || gazeAwayEnter;
           let exit  = (poseAwayExit && transAwayExit && eyesAwayExit && gazeAwayExit);
 
+          // Si la calibración detectó que tu baseline ya estaba "desviado",
+          // // volteamos la lógica para no invertir "atento/mirada".
+          if (invertSense) {
+            const poseEnter = poseAwayEnter || transAwayEnter;
+            const poseExit  = poseAwayExit  && transAwayExit;
+            const flippedEnter = poseExit  || eyesAwayEnter || gazeAwayEnter;
+            const flippedExit  = poseEnter && eyesAwayExit  && gazeAwayExit;
+            enter = flippedEnter;
+            exit  = flippedExit;
+          }
+
           // LABIOS
           const lipsActivityHigh = (lipsVelEMA > LIPS_VEL_ENTER);
           const lipsActivityLow  = (lipsVelEMA < LIPS_VEL_EXIT);
@@ -636,8 +647,9 @@ function loop(){
           lipsBack = (ema.mouth < thr.exit.mouth) && lipsActivityLow && (mouthAmp < LIPS_MIN_AMP*0.6);
 
           if (!isOccluded) {
-            awayNow = movementFast || enter;
-            backNow = !movementFast && exit;
+            awayNow = enter || (movementFast && !exit);
+            backNow = exit && !movementFast;
+
 
             if (!isLookAway && !movementFast) {
               adaptBaseline(ema.ar, ema.off, ema.yaw, ema.pitch, ema.gaze, ema.gH, ema.gV, ema.mouth);
