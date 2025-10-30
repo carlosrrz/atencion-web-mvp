@@ -789,6 +789,26 @@ function closeOpenEpisodes(nowTs){
   }
 }
 
+// === Guardado local para la vista del encargado ===
+function getStudent(){
+  try{ return JSON.parse(localStorage.getItem('proctor.student')||'{}'); }catch{ return {}; }
+}
+function saveAttempt(summary, evidenceItems){
+  const KEY='proctor.attempts.v1';
+  const rec = {
+    id: Date.now(),
+    student: getStudent(),
+    summary,
+    evidence: Array.isArray(evidenceItems)? evidenceItems.slice(0,80) : []
+  };
+  try{
+    const list = JSON.parse(localStorage.getItem(KEY)||'[]');
+    list.push(rec);
+    localStorage.setItem(KEY, JSON.stringify(list));
+  }catch{}
+}
+
+
 function buildSummaryObject(){
   const { fpsMed, latP95 } = metrics.read();
   const tabSum = tabLogger.getSummary?.() || {
@@ -1010,6 +1030,7 @@ saveAttempt(attempt);
 
   // resumen + modal
   const summary = buildSummaryObject();
+  saveAttempt(summary, evidence.list?.());
   showSummaryModal(summary);
 });
 
