@@ -1,0 +1,122 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8"/>
+  <title>Evaluación – Estudiante</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <link rel="stylesheet" href="styles.css"/>
+  <style>
+    body{max-width:1000px;margin:0 auto;padding:16px;font-family:system-ui,Segoe UI,Roboto;}
+    header{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px}
+    .card{border:1px solid #e5e7eb;border-radius:14px;padding:14px;margin:10px 0;box-shadow:0 1px 2px #0001}
+    .row{display:flex;gap:12px;flex-wrap:wrap}
+    .row > .col{flex:1 1 320px}
+    button{border:0;border-radius:10px;padding:10px 14px;cursor:pointer}
+    .btn-primary{background:#111827;color:#fff}
+    .btn-lite{background:#f3f4f6}
+    video,canvas{width:100%;max-height:320px;background:#000;border-radius:12px}
+    .help{font-size:12px;color:#6b7280}
+  </style>
+</head>
+<body>
+<header>
+  <h2>Evaluación (estudiante)</h2>
+  <a class="help" href="encargado.html">¿Eres encargado?</a>
+</header>
+
+<div class="card">
+  <h3>Datos del estudiante</h3>
+  <div class="row">
+    <div class="col"><label>Nombre<br><input id="stu-name" required></label></div>
+    <div class="col"><label>Código<br><input id="stu-code"></label></div>
+    <div class="col"><label>Email<br><input id="stu-email" type="email"></label></div>
+  </div>
+  <p class="help">Solo se usan para identificar tu intento en la revisión.</p>
+</div>
+
+<div class="row">
+  <div class="col">
+    <div class="card">
+      <h3>Cámara</h3>
+      <video id="cam" autoplay playsinline></video>
+      <canvas id="canvas" class="hidden"></canvas>
+      <div class="row" style="margin-top:10px">
+        <button id="btn-permitir" class="btn-lite">Permitir cámara</button>
+        <button id="btn-start" class="btn-primary">Iniciar monitoreo</button>
+        <button id="btn-stop" class="btn-lite">Finalizar y enviar</button>
+      </div>
+      <div class="help" style="margin-top:8px">
+        La cámara se usa SOLO para ver si miras fuera, te cubres el rostro o hablas durante el examen. No se muestra al estudiante ningún detalle del monitoreo.
+      </div>
+      <div style="margin-top:8px">
+        <span id="cam-status" class="pill pill-neutral">—</span>
+        <span id="cam-help" class="help"></span>
+      </div>
+    </div>
+  </div>
+
+  <div class="col">
+    <div class="card" id="exam-root">
+      <h3>Examen</h3>
+      <form id="exam-form">
+        <ol>
+          <li>2 + 2 = ?
+            <label><input type="radio" name="q1" value="4">4</label>
+            <label><input type="radio" name="q1" value="5">5</label>
+          </li>
+          <li>Capital de Francia:
+            <label><input type="radio" name="q2" value="Paris">París</label>
+            <label><input type="radio" name="q2" value="Roma">Roma</label>
+          </li>
+          <li>Color del cielo despejado:
+            <label><input type="radio" name="q3" value="Azul">Azul</label>
+            <label><input type="radio" name="q3" value="Rojo">Rojo</label>
+          </li>
+          <li>3 * 3 = ?
+            <label><input type="radio" name="q4" value="9">9</label>
+            <label><input type="radio" name="q4" value="6">6</label>
+          </li>
+          <li>HTTP es un protocolo de:
+            <label><input type="radio" name="q5" value="Aplicacion">Aplicación</label>
+            <label><input type="radio" name="q5" value="Enlace">Enlace</label>
+          </li>
+        </ol>
+        <button type="button" id="btn-submit-exam" class="btn-primary">Terminar examen</button>
+        <div id="exam-msg" class="help" style="margin-top:6px"></div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<!-- Modal de evidencia (si usas capturas) -->
+<div id="evidence-backdrop" class="hidden"></div>
+<div id="evidence-modal" class="hidden">
+  <div id="evidence-grid"></div>
+  <button id="btn-evid-close">Cerrar</button>
+  <button id="btn-evid-download">Descargar JSON</button>
+</div>
+
+<!-- No ponemos el modal de “Resumen” aquí, para NO mostrar métricas al estudiante -->
+
+<script type="module">
+  import './store.js';                 // para asegurar disponible (no se usa directo aquí)
+  import './app.js';                   // tu app.js actual (detección y monitoreo)
+
+  // Mini corrector local para el examen
+  const key = { q1:'4', q2:'Paris', q3:'Azul', q4:'9', q5:'Aplicacion' };
+  document.getElementById('btn-submit-exam')?.addEventListener('click', ()=>{
+    const f = document.getElementById('exam-form');
+    const fd = new FormData(f);
+    let score = 0, total = 5, answers = {};
+    for (const k of Object.keys(key)){
+      const v = fd.get(k) || '';
+      answers[k] = v;
+      if (v === key[k]) score++;
+    }
+    // Guardamos el resultado en window para que app.js lo recoja al finalizar
+    window.__examResult = { score, total, answers };
+    document.getElementById('exam-msg').textContent = `Examen listo. Puntaje preliminar: ${score}/${total}. Ahora pulsa "Finalizar y enviar".`;
+  });
+</script>
+</body>
+</html>

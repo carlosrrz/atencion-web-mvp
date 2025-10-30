@@ -1,0 +1,120 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8"/>
+  <title>Proctor – Encargado</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <link rel="stylesheet" href="styles.css"/>
+  <style>
+    body{max-width:1100px;margin:0 auto;padding:16px;font-family:system-ui,Segoe UI,Roboto;}
+    table{width:100%;border-collapse:collapse}
+    th,td{padding:8px;border-bottom:1px solid #e5e7eb;text-align:left}
+    .row{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px}
+    button{border:0;border-radius:10px;padding:8px 12px;cursor:pointer}
+    .btn{background:#111827;color:#fff}
+    .btn-lite{background:#f3f4f6}
+    .tag{font-size:12px;background:#eef2ff;border-radius:8px;padding:2px 8px}
+    .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:10px}
+    .ev img{width:100%;border-radius:8px;display:block}
+    dialog{width:95%;max-width:900px;border:0;border-radius:14px;box-shadow:0 10px 30px #0003;padding:0}
+    .modal-head{display:flex;justify-content:space-between;align-items:center;padding:12px 16px;border-bottom:1px solid #e5e7eb}
+    .modal-body{padding:16px}
+  </style>
+</head>
+<body>
+  <h2>Intentos registrados</h2>
+  <div class="row">
+    <button id="btn-export-all" class="btn">Exportar todo (CSV)</button>
+    <button id="btn-clear" class="btn-lite">Borrar todo (local)</button>
+  </div>
+
+  <table id="tbl">
+    <thead>
+      <tr>
+        <th>Estudiante</th><th>Código</th><th>Email</th>
+        <th>Inicio</th><th>Duración</th>
+        <th>Fuera pestaña</th><th>Mirada</th><th>Oclusión</th><th>Habla</th>
+        <th></th>
+      </tr>
+    </thead>
+    <tbody id="tbody"></tbody>
+  </table>
+
+  <dialog id="dlg">
+    <div class="modal-head">
+      <strong id="dlg-title">Resumen del intento</strong>
+      <button id="dlg-close" class="btn-lite">Cerrar</button>
+    </div>
+    <div class="modal-body">
+      <div id="sum"></div>
+      <div style="margin:10px 0">
+        <button id="btn-export-one" class="btn">Exportar este intento (CSV)</button>
+      </div>
+      <h4>Evidencias</h4>
+      <div id="ev" class="grid"></div>
+    </div>
+  </dialog>
+
+<script type="module">
+  import { loadAttempts, exportAllCSV, exportOneCSV, clearAll } from './store.js';
+
+  const tbody = document.getElementById('tbody');
+  const dlg   = document.getElementById('dlg');
+  const sumEl = document.getElementById('sum');
+  const evEl  = document.getElementById('ev');
+  let current = null;
+
+  document.getElementById('btn-export-all')?.addEventListener('click', exportAllCSV);
+  document.getElementById('btn-clear')?.addEventListener('click', ()=>{ if(confirm('¿Borrar todos los intentos locales?')){ clearAll(); location.reload(); }});
+  document.getElementById('dlg-close')?.addEventListener('click', ()=> dlg.close());
+  document.getElementById('btn-export-one')?.addEventListener('click', ()=> current && exportOneCSV(current));
+
+  function fmtTime(ms){ const s=Math.floor((ms||0)/1000);const m=String(Math.floor(s/60)).padStart(2,'0');const ss=String(s%60).padStart(2,'0');return `${m}:${ss}`; }
+  function row(a){
+    const s=a.summary||{}, ta=s.tab_activity||{}, att=s.attention||{}, occ=s.occlusion||{}, lip=s.lips||{};
+    const tr=document.createElement('tr');
+    tr.innerHTML = `
+      <td>${esc(a.student?.name)}</td>
+      <td>${esc(a.student?.code||'')}</td>
+      <td>${esc(a.student?.email||'')}</td>
+      <td>${new Date(a.startedAt).toLocaleString()}</td>
+      <td>${fmtTime(a.durationMs)}</td>
+      <td><span class="tag">${ta.off_episodes ?? 0}</span></td>
+      <td><span class="tag">${att.lookaway_episodes ?? 0}</span></td>
+      <td><span class="tag">${occ.episodes ?? 0}</span></td>
+      <td><span class="tag">${lip.speak_episodes ?? 0}</span></td>
+      <td><button class="btn-lite">Revisar</button></td>`;
+    tr.querySelector('button').addEventListener('click', ()=> openAttempt(a));
+    return tr;
+  }
+  function openAttempt(a){
+    current = a;
+    const s=a.summary||{}, ta=s.tab_activity||{}, att=s.attention||{}, occ=s.occlusion||{}, lip=s.lips||{}, p=s.performance||{};
+    document.getElementById('dlg-title').textContent =
+      `${a.student?.name||'Estudiante'} — ${new Date(a.startedAt).toLocaleString()}`;
+    sumEl.innerHTML = `
+      <p><strong>Duración:</strong> ${fmtTime(a.durationMs)}</p>
+      <ul>
+        <li><strong>Fuera de pestaña:</strong> ${ta.off_episodes ?? 0} episodios, ${fmtTime(ta.off_total_ms||0)}</li>
+        <li><strong>Mirada desviada:</strong> ${att.lookaway_episodes ?? 0} episodios, ${fmtTime(att.lookaway_total_ms||0)}</li>
+        <li><strong>Rostro cubierto:</strong> ${occ.episodes ?? 0} episodios, ${fmtTime(occ.total_ms||0)}</li>
+        <li><strong>Posible habla:</strong> ${lip.speak_episodes ?? 0} episodios, ${fmtTime(lip.speak_total_ms||0)}</li>
+        <li><strong>Rendimiento:</strong> FPS≈${p.fps_median ?? '—'}, p95≈${p.latency_p95_ms ?? '—'} ms</li>
+        ${a.exam ? `<li><strong>Puntaje examen:</strong> ${a.exam.score}/${a.exam.total}</li>`:''}
+      </ul>`;
+    evEl.innerHTML = (a.evidence?.length? '' : '<div class="help">Sin capturas.</div>');
+    for (const e of (a.evidence||[])){
+      const div=document.createElement('div'); div.className='ev';
+      div.innerHTML = `<img src="${e.data}" alt="${e.kind}"><div class="help">${new Date(e.t).toLocaleTimeString()} — ${e.kind}</div>`;
+      evEl.appendChild(div);
+    }
+    dlg.showModal();
+  }
+  function esc(s){ return (s||'').replace(/[&<>"]/g, c=>({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+
+  // render
+  const attempts = loadAttempts();
+  attempts.forEach(a => tbody.appendChild(row(a)));
+</script>
+</body>
+</html>

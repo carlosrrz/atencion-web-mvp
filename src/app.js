@@ -2,6 +2,8 @@
 import { createMetrics } from './metrics.js';
 import { createTabLogger } from './tab-logger.js';
 import { FilesetResolver, FaceLandmarker } from "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.3";
+import { saveAttempt } from './store.js';
+
 
 /* ===== DOM ===== */
 const cam = document.getElementById('cam');
@@ -989,6 +991,23 @@ btnStop?.addEventListener('click', ()=>{
   // export de actividad de pestaña
   tabLogger.stopAndDownloadCSV?.();
 
+const stu = getStudentInfo();
+const attempt = {
+  id: uuid(),
+  student: stu,
+  startedAt: new Date(sessionStart).toISOString(),
+  endedAt: new Date().toISOString(),
+  durationMs: Math.max(0, performance.now() - sessionStart),
+  summary: buildSummaryObject(),
+  evidence: (typeof evidence?.list === 'function') ? evidence.list() : [],
+  exam: window.__examResult || null
+};
+saveAttempt(attempt);
+
+// Si NO quieres mostrar el modal al estudiante, basta con que la vista estudiante no tenga
+// los nodos del modal (como en estudiante.html). El código ya usa ?. y no fallará.
+
+
   // resumen + modal
   const summary = buildSummaryObject();
   showSummaryModal(summary);
@@ -1003,6 +1022,16 @@ document.addEventListener('visibilitychange', async ()=>{
 navigator.mediaDevices?.addEventListener?.('devicechange', async ()=>{
   if (!stream && camRequested) await startCamera();
 });
+
+
+function getStudentInfo(){
+  const name = document.getElementById('stu-name')?.value?.trim() || 'Estudiante';
+  const code = document.getElementById('stu-code')?.value?.trim() || '';
+  const email= document.getElementById('stu-email')?.value?.trim() || '';
+  return { name, code, email };
+}
+function uuid(){ return (crypto?.randomUUID?.() || ('id_'+Date.now().toString(36))); }
+
 
 /* ===== Init ===== */
 (function init(){
