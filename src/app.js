@@ -1,30 +1,35 @@
 // app.js — Mirada + Oclusión + Labios + Anti-blink + Off-tab + Resumen modal + Episodios en vivo
 import { createMetrics } from './metrics.js';
 import { createTabLogger } from './tab-logger.js';
-import { FilesetResolver, FaceLandmarker } from "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.3";
-import { saveAttempt, updateLastAttemptExam } from './store.js';
 
-/* ===== Conexión robusta con store.js (evita romper app.js si cambia la ruta) ===== */
-let saveAttempt = (attempt)=>{ // fallback local si no hay store.js
-  try{
+// ===== saveAttempt robusto SIN top-level await =====
+let saveAttempt = (attempt) => {
+  try {
     const KEY = 'proctor.attempts.v1';
     const arr = JSON.parse(localStorage.getItem(KEY) || '[]');
     arr.push(attempt);
     localStorage.setItem(KEY, JSON.stringify(arr));
-  }catch(e){ console.warn('[app] fallback saveAttempt error:', e); }
+  } catch (e) { console.warn('[app] fallback saveAttempt error:', e); }
 };
 
-try{
-  // Intenta en ./, luego ../ y ../src (cubre src/src vs src)
-  const mod = await import('./store.js')
-    .catch(()=>import('../store.js'))
-    .catch(()=>import('../src/store.js'));
-  if (mod?.saveAttempt) saveAttempt = mod.saveAttempt;
-  console.log('[app] saveAttempt listo (store.js encontrado)');
-}catch(e){
-  console.warn('[app] No se encontró store.js; usando fallback local');
-}
+// Carga store.js en segundo plano con rutas alternativas (sin bloquear el módulo)
+(async () => {
+  try {
+    const mod = await import('./store.js')
+      .catch(() => import('../store.js'))
+      .catch(() => import('../src/store.js'));
+    if (mod?.saveAttempt) {
+      saveAttempt = mod.saveAttempt;
+      console.log('[app] saveAttempt listo (store.js encontrado)');
+    }
+  } catch (e) {
+    console.warn('[app] No se encontró store.js; usando fallback local');
+  }
+})();
 
+
+import { FilesetResolver, FaceLandmarker } from "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.3";
+import { saveAttempt, updateLastAttemptExam } from './store.js';
 
 
 const studentName  = document.getElementById('student-name');
