@@ -129,13 +129,17 @@
     </div>
   </div>
 
-  <!-- Enforce rol y módulos -->
-  <script type="module">
-    import { requireRole } from './src/src/roles.js';
-    requireRole('student');
-  </script>
+  <!-- Gate de rol -->
+<script type="module">
+  import { requireRole } from './src/src/roles.js';
+  requireRole('student');
+</script>
 
-  <script type="module" src="./src/src/exam.js"></script>
-  <script type="module" src="./src/src/app.js"></script>
+<!-- Orden: helpers -> examen -> app -->
+<script type="module" src="./src/src/metrics.js"></script>
+<script type="module" src="./src/src/tab-logger.js"></script>
+<script type="module" src="./src/src/exam.js"></script>
+<script type="module" src="./src/src/app.js"></script>
+
 </body>
 </html>

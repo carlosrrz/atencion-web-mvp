@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Panel — Profesor</title>
   <link rel="stylesheet" href="./src/styles.css" />
+  
   <style>
     .wrap{max-width:1200px;margin:20px auto;padding:0 16px}
     table{width:100%;border-collapse:separate;border-spacing:0 6px}
@@ -165,5 +166,14 @@
 
     render();
   </script>
+  <script type="module">
+  import { requireRole } from './src/roles.js';
+  requireRole('prof');
+</script>
+
+<script type="module" src="./src/store.js"></script>
+<script type="module" src="./src/roles.js"></script>
+<!-- Tu script inline del panel puede quedarse, o si lo separas en un archivo, referencia su ruta correcta -->
+
 </body>
 </html>
