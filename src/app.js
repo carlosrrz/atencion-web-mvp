@@ -1,6 +1,7 @@
 // app.js — Mirada + Oclusión + Labios + Anti-blink + Off-tab + Resumen modal + Episodios en vivo
 import { createMetrics } from './metrics.js';
 import { createTabLogger } from './tab-logger.js';
+import { updateLastAttemptExam } from './store.js';
 
 // ===== persistencia robusta SIN top-level await =====
 let saveAttempt = (attempt) => {
@@ -1024,13 +1025,18 @@ btnStart?.addEventListener('click', ()=>{
 
 btnStop?.addEventListener('click', ()=>{
   const now = performance.now();
+  // cierra episodios abiertos
   closeOpenEpisodes(now);
 
+  // detener pipeline/UI
   running = false;
   metrics.stop();
   sessionStatus && (sessionStatus.textContent = 'Detenida');
+
+  // export de actividad de pestaña
   tabLogger.stopAndDownloadCSV?.();
 
+  // resumen + modal
   const summary = buildSummaryObject();
   showSummaryModal(summary);
 
@@ -1039,6 +1045,7 @@ btnStop?.addEventListener('click', ()=>{
     try { lastExamResult = JSON.parse(localStorage.getItem('proctor.last_exam') || 'null'); } catch {}
   }
 
+  // ===== Guardar intento (único) para el panel del profesor =====
   const attempt = {
     id: `att_${Date.now().toString(36)}`,
     student: {
@@ -1051,6 +1058,7 @@ btnStop?.addEventListener('click', ()=>{
     durationMs: Math.round(summary.duration_ms),
     summary,
     exam: lastExamResult || null,
+    // 👇 clave correcta (plural) y acotada para no saturar localStorage
     evidences: (typeof evidence?.list === 'function') ? evidence.list().slice(-24) : []
   };
 

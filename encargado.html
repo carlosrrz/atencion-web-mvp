@@ -5,22 +5,28 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Panel — Profesor</title>
   <link rel="stylesheet" href="./src/styles.css" />
-  
+
   <style>
     .wrap{max-width:1200px;margin:20px auto;padding:0 16px}
     table{width:100%;border-collapse:separate;border-spacing:0 6px}
-    th,td{padding:8px 10px;background:#fff;border:1px solid #e5e7eb}
+    th,td{padding:8px 10px;background:#fff;border:1px solid var(--border)}
     th{background:#f8fafc;text-align:left}
     .row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
-    .pill{display:inline-flex;align-items:center;padding:2px 8px;border-radius:999px;background:#f3f4f6;border:1px solid #e5e7eb}
-    .ev{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:10px}
-    .ev img{width:100%;height:auto;border-radius:8px;display:block}
-    .modal-backdrop{position:fixed;inset:0;background:rgba(0,0,0,.45);display:none}
-    .modal{position:fixed;inset:auto auto 6% 50%;transform:translateX(-50%);width:min(900px,94%);background:#fff;border:1px solid #e5e7eb;border-radius:14px;display:none}
-    .modal header,.modal footer{padding:12px 14px;border-bottom:1px solid #e5e7eb}
-    .modal footer{border-top:1px solid #e5e7eb;border-bottom:none;display:flex;justify-content:flex-end;gap:8px}
+    .pill{display:inline-flex;align-items:center;padding:2px 8px;border-radius:999px;background:#f3f4f6;border:1px solid var(--border)}
+    .muted{color:var(--muted);font-size:.92rem}
+
+    /* Modal sencillo (propio de esta página) */
+    .backdrop{position:fixed;inset:0;background:rgba(0,0,0,.45);display:none;z-index:300}
+    .modal{position:fixed;left:50%;top:7%;transform:translateX(-50%);width:min(980px,94vw);background:#fff;border:1px solid var(--border);border-radius:14px;box-shadow:var(--shadow);display:none;z-index:301}
+    .modal header,.modal footer{padding:12px 16px;border-bottom:1px solid var(--border)}
+    .modal footer{border-top:1px solid var(--border);border-bottom:none;display:flex;justify-content:flex-end;gap:8px}
     .modal .body{padding:14px}
-    .hidden{display:none!important}
+
+    /* Grid de evidencias (usa nombres similares a tu styles.css) */
+    .ev-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:12px}
+    .ev-card{border:1px solid var(--border);border-radius:12px;padding:8px;background:#fff;box-shadow:0 2px 10px rgba(2,8,23,.05)}
+    .ev-card img{width:100%;height:auto;border-radius:8px;display:block}
+    .ev-note{font-size:.85rem;color:var(--muted);margin-top:6px}
   </style>
 </head>
 <body>
@@ -63,100 +69,144 @@
   </main>
 
   <!-- Modal detalle -->
-  <div id="backdrop" class="modal-backdrop"></div>
-  <div id="modal" class="modal" role="dialog" aria-modal="true">
-    <header><strong id="m-title">Detalle</strong></header>
+  <div id="backdrop" class="backdrop" aria-hidden="true"></div>
+  <div id="modal" class="modal" role="dialog" aria-modal="true" aria-labelledby="m-title">
+    <header>
+      <div class="row" style="justify-content:space-between">
+        <strong id="m-title">Detalle</strong>
+        <button id="m-close" class="secondary">Cerrar</button>
+      </div>
+    </header>
     <div class="body" id="m-body">—</div>
     <footer>
       <button id="m-export" class="secondary">Exportar CSV (intento)</button>
-      <button id="m-close" class="secondary">Cerrar</button>
     </footer>
   </div>
 
   <script type="module">
+    // 🔗 Ajusta estas rutas si tus módulos están en otra carpeta
     import { requireRole } from './src/roles.js';
-    import { getAllAttempts, exportAllCSV, exportOneCSV, clearAll } from './src/store.js';
+    import { loadAttempts, exportAllCSV, exportOneCSV, clearAll } from './src/store.js';
 
     requireRole('prof');
 
-    const tblBody = document.querySelector('#tbl tbody');
+    const tblBody   = document.querySelector('#tbl tbody');
     const countPill = document.getElementById('count-pill');
-    const btnAll = document.getElementById('btn-export-all');
-    const btnClr = document.getElementById('btn-clear');
+    const btnAll    = document.getElementById('btn-export-all');
+    const btnClr    = document.getElementById('btn-clear');
 
-    const backdrop = document.getElementById('backdrop');
-    const modal = document.getElementById('modal');
-    const mTitle = document.getElementById('m-title');
-    const mBody  = document.getElementById('m-body');
-    const mClose = document.getElementById('m-close');
-    const mExport= document.getElementById('m-export');
+    const backdrop  = document.getElementById('backdrop');
+    const modal     = document.getElementById('modal');
+    const mTitle    = document.getElementById('m-title');
+    const mBody     = document.getElementById('m-body');
+    const mClose    = document.getElementById('m-close');
+    const mExport   = document.getElementById('m-export');
 
     let current = null;
 
-    function fmtTime(ms){ const s=Math.floor(ms/1000); const mm=String(Math.floor(s/60)).padStart(2,'0'); const ss=String(s%60).padStart(2,'0'); return `${mm}:${ss}`; }
-    function fmt(ts){ try{ return new Date(ts).toLocaleString(); }catch{ return '—'; } }
+    const fmtTime = (ms)=>{ const s=Math.floor((ms||0)/1000); const mm=String(Math.floor(s/60)).padStart(2,'0'); const ss=String(s%60).padStart(2,'0'); return `${mm}:${ss}`; };
+    const fmt     = (ts)=>{ try{ return new Date(ts).toLocaleString(); }catch{ return '—'; } };
+    const safe    = (v)=> (v==null || v==='') ? '—' : String(v);
 
     function render(){
-      const arr = getAllAttempts();
+      const arr = loadAttempts(); // usa la misma KEY del store
       countPill.textContent = `${arr.length} intento${arr.length===1?'':'s'}`;
+
       tblBody.innerHTML = arr.map((a,i)=>{
-        const s = a.summary || {};
-        const ta = s.tab_activity || {}; const att = s.attention || {}; const lip = s.lips || {};
-        const exam = a.exam ? `${a.exam.correct}/${a.exam.total}` : '—';
+        const s   = a.summary || {};
+        const ta  = s.tab_activity || {};
+        const att = s.attention     || {};
+        const lip = s.lips          || {};
+        const ex  = a.exam || {};
+        // compatibilidad: exam.correct o exam.score
+        const examTxt = (ex.correct!=null && ex.total!=null) ? `${ex.correct}/${ex.total}`
+                       : (ex.score!=null && ex.total!=null)   ? `${ex.score}/${ex.total}` : '—';
+
         return `
           <tr>
             <td>${i+1}</td>
-            <td>${(a.student?.name||'').replaceAll('<','&lt;')}</td>
-            <td>${(a.student?.code||'').replaceAll('<','&lt;')}</td>
+            <td>${safe(a.student?.name)}</td>
+            <td>${safe(a.student?.code)}</td>
             <td>${fmt(a.startedAt)}</td>
             <td>${fmt(a.endedAt)}</td>
             <td>${fmtTime(a.durationMs||0)}</td>
             <td>${ta.off_episodes ?? 0}</td>
             <td>${att.lookaway_episodes ?? 0}</td>
             <td>${lip.speak_episodes ?? 0}</td>
-            <td>${exam}</td>
+            <td>${examTxt}</td>
             <td><button class="secondary" data-id="${a.id}">Ver</button></td>
           </tr>`;
       }).join('');
     }
 
     function openDetail(id){
-      const a = getAllAttempts().find(x=>x.id===id);
+      const a = loadAttempts().find(x=>x.id===id);
       if(!a) return;
       current = a;
-      const s = a.summary || {};
-      const ta=s.tab_activity||{}, att=s.attention||{}, occ=s.occlusion||{}, lip=s.lips||{}, perf=s.performance||{};
-      mTitle.textContent = `Intento ${a.id} — ${(a.student?.name||'')}`;
+
+      const s   = a.summary || {};
+      const ta  = s.tab_activity || {};
+      const att = s.attention     || {};
+      const occ = s.occlusion     || {};
+      const lip = s.lips          || {};
+      const perf= s.performance   || {};
+      const ex  = a.exam          || {};
+      const examTxt = (ex.correct!=null && ex.total!=null) ? `${ex.correct}/${ex.total}`
+                     : (ex.score!=null && ex.total!=null)   ? `${ex.score}/${ex.total}` : '—';
+
+      // 👇 Evidencias: usa plural y SI NO existe, hace fallback al singular
+      const evid = Array.isArray(a.evidences) ? a.evidences
+                 : (Array.isArray(a.evidence) ? a.evidence : []);
+
+      mTitle.textContent = `Intento ${a.id} — ${safe(a.student?.name)}`;
       mBody.innerHTML = `
         <div class="row" style="margin-bottom:8px">
-          <div class="pill">Inicio: ${fmt(a.startedAt)}</div>
-          <div class="pill">Fin: ${fmt(a.endedAt)}</div>
-          <div class="pill">Duración: ${fmtTime(a.durationMs||0)}</div>
-          <div class="pill">Examen: ${a.exam?`${a.exam.correct}/${a.exam.total}`:'—'}</div>
+          <span class="pill">Inicio: ${fmt(a.startedAt)}</span>
+          <span class="pill">Fin: ${fmt(a.endedAt)}</span>
+          <span class="pill">Duración: ${fmtTime(a.durationMs||0)}</span>
+          <span class="pill">Examen: ${examTxt}</span>
         </div>
+
         <h4>Resumen</h4>
         <ul>
-          <li>Off-tab (≥ ${Math.round((ta.threshold_ms||ta.offThresholdMs||1500)/1000)}s): ${ta.off_episodes ?? 0} · tiempo: ${fmtTime(ta.off_total_ms||0)}</li>
+          <li>Off-tab (≥ ${Math.round((ta.threshold_ms ?? ta.offThresholdMs ?? 1500)/1000)}s): ${ta.off_episodes ?? 0} · tiempo: ${fmtTime(ta.off_total_ms||0)}</li>
           <li>Mirada desviada: ${att.lookaway_episodes ?? 0} · tiempo: ${fmtTime(att.lookaway_total_ms||0)} · máx: ${fmtTime(att.lookaway_longest_ms||0)}</li>
           <li>Rostro cubierto: ${occ.episodes ?? 0} · tiempo: ${fmtTime(occ.total_ms||0)}</li>
           <li>Posible habla: ${lip.speak_episodes ?? 0} · tiempo: ${fmtTime(lip.speak_total_ms||0)}</li>
-          <li>Rendimiento: FPS≈${(perf.fps_median??0).toFixed?.(1) || perf.fps_median || 0} · p95≈${(perf.latency_p95_ms??0).toFixed?.(1)||perf.latency_p95_ms||0} ms</li>
+          <li>Rendimiento: FPS≈${(perf.fps_median ?? 0)} · p95≈${(perf.latency_p95_ms ?? 0)} ms</li>
         </ul>
+
         <h4>Evidencias</h4>
-        <div class="ev">
-          ${Array.isArray(a.evidence)&&a.evidence.length
-            ? a.evidence.map(it=>`<div><img src="${it.data}" alt="${it.kind}"/><div class="muted">${new Date(it.t).toLocaleTimeString()} — ${it.kind}</div></div>`).join('')
-            : '<div class="muted">No hay evidencias capturadas.</div>'}
+        <div class="ev-grid" id="ev-grid">
+          ${
+            evid.length
+              ? evid.map(it => `
+                  <div class="ev-card">
+                    <div class="pill pill-warn">${it.kind||'alerta'}</div>
+                    <img src="${it.data}" alt="${it.kind||'evidencia'}" />
+                    <div class="ev-note">${new Date(it.t||Date.now()).toLocaleTimeString()} — ${it.note||''}</div>
+                  </div>
+                `).join('')
+              : '<div class="muted">No hay evidencias capturadas.</div>'
+          }
         </div>
       `;
-      backdrop.style.display='block'; modal.style.display='block';
+
+      backdrop.style.display='block';
+      modal.style.display='block';
     }
 
+    // Delegación clicks en tabla
     tblBody.addEventListener('click', (e)=>{
-      const id = e.target?.dataset?.id; if(id) openDetail(id);
+      const btn = e.target.closest('button');
+      if (!btn) return;
+      const id = btn.dataset.id;
+      if (id) openDetail(id);
     });
 
+    // Controles modal / superiores
     mClose.addEventListener('click', ()=>{ backdrop.style.display='none'; modal.style.display='none'; current=null; });
+    backdrop.addEventListener('click', (e)=>{ if(e.target===backdrop){ backdrop.style.display='none'; modal.style.display='none'; current=null; }});
     mExport.addEventListener('click', ()=>{ if(current) exportOneCSV(current); });
     btnAll.addEventListener('click', ()=> exportAllCSV());
     btnClr.addEventListener('click', ()=>{
@@ -166,165 +216,5 @@
 
     render();
   </script>
-  <script type="module">
-  import { requireRole } from './src/src/roles.js';
-  import { loadAttempts, exportAllCSV, clearAll, exportOneCSV } from './src/src/store.js';
-
-  requireRole('prof');
-
-  const tbody = document.querySelector('#tbl tbody');
-  const btnCSVAll = document.getElementById('btn-export') || document.querySelector('#btn-export, [data-export-all]');
-  const btnClear  = document.getElementById('btn-clear')  || document.querySelector('#btn-clear, [data-clear]');
-  const badge     = document.getElementById('attempt-badge') || document.querySelector('[data-badge]');
-
-  function fmtTime(ms){
-    const s = Math.floor((ms||0)/1000);
-    const mm = String(Math.floor(s/60)).padStart(2,'0');
-    const ss = String(s%60).padStart(2,'0');
-    return `${mm}:${ss}`;
-  }
-  function safe(v){ return (v==null || v==='') ? '—' : v; }
-
-  function render(){
-    const arr = loadAttempts();
-    if (badge) badge.textContent = `${arr.length} intentos`;
-    tbody.innerHTML = arr.map((a,i)=>{
-      const ta = a.summary?.tab_activity || {};
-      const att= a.summary?.attention     || {};
-      const lip= a.summary?.lips          || {};
-      const ex = a.exam || {};
-      const dur = a.durationMs ?? 0;
-
-      return `
-        <tr>
-          <td>${i+1}</td>
-          <td>${safe(a.student?.name)}</td>
-          <td>${safe(a.student?.code)}</td>
-          <td>${safe(a.startedAt)}</td>
-          <td>${safe(a.endedAt)}</td>
-          <td>${fmtTime(dur)}</td>
-          <td>${ta.off_episodes ?? 0}</td>
-          <td>${att.lookaway_episodes ?? 0}</td>
-          <td>${lip.speak_episodes ?? 0}</td>
-          <td>${(ex?.score != null && ex?.total != null) ? `${ex.score}/${ex.total}` : '—'}</td>
-          <td>
-            <button class="btn btn-ghost btn-view" data-idx="${i}">Ver</button>
-            <button class="btn btn-ghost btn-exp-one" data-idx="${i}">CSV</button>
-          </td>
-        </tr>`;
-    }).join('');
-  }
-
-  // Modal de detalle simple (se crea on-demand)
-  function showAttempt(attempt){
-    const ta = attempt.summary?.tab_activity || {};
-    const att= attempt.summary?.attention     || {};
-    const occ= attempt.summary?.occlusion     || {};
-    const lip= attempt.summary?.lips          || {};
-    const perf=attempt.summary?.performance   || {};
-
-    const wrap = document.createElement('div');
-    wrap.className = 'modal-backdrop';
-    wrap.innerHTML = `
-      <div class="modal">
-        <div class="modal-card">
-          <div style="display:flex;gap:10px;align-items:center;">
-            <h3 style="margin:0;">Detalle del intento</h3>
-            <span style="flex:1"></span>
-            <button class="btn btn-ghost" id="x-close">Cerrar</button>
-          </div>
-          <div style="margin-top:10px;">
-            <p><strong>Alumno:</strong> ${safe(attempt.student?.name)} (${safe(attempt.student?.code)}) — ${safe(attempt.student?.email)}</p>
-            <p><strong>Inicio:</strong> ${safe(attempt.startedAt)} &nbsp; | &nbsp; <strong>Fin:</strong> ${safe(attempt.endedAt)} &nbsp; | &nbsp; <strong>Duración:</strong> ${fmtTime(attempt.durationMs)}</p>
-
-            <h4>Actividad de pestaña</h4>
-            <ul>
-              <li>Episodios (≥ ${Math.round((ta.offThresholdMs ?? 1500)/1000)}s): <strong>${ta.off_episodes ?? 0}</strong></li>
-              <li>Tiempo fuera: <strong>${fmtTime(ta.off_total_ms ?? 0)}</strong></li>
-            </ul>
-
-            <h4>Desatención por mirada</h4>
-            <ul>
-              <li>Episodios: <strong>${att.lookaway_episodes ?? 0}</strong></li>
-              <li>Tiempo total: <strong>${fmtTime(att.lookaway_total_ms ?? 0)}</strong></li>
-              <li>Más largo: <strong>${fmtTime(att.lookaway_longest_ms ?? 0)}</strong></li>
-            </ul>
-
-            <h4>Rostro cubierto</h4>
-            <ul>
-              <li>Episodios: <strong>${occ.episodes ?? 0}</strong></li>
-              <li>Tiempo total: <strong>${fmtTime(occ.total_ms ?? 0)}</strong></li>
-            </ul>
-
-            <h4>Posible habla</h4>
-            <ul>
-              <li>Episodios: <strong>${lip.speak_episodes ?? 0}</strong></li>
-              <li>Tiempo total: <strong>${fmtTime(lip.speak_total_ms ?? 0)}</strong></li>
-            </ul>
-
-            <h4>Rendimiento</h4>
-            <ul>
-              <li>FPS (mediana): <strong>${perf.fps_median ?? '—'}</strong></li>
-              <li>Latencia p95: <strong>${perf.latency_p95_ms ?? '—'}</strong> ms</li>
-              <li>Estado: <strong>${perf.overall ?? '—'}</strong></li>
-            </ul>
-
-            <h4>Examen</h4>
-            <p><strong>Puntaje:</strong> ${(attempt.exam?.score != null && attempt.exam?.total != null) ? `${attempt.exam.score}/${attempt.exam.total}` : '—'}</p>
-
-            <h4>Evidencias</h4>
-            <div class="ev-grid" id="ev-grid"></div>
-          </div>
-        </div>
-      </div>
-    `;
-    document.body.appendChild(wrap);
-
-    const grid = wrap.querySelector('#ev-grid');
-    const items = Array.isArray(attempt.evidences) ? attempt.evidences : [];
-    if (!items.length){
-      grid.innerHTML = `<div class="help">Sin evidencias capturadas.</div>`;
-    } else {
-      grid.innerHTML = items.map(it => `
-        <div class="ev-card">
-          <div class="pill pill-warn" style="margin-bottom:6px;">${it.kind||'evidencia'}</div>
-          <img alt="${it.kind||''}" src="${it.data}"/>
-          <div class="ev-note">${new Date(it.t||Date.now()).toLocaleTimeString()} — ${it.note||''}</div>
-        </div>
-      `).join('');
-    }
-    wrap.querySelector('#x-close').addEventListener('click', ()=> wrap.remove());
-    wrap.addEventListener('click', (e)=>{ if (e.target===wrap) wrap.remove(); });
-  }
-
-  // Delegación de clicks en la tabla
-  tbody.addEventListener('click', (e)=>{
-    const btn = e.target.closest('button');
-    if (!btn) return;
-    const idx = parseInt(btn.dataset.idx, 10);
-    const arr = loadAttempts();
-    const at = arr[idx];
-    if (!at) return;
-
-    if (btn.classList.contains('btn-view')) {
-      showAttempt(at);
-    } else if (btn.classList.contains('btn-exp-one')) {
-      // CSV por intento (usa util de store.js)
-      exportOneCSV(at);
-    }
-  });
-
-  // Controles superiores
-  btnCSVAll?.addEventListener('click', exportAllCSV);
-  btnClear?.addEventListener('click', ()=>{
-    if (!confirm('¿Borrar todos los intentos guardados en este navegador?')) return;
-    clearAll();
-    render();
-  });
-
-  render();
-</script>
-
-
 </body>
 </html>
