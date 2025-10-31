@@ -2,7 +2,7 @@
 import { createMetrics } from './metrics.js';
 import { createTabLogger } from './tab-logger.js';
 
-// ===== saveAttempt robusto SIN top-level await =====
+// ===== persistencia robusta SIN top-level await =====
 let saveAttempt = (attempt) => {
   try {
     const KEY = 'proctor.attempts.v1';
@@ -11,25 +11,24 @@ let saveAttempt = (attempt) => {
     localStorage.setItem(KEY, JSON.stringify(arr));
   } catch (e) { console.warn('[app] fallback saveAttempt error:', e); }
 };
+let updateLastAttemptExam = () => {};
 
-// Carga store.js en segundo plano con rutas alternativas (sin bloquear el módulo)
 (async () => {
   try {
     const mod = await import('./store.js')
       .catch(() => import('../store.js'))
       .catch(() => import('../src/store.js'));
-    if (mod?.saveAttempt) {
-      saveAttempt = mod.saveAttempt;
-      console.log('[app] saveAttempt listo (store.js encontrado)');
-    }
+    if (mod?.saveAttempt) saveAttempt = mod.saveAttempt;
+    if (mod?.updateLastAttemptExam) updateLastAttemptExam = mod.updateLastAttemptExam;
+    console.log('[app] store.js cargado');
   } catch (e) {
-    console.warn('[app] No se encontró store.js; usando fallback local');
+    console.warn('[app] usando fallback de almacenamiento');
   }
 })();
 
 
+
 import { FilesetResolver, FaceLandmarker } from "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.3";
-import { saveAttempt, updateLastAttemptExam } from './store.js';
 
 
 const studentName  = document.getElementById('student-name');
@@ -142,6 +141,7 @@ const BLINK_MAX_MS = 280;
 /* ===== Estado ===== */
 let awayScore   = 0;
 let isLookAway  = false;
+let lastExamResult = null;
 
 let lipsScore   = 0;
 let lipsActive  = false;
@@ -981,15 +981,15 @@ btnStart?.addEventListener('click', ()=>{
   if (!stream){ alert('Primero permite la cámara.'); return; }
   running = true;
   frameCount = 0;
-  let startedAtISO = null; // declara cerca de tus estados globales
+
   startedAtISO = new Date().toISOString();
-  sessionStart = performance.now();
-  
-  let lastExamResult = null;
+
+  // recoger resultado del examen cuando ocurra
   window.addEventListener('exam:finished', (e) => {
     lastExamResult = e.detail;               // { correct, total }
-    updateLastAttemptExam?.(lastExamResult); // por si ya se guardó un intento previo
-    });
+    updateLastAttemptExam?.(lastExamResult);
+  }, { once: true });
+
 
   
   // Off-tab
@@ -1024,76 +1024,41 @@ btnStart?.addEventListener('click', ()=>{
 
 btnStop?.addEventListener('click', ()=>{
   const now = performance.now();
-  // cierra episodios abiertos
   closeOpenEpisodes(now);
 
-  // detener pipeline/UI
   running = false;
   metrics.stop();
   sessionStatus && (sessionStatus.textContent = 'Detenida');
-
-  // export de actividad de pestaña
   tabLogger.stopAndDownloadCSV?.();
 
-  // resumen + modal
   const summary = buildSummaryObject();
   showSummaryModal(summary);
 
-  // ===== Guardar intento para el panel del profesor =====
-try {
-  const endedAtISO = new Date().toISOString();
-  // examen (si existe)
-  let examSum = window.__examSummary;
-  if (!examSum) {
-    try { examSum = JSON.parse(localStorage.getItem('proctor.last_exam') || 'null'); } catch {}
+  // examen (si no llegó el evento, intenta leer el último)
+  if (!lastExamResult) {
+    try { lastExamResult = JSON.parse(localStorage.getItem('proctor.last_exam') || 'null'); } catch {}
   }
 
-  // evidencias: limita a las últimas 24 para no saturar localStorage
-  const evid = Array.isArray(evidence.list?.()) ? evidence.list() : [];
-  const evidSlim = evid.slice(-24);
-
   const attempt = {
-    id: String(Date.now()),
+    id: `att_${Date.now().toString(36)}`,
     student: {
-      name: (studentName?.value || '').trim(),
-      code: (studentCode?.value || '').trim(),
+      name:  (studentName?.value || '').trim(),
+      code:  (studentCode?.value || '').trim(),
       email: (studentEmail?.value || '').trim(),
     },
-    startedAt: startedAtISO || endedAtISO,
-    endedAt: endedAtISO,
-    durationMs: summary.duration_ms,
-    summary,          // ← todo el resumen (tab_activity, attention, lips, occlusion, performance)
-    exam: examSum || null,
-    evidences: evidSlim
+    startedAt: startedAtISO || new Date(Date.now() - summary.duration_ms).toISOString(),
+    endedAt:   new Date().toISOString(),
+    durationMs: Math.round(summary.duration_ms),
+    summary,
+    exam: lastExamResult || null,
+    evidences: (typeof evidence?.list === 'function') ? evidence.list().slice(-24) : []
   };
 
   saveAttempt(attempt);
   try { localStorage.removeItem('proctor.last_exam'); } catch {}
-
   console.log('[proctor] intento guardado:', attempt);
-} catch (e) {
-  console.warn('No se pudo guardar el intento:', e);
-}
-
-
-  // ==== NUEVO: guardar intento con evidencias y datos del alumno ====
-const attempt = {
-  id: `att_${Date.now().toString(36)}`,
-  student: {
-    name:  studentName?.value?.trim()  || '',
-    code:  studentCode?.value?.trim()  || '',
-    email: studentEmail?.value?.trim() || ''
-  },
-  startedAt: startedAtISO || new Date(Date.now() - summary.duration_ms).toISOString(),
-  endedAt:   new Date().toISOString(),
-  durationMs: Math.round(summary.duration_ms),
-  summary,
-  evidence: (typeof evidence?.list === 'function') ? evidence.list() : [],
-  exam: lastExamResult || null
-};
-saveAttempt(attempt);
-// ================================================================
 });
+
 
 // Re-apertura / dispositivos
 document.addEventListener('visibilitychange', async ()=>{
