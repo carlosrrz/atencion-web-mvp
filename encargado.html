@@ -167,13 +167,164 @@
     render();
   </script>
   <script type="module">
-  import { requireRole } from './src/roles.js';
+  import { requireRole } from './src/src/roles.js';
+  import { loadAttempts, exportAllCSV, clearAll, exportOneCSV } from './src/src/store.js';
+
   requireRole('prof');
+
+  const tbody = document.querySelector('#tbl tbody');
+  const btnCSVAll = document.getElementById('btn-export') || document.querySelector('#btn-export, [data-export-all]');
+  const btnClear  = document.getElementById('btn-clear')  || document.querySelector('#btn-clear, [data-clear]');
+  const badge     = document.getElementById('attempt-badge') || document.querySelector('[data-badge]');
+
+  function fmtTime(ms){
+    const s = Math.floor((ms||0)/1000);
+    const mm = String(Math.floor(s/60)).padStart(2,'0');
+    const ss = String(s%60).padStart(2,'0');
+    return `${mm}:${ss}`;
+  }
+  function safe(v){ return (v==null || v==='') ? '—' : v; }
+
+  function render(){
+    const arr = loadAttempts();
+    if (badge) badge.textContent = `${arr.length} intentos`;
+    tbody.innerHTML = arr.map((a,i)=>{
+      const ta = a.summary?.tab_activity || {};
+      const att= a.summary?.attention     || {};
+      const lip= a.summary?.lips          || {};
+      const ex = a.exam || {};
+      const dur = a.durationMs ?? 0;
+
+      return `
+        <tr>
+          <td>${i+1}</td>
+          <td>${safe(a.student?.name)}</td>
+          <td>${safe(a.student?.code)}</td>
+          <td>${safe(a.startedAt)}</td>
+          <td>${safe(a.endedAt)}</td>
+          <td>${fmtTime(dur)}</td>
+          <td>${ta.off_episodes ?? 0}</td>
+          <td>${att.lookaway_episodes ?? 0}</td>
+          <td>${lip.speak_episodes ?? 0}</td>
+          <td>${(ex?.score != null && ex?.total != null) ? `${ex.score}/${ex.total}` : '—'}</td>
+          <td>
+            <button class="btn btn-ghost btn-view" data-idx="${i}">Ver</button>
+            <button class="btn btn-ghost btn-exp-one" data-idx="${i}">CSV</button>
+          </td>
+        </tr>`;
+    }).join('');
+  }
+
+  // Modal de detalle simple (se crea on-demand)
+  function showAttempt(attempt){
+    const ta = attempt.summary?.tab_activity || {};
+    const att= attempt.summary?.attention     || {};
+    const occ= attempt.summary?.occlusion     || {};
+    const lip= attempt.summary?.lips          || {};
+    const perf=attempt.summary?.performance   || {};
+
+    const wrap = document.createElement('div');
+    wrap.className = 'modal-backdrop';
+    wrap.innerHTML = `
+      <div class="modal">
+        <div class="modal-card">
+          <div style="display:flex;gap:10px;align-items:center;">
+            <h3 style="margin:0;">Detalle del intento</h3>
+            <span style="flex:1"></span>
+            <button class="btn btn-ghost" id="x-close">Cerrar</button>
+          </div>
+          <div style="margin-top:10px;">
+            <p><strong>Alumno:</strong> ${safe(attempt.student?.name)} (${safe(attempt.student?.code)}) — ${safe(attempt.student?.email)}</p>
+            <p><strong>Inicio:</strong> ${safe(attempt.startedAt)} &nbsp; | &nbsp; <strong>Fin:</strong> ${safe(attempt.endedAt)} &nbsp; | &nbsp; <strong>Duración:</strong> ${fmtTime(attempt.durationMs)}</p>
+
+            <h4>Actividad de pestaña</h4>
+            <ul>
+              <li>Episodios (≥ ${Math.round((ta.offThresholdMs ?? 1500)/1000)}s): <strong>${ta.off_episodes ?? 0}</strong></li>
+              <li>Tiempo fuera: <strong>${fmtTime(ta.off_total_ms ?? 0)}</strong></li>
+            </ul>
+
+            <h4>Desatención por mirada</h4>
+            <ul>
+              <li>Episodios: <strong>${att.lookaway_episodes ?? 0}</strong></li>
+              <li>Tiempo total: <strong>${fmtTime(att.lookaway_total_ms ?? 0)}</strong></li>
+              <li>Más largo: <strong>${fmtTime(att.lookaway_longest_ms ?? 0)}</strong></li>
+            </ul>
+
+            <h4>Rostro cubierto</h4>
+            <ul>
+              <li>Episodios: <strong>${occ.episodes ?? 0}</strong></li>
+              <li>Tiempo total: <strong>${fmtTime(occ.total_ms ?? 0)}</strong></li>
+            </ul>
+
+            <h4>Posible habla</h4>
+            <ul>
+              <li>Episodios: <strong>${lip.speak_episodes ?? 0}</strong></li>
+              <li>Tiempo total: <strong>${fmtTime(lip.speak_total_ms ?? 0)}</strong></li>
+            </ul>
+
+            <h4>Rendimiento</h4>
+            <ul>
+              <li>FPS (mediana): <strong>${perf.fps_median ?? '—'}</strong></li>
+              <li>Latencia p95: <strong>${perf.latency_p95_ms ?? '—'}</strong> ms</li>
+              <li>Estado: <strong>${perf.overall ?? '—'}</strong></li>
+            </ul>
+
+            <h4>Examen</h4>
+            <p><strong>Puntaje:</strong> ${(attempt.exam?.score != null && attempt.exam?.total != null) ? `${attempt.exam.score}/${attempt.exam.total}` : '—'}</p>
+
+            <h4>Evidencias</h4>
+            <div class="ev-grid" id="ev-grid"></div>
+          </div>
+        </div>
+      </div>
+    `;
+    document.body.appendChild(wrap);
+
+    const grid = wrap.querySelector('#ev-grid');
+    const items = Array.isArray(attempt.evidences) ? attempt.evidences : [];
+    if (!items.length){
+      grid.innerHTML = `<div class="help">Sin evidencias capturadas.</div>`;
+    } else {
+      grid.innerHTML = items.map(it => `
+        <div class="ev-card">
+          <div class="pill pill-warn" style="margin-bottom:6px;">${it.kind||'evidencia'}</div>
+          <img alt="${it.kind||''}" src="${it.data}"/>
+          <div class="ev-note">${new Date(it.t||Date.now()).toLocaleTimeString()} — ${it.note||''}</div>
+        </div>
+      `).join('');
+    }
+    wrap.querySelector('#x-close').addEventListener('click', ()=> wrap.remove());
+    wrap.addEventListener('click', (e)=>{ if (e.target===wrap) wrap.remove(); });
+  }
+
+  // Delegación de clicks en la tabla
+  tbody.addEventListener('click', (e)=>{
+    const btn = e.target.closest('button');
+    if (!btn) return;
+    const idx = parseInt(btn.dataset.idx, 10);
+    const arr = loadAttempts();
+    const at = arr[idx];
+    if (!at) return;
+
+    if (btn.classList.contains('btn-view')) {
+      showAttempt(at);
+    } else if (btn.classList.contains('btn-exp-one')) {
+      // CSV por intento (usa util de store.js)
+      exportOneCSV(at);
+    }
+  });
+
+  // Controles superiores
+  btnCSVAll?.addEventListener('click', exportAllCSV);
+  btnClear?.addEventListener('click', ()=>{
+    if (!confirm('¿Borrar todos los intentos guardados en este navegador?')) return;
+    clearAll();
+    render();
+  });
+
+  render();
 </script>
 
-<script type="module" src="./src/store.js"></script>
-<script type="module" src="./src/roles.js"></script>
-<!-- Tu script inline del panel puede quedarse, o si lo separas en un archivo, referencia su ruta correcta -->
 
 </body>
 </html>

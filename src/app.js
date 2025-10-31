@@ -3,10 +3,12 @@ import { createMetrics } from './metrics.js';
 import { createTabLogger } from './tab-logger.js';
 import { FilesetResolver, FaceLandmarker } from "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.3";
 import { saveAttempt, updateLastAttemptExam } from './store.js';
+import { saveAttempt } from './store.js';
 
 const studentName  = document.getElementById('student-name');
 const studentCode  = document.getElementById('student-code');
 const studentEmail = document.getElementById('student-email');
+
 
 
 /* ===== DOM ===== */
@@ -129,6 +131,8 @@ let running = false;
 let camRequested = false;
 let frameCount = 0;
 let sessionStart = 0;
+let startedAtISO = null;
+
 
 let landmarker = null;
 
@@ -1007,6 +1011,44 @@ btnStop?.addEventListener('click', ()=>{
   // resumen + modal
   const summary = buildSummaryObject();
   showSummaryModal(summary);
+
+  // ===== Guardar intento para el panel del profesor =====
+try {
+  const endedAtISO = new Date().toISOString();
+  // examen (si existe)
+  let examSum = window.__examSummary;
+  if (!examSum) {
+    try { examSum = JSON.parse(localStorage.getItem('proctor.last_exam') || 'null'); } catch {}
+  }
+
+  // evidencias: limita a las últimas 24 para no saturar localStorage
+  const evid = Array.isArray(evidence.list?.()) ? evidence.list() : [];
+  const evidSlim = evid.slice(-24);
+
+  const attempt = {
+    id: String(Date.now()),
+    student: {
+      name: (studentName?.value || '').trim(),
+      code: (studentCode?.value || '').trim(),
+      email: (studentEmail?.value || '').trim(),
+    },
+    startedAt: startedAtISO || endedAtISO,
+    endedAt: endedAtISO,
+    durationMs: summary.duration_ms,
+    summary,          // ← todo el resumen (tab_activity, attention, lips, occlusion, performance)
+    exam: examSum || null,
+    evidences: evidSlim
+  };
+
+  saveAttempt(attempt);
+  try { localStorage.removeItem('proctor.last_exam'); } catch {}
+
+  console.log('[proctor] intento guardado:', attempt);
+} catch (e) {
+  console.warn('No se pudo guardar el intento:', e);
+}
+
+
   // ==== NUEVO: guardar intento con evidencias y datos del alumno ====
 const attempt = {
   id: `att_${Date.now().toString(36)}`,

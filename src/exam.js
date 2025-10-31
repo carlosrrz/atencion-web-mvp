@@ -227,6 +227,12 @@ function finishTest() {
   const correct = state.answers.reduce((a, r) => a + r.correct, 0);
   const meanRT = state.answers.reduce((a, r) => a + r.rtMs, 0) / state.answers.length;
 
+  // Guarda un “resumen” de examen accesible por app.js al terminar la sesión
+window.__examSummary = { score: correct, total: state.answers.length };
+// (opcional, por si la página se refresca) – se limpia al guardar el intento
+try { localStorage.setItem('proctor.last_exam', JSON.stringify(window.__examSummary)); } catch {}
+
+
   // Mostrar resumen
   els.result.classList.remove('hidden');
   els.result.innerHTML = `
