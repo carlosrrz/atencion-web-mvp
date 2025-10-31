@@ -1,9 +1,8 @@
 // app.js — Mirada + Oclusión + Labios + Anti-blink + Off-tab + Resumen modal + Episodios en vivo
 import { createMetrics } from './metrics.js';
 import { createTabLogger } from './tab-logger.js';
-import { updateLastAttemptExam } from './store.js';
 
-// ===== persistencia robusta SIN top-level await =====
+// ===== saveAttempt robusto SIN top-level await =====
 let saveAttempt = (attempt) => {
   try {
     const KEY = 'proctor.attempts.v1';
@@ -12,7 +11,9 @@ let saveAttempt = (attempt) => {
     localStorage.setItem(KEY, JSON.stringify(arr));
   } catch (e) { console.warn('[app] fallback saveAttempt error:', e); }
 };
-let updateLastAttemptExam = () => {};
+
+// Si store.js existe, sobreescribimos saveAttempt (y opcionalmente updateLastAttemptExam)
+let updateLastAttemptExam; // opcional; se usará con ?. más abajo
 
 (async () => {
   try {
@@ -21,15 +22,15 @@ let updateLastAttemptExam = () => {};
       .catch(() => import('../src/store.js'));
     if (mod?.saveAttempt) saveAttempt = mod.saveAttempt;
     if (mod?.updateLastAttemptExam) updateLastAttemptExam = mod.updateLastAttemptExam;
-    console.log('[app] store.js cargado');
+    console.log('[app] saveAttempt listo (store.js encontrado)');
   } catch (e) {
-    console.warn('[app] usando fallback de almacenamiento');
+    console.warn('[app] No se encontró store.js; usando fallback local');
   }
 })();
 
-
-
+// MediaPipe
 import { FilesetResolver, FaceLandmarker } from "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.3";
+
 
 
 const studentName  = document.getElementById('student-name');
