@@ -2,6 +2,12 @@
 import { createMetrics } from './metrics.js';
 import { createTabLogger } from './tab-logger.js';
 import { FilesetResolver, FaceLandmarker } from "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.3";
+import { saveAttempt, updateLastAttemptExam } from './store.js';
+
+const studentName  = document.getElementById('student-name');
+const studentCode  = document.getElementById('student-code');
+const studentEmail = document.getElementById('student-email');
+
 
 /* ===== DOM ===== */
 const cam = document.getElementById('cam');
@@ -944,8 +950,17 @@ btnStart?.addEventListener('click', ()=>{
   if (!stream){ alert('Primero permite la cámara.'); return; }
   running = true;
   frameCount = 0;
+  let startedAtISO = null; // declara cerca de tus estados globales
+  startedAtISO = new Date().toISOString();
   sessionStart = performance.now();
+  
+  let lastExamResult = null;
+  window.addEventListener('exam:finished', (e) => {
+    lastExamResult = e.detail;               // { correct, total }
+    updateLastAttemptExam?.(lastExamResult); // por si ya se guardó un intento previo
+    });
 
+  
   // Off-tab
   offTabStart   = isInTab() ? null : performance.now();
   offTabEpisodes= 0;
@@ -992,6 +1007,23 @@ btnStop?.addEventListener('click', ()=>{
   // resumen + modal
   const summary = buildSummaryObject();
   showSummaryModal(summary);
+  // ==== NUEVO: guardar intento con evidencias y datos del alumno ====
+const attempt = {
+  id: `att_${Date.now().toString(36)}`,
+  student: {
+    name:  studentName?.value?.trim()  || '',
+    code:  studentCode?.value?.trim()  || '',
+    email: studentEmail?.value?.trim() || ''
+  },
+  startedAt: startedAtISO || new Date(Date.now() - summary.duration_ms).toISOString(),
+  endedAt:   new Date().toISOString(),
+  durationMs: Math.round(summary.duration_ms),
+  summary,
+  evidence: (typeof evidence?.list === 'function') ? evidence.list() : [],
+  exam: lastExamResult || null
+};
+saveAttempt(attempt);
+// ================================================================
 });
 
 // Re-apertura / dispositivos

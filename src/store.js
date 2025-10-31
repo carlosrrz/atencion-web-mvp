@@ -72,3 +72,14 @@ function downloadCSV(name, text){
   const blob = new Blob([text], {type:'text/csv'}); const a=document.createElement('a');
   a.href=URL.createObjectURL(blob); a.download=name; a.click(); URL.revokeObjectURL(a.href);
 }
+// (al final del archivo)
+export function getAllAttempts(){ return loadAttempts(); }
+
+export function updateLastAttemptExam(exam){
+  try{
+    const all = loadAttempts();
+    if(!all.length) return;
+    all[all.length - 1].exam = exam;
+    localStorage.setItem(KEY, JSON.stringify(all));
+  }catch{}
+}

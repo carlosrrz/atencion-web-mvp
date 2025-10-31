@@ -3,101 +3,167 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Evaluación — Encargado</title>
-  <link rel="stylesheet" href="./src/src/styles.css" />
+  <title>Panel — Profesor</title>
+  <link rel="stylesheet" href="./src/styles.css" />
+  <style>
+    .wrap{max-width:1200px;margin:20px auto;padding:0 16px}
+    table{width:100%;border-collapse:separate;border-spacing:0 6px}
+    th,td{padding:8px 10px;background:#fff;border:1px solid #e5e7eb}
+    th{background:#f8fafc;text-align:left}
+    .row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+    .pill{display:inline-flex;align-items:center;padding:2px 8px;border-radius:999px;background:#f3f4f6;border:1px solid #e5e7eb}
+    .ev{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:10px}
+    .ev img{width:100%;height:auto;border-radius:8px;display:block}
+    .modal-backdrop{position:fixed;inset:0;background:rgba(0,0,0,.45);display:none}
+    .modal{position:fixed;inset:auto auto 6% 50%;transform:translateX(-50%);width:min(900px,94%);background:#fff;border:1px solid #e5e7eb;border-radius:14px;display:none}
+    .modal header,.modal footer{padding:12px 14px;border-bottom:1px solid #e5e7eb}
+    .modal footer{border-top:1px solid #e5e7eb;border-bottom:none;display:flex;justify-content:flex-end;gap:8px}
+    .modal .body{padding:14px}
+    .hidden{display:none!important}
+  </style>
 </head>
 <body>
   <header class="topbar">
-    <div class="wrap">
-      <h1>Panel del encargado</h1>
-      <nav>
-        <a href="index.html">Volver</a>
+    <div class="wrap row" style="justify-content:space-between">
+      <h1>Panel del profesor</h1>
+      <nav class="row">
+        <a href="login.html" class="secondary">Salir</a>
       </nav>
     </div>
   </header>
 
   <main class="wrap">
-    <div class="card" id="gate">
-      <h2>Acceso</h2>
-      <p>Ingresa el código:</p>
-      <input id="admin-code" class="input" placeholder="Código" />
-      <button id="btn-enter" class="btn btn-primary">Entrar</button>
-      <p class="help">Este código es sólo para evitar accesos accidentales.</p>
+    <div class="row" style="justify-content:space-between;margin-bottom:10px">
+      <div class="row">
+        <button id="btn-export-all" class="secondary">Exportar CSV (todos)</button>
+        <button id="btn-clear" class="secondary">Limpiar todo</button>
+      </div>
+      <span class="pill" id="count-pill">0 intentos</span>
     </div>
 
-    <div class="card hidden" id="panel">
-      <h2>Intentos registrados</h2>
-      <div class="row">
-        <button id="btn-export" class="btn btn-ghost">Exportar CSV</button>
-        <button id="btn-clear"  class="btn btn-danger">Limpiar</button>
-      </div>
-      <table class="table" id="tbl">
-        <thead>
-          <tr><th>#</th><th>Inicio</th><th>Fin</th><th>Correctas</th><th>Total</th></tr>
-        </thead>
-        <tbody></tbody>
-      </table>
-    </div>
+    <table id="tbl">
+      <thead>
+        <tr>
+          <th>#</th>
+          <th>Alumno</th>
+          <th>Código</th>
+          <th>Inicio</th>
+          <th>Fin</th>
+          <th>Duración</th>
+          <th>Off-tab (episodios)</th>
+          <th>Mirada (episodios)</th>
+          <th>Habla (episodios)</th>
+          <th>Examen</th>
+          <th>Ver</th>
+        </tr>
+      </thead>
+      <tbody></tbody>
+    </table>
   </main>
 
-  <script type="module">
-    const ADMIN_CODE = '7777';
+  <!-- Modal detalle -->
+  <div id="backdrop" class="modal-backdrop"></div>
+  <div id="modal" class="modal" role="dialog" aria-modal="true">
+    <header><strong id="m-title">Detalle</strong></header>
+    <div class="body" id="m-body">—</div>
+    <footer>
+      <button id="m-export" class="secondary">Exportar CSV (intento)</button>
+      <button id="m-close" class="secondary">Cerrar</button>
+    </footer>
+  </div>
 
-    const gate   = document.getElementById('gate');
-    const panel  = document.getElementById('panel');
-    const input  = document.getElementById('admin-code');
-    const enter  = document.getElementById('btn-enter');
-    const tbl    = document.getElementById('tbl').querySelector('tbody');
-    const btnCSV = document.getElementById('btn-export');
+  <script type="module">
+    import { requireRole } from './src/roles.js';
+    import { getAllAttempts, exportAllCSV, exportOneCSV, clearAll } from './src/store.js';
+
+    requireRole('prof');
+
+    const tblBody = document.querySelector('#tbl tbody');
+    const countPill = document.getElementById('count-pill');
+    const btnAll = document.getElementById('btn-export-all');
     const btnClr = document.getElementById('btn-clear');
 
-    const KEY = 'mvp.exam.attempts';
+    const backdrop = document.getElementById('backdrop');
+    const modal = document.getElementById('modal');
+    const mTitle = document.getElementById('m-title');
+    const mBody  = document.getElementById('m-body');
+    const mClose = document.getElementById('m-close');
+    const mExport= document.getElementById('m-export');
 
-    function fmt(ts){
-      try{ return new Date(ts).toLocaleString(); }catch{ return '—'; }
+    let current = null;
+
+    function fmtTime(ms){ const s=Math.floor(ms/1000); const mm=String(Math.floor(s/60)).padStart(2,'0'); const ss=String(s%60).padStart(2,'0'); return `${mm}:${ss}`; }
+    function fmt(ts){ try{ return new Date(ts).toLocaleString(); }catch{ return '—'; } }
+
+    function render(){
+      const arr = getAllAttempts();
+      countPill.textContent = `${arr.length} intento${arr.length===1?'':'s'}`;
+      tblBody.innerHTML = arr.map((a,i)=>{
+        const s = a.summary || {};
+        const ta = s.tab_activity || {}; const att = s.attention || {}; const lip = s.lips || {};
+        const exam = a.exam ? `${a.exam.correct}/${a.exam.total}` : '—';
+        return `
+          <tr>
+            <td>${i+1}</td>
+            <td>${(a.student?.name||'').replaceAll('<','&lt;')}</td>
+            <td>${(a.student?.code||'').replaceAll('<','&lt;')}</td>
+            <td>${fmt(a.startedAt)}</td>
+            <td>${fmt(a.endedAt)}</td>
+            <td>${fmtTime(a.durationMs||0)}</td>
+            <td>${ta.off_episodes ?? 0}</td>
+            <td>${att.lookaway_episodes ?? 0}</td>
+            <td>${lip.speak_episodes ?? 0}</td>
+            <td>${exam}</td>
+            <td><button class="secondary" data-id="${a.id}">Ver</button></td>
+          </tr>`;
+      }).join('');
     }
 
-    function load(){
-      let arr = [];
-      try{ arr = JSON.parse(localStorage.getItem(KEY) || '[]'); }catch{}
-      tbl.innerHTML = arr.map((r,i)=>`
-        <tr>
-          <td>${i+1}</td>
-          <td>${fmt(r.startedAt)}</td>
-          <td>${fmt(r.finishedAt)}</td>
-          <td>${r.correct}</td>
-          <td>${r.total}</td>
-        </tr>
-      `).join('');
+    function openDetail(id){
+      const a = getAllAttempts().find(x=>x.id===id);
+      if(!a) return;
+      current = a;
+      const s = a.summary || {};
+      const ta=s.tab_activity||{}, att=s.attention||{}, occ=s.occlusion||{}, lip=s.lips||{}, perf=s.performance||{};
+      mTitle.textContent = `Intento ${a.id} — ${(a.student?.name||'')}`;
+      mBody.innerHTML = `
+        <div class="row" style="margin-bottom:8px">
+          <div class="pill">Inicio: ${fmt(a.startedAt)}</div>
+          <div class="pill">Fin: ${fmt(a.endedAt)}</div>
+          <div class="pill">Duración: ${fmtTime(a.durationMs||0)}</div>
+          <div class="pill">Examen: ${a.exam?`${a.exam.correct}/${a.exam.total}`:'—'}</div>
+        </div>
+        <h4>Resumen</h4>
+        <ul>
+          <li>Off-tab (≥ ${Math.round((ta.threshold_ms||ta.offThresholdMs||1500)/1000)}s): ${ta.off_episodes ?? 0} · tiempo: ${fmtTime(ta.off_total_ms||0)}</li>
+          <li>Mirada desviada: ${att.lookaway_episodes ?? 0} · tiempo: ${fmtTime(att.lookaway_total_ms||0)} · máx: ${fmtTime(att.lookaway_longest_ms||0)}</li>
+          <li>Rostro cubierto: ${occ.episodes ?? 0} · tiempo: ${fmtTime(occ.total_ms||0)}</li>
+          <li>Posible habla: ${lip.speak_episodes ?? 0} · tiempo: ${fmtTime(lip.speak_total_ms||0)}</li>
+          <li>Rendimiento: FPS≈${(perf.fps_median??0).toFixed?.(1) || perf.fps_median || 0} · p95≈${(perf.latency_p95_ms??0).toFixed?.(1)||perf.latency_p95_ms||0} ms</li>
+        </ul>
+        <h4>Evidencias</h4>
+        <div class="ev">
+          ${Array.isArray(a.evidence)&&a.evidence.length
+            ? a.evidence.map(it=>`<div><img src="${it.data}" alt="${it.kind}"/><div class="muted">${new Date(it.t).toLocaleTimeString()} — ${it.kind}</div></div>`).join('')
+            : '<div class="muted">No hay evidencias capturadas.</div>'}
+        </div>
+      `;
+      backdrop.style.display='block'; modal.style.display='block';
     }
 
-    function toCSV(){
-      let arr = [];
-      try{ arr = JSON.parse(localStorage.getItem(KEY) || '[]'); }catch{}
-      const rows = [['#','inicio','fin','correctas','total']];
-      arr.forEach((r,i)=> rows.push([i+1, fmt(r.startedAt), fmt(r.finishedAt), r.correct, r.total]));
-      const csv = rows.map(r=>r.join(',')).join('\n');
-      const blob = new Blob([csv], { type:'text/csv' });
-      const a = document.createElement('a');
-      a.href = URL.createObjectURL(blob);
-      a.download = 'intentos.csv';
-      a.click();
-      URL.revokeObjectURL(a.href);
-    }
-
-    enter.addEventListener('click', ()=>{
-      if (input.value.trim() !== ADMIN_CODE){ alert('Código incorrecto'); return; }
-      gate.classList.add('hidden');
-      panel.classList.remove('hidden');
-      load();
+    tblBody.addEventListener('click', (e)=>{
+      const id = e.target?.dataset?.id; if(id) openDetail(id);
     });
 
-    btnCSV.addEventListener('click', toCSV);
+    mClose.addEventListener('click', ()=>{ backdrop.style.display='none'; modal.style.display='none'; current=null; });
+    mExport.addEventListener('click', ()=>{ if(current) exportOneCSV(current); });
+    btnAll.addEventListener('click', ()=> exportAllCSV());
     btnClr.addEventListener('click', ()=>{
-      if (!confirm('¿Borrar todos los intentos guardados en este navegador?')) return;
-      localStorage.removeItem(KEY);
-      load();
+      if(!confirm('¿Borrar todos los intentos guardados en este navegador?')) return;
+      clearAll(); render();
     });
+
+    render();
   </script>
 </body>
 </html>

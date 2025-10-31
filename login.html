@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Acceso — Proctoring</title>
+  <link rel="stylesheet" href="./src/styles.css" />
+  <style>
+    body{display:grid;min-height:100dvh;place-items:center}
+    .card{max-width:520px;width:min(92vw,520px)}
+    .row{display:flex;gap:10px;align-items:center;margin:8px 0}
+    .grid{display:grid;gap:10px;grid-template-columns:1fr 1fr}
+    input{width:100%;padding:10px;border:1px solid #e5e7eb;border-radius:10px}
+    .muted{color:#64748b}
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h2>Acceso</h2>
+    <p class="muted">Selecciona tu rol e ingresa el código.</p>
+
+    <div class="row">
+      <label><input type="radio" name="role" value="student" checked> Estudiante</label>
+      <label><input type="radio" name="role" value="prof"> Profesor</label>
+    </div>
+
+    <div class="row">
+      <input id="code" placeholder="Código de acceso" />
+    </div>
+
+    <div class="row">
+      <button id="enter" class="primary">Entrar</button>
+    </div>
+
+    <p class="muted">Ejemplo: Estudiante = <code>1111</code> · Profesor = <code>7777</code></p>
+  </div>
+
+  <script type="module">
+    import { setRole } from './src/roles.js';
+
+    // Cambia las credenciales aquí (una sola por rol):
+    const CODES = { student: '1111', prof: '7777' };
+
+    const code = document.getElementById('code');
+    const enter = document.getElementById('enter');
+
+    enter.addEventListener('click', () => {
+      const role = (document.querySelector('input[name="role"]:checked')?.value) || 'student';
+      if (code.value.trim() !== CODES[role]) { alert('Código incorrecto'); return; }
+      setRole(role);
+      location.href = role === 'prof' ? 'encargado.html' : 'estudiante.html';
+    });
+  </script>
+</body>
+</html>

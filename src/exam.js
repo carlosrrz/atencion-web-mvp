@@ -246,6 +246,10 @@ function finishTest() {
     off_episodes: state.offEpisodes,
     off_total_ms: Math.round(state.offTotalMs)
   });
+  // ... justo antes de "els.start.classList.remove('hidden'); ..."
+  window.dispatchEvent(new CustomEvent('exam:finished', {
+    detail: { correct, total: state.answers.length }
+  }));
 
   // Reset UI de botones
   els.start.classList.remove('hidden');
