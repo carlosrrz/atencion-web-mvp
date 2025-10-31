@@ -192,7 +192,8 @@ function startTest() {
   els.next.classList.remove('hidden');
   els.finish.classList.add('hidden');
   els.result.classList.add('hidden');
-  els.instr.classList.add('hidden');
+  els.instr?.classList.add('hidden');
+  els.instr?.classList.remove('hidden');
 
   renderQuestion();
 }
