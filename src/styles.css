@@ -343,3 +343,83 @@ button.secondary {
   border: 1px solid #1c2a48;
 }
 button.secondary:hover { background: #142441; }
+
+/* ====== Modal (detalle de intento) – DARK MODE ====== */
+
+/* Fondo de oscurecimiento */
+.modal-backdrop{
+  background: rgba(3,10,24,.78) !important;
+  backdrop-filter: blur(2px);
+}
+
+/* Contenedor del modal (soporta .modal y .modal .modal-card) */
+.modal,
+.modal .modal-card{
+  background:#0b1324 !important;
+  color:#e6edf7 !important;
+  border:1px solid #13233f !important;
+  border-radius:18px !important;
+  box-shadow: 0 24px 70px rgba(0,0,0,.55) !important;
+}
+
+/* Encabezado y pie del modal (si existen) */
+.modal header,
+.modal footer{
+  background:#0e1a2f !important;
+  color:#e6edf7 !important;
+  border-color:#13233f !important;
+}
+
+/* Cuerpo del modal */
+.modal .body{
+  color:#e6edf7 !important;
+}
+
+/* Chips/pastillas e indicadores dentro del modal */
+.modal .pill{
+  background:#0e1a2f !important;
+  color:#e6edf7 !important;
+  border:1px solid #1c2a48 !important;
+}
+.modal .muted,
+.modal .help{
+  color:#b9c6dc !important;
+}
+
+/* ------- Evidencias ------- */
+.ev, .ev-grid{
+  display:grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap:12px;
+}
+.ev-card,
+.ev > div{
+  background:#0f1e37 !important;
+  border:1px solid #1c2a48 !important;
+  border-radius:12px !important;
+  padding:8px !important;
+}
+.ev-card img,
+.ev img{
+  width:100%;
+  display:block;
+  border-radius:8px;
+}
+.ev-note{ color:#9fb2d3 !important; }
+
+/* Botones dentro del modal (Cerrar / Exportar / etc.) */
+#x-close, #m-close, #m-export,
+.modal .secondary, .btn-ghost{
+  background:#1a2c53 !important;
+  border:1px solid #27406d !important;
+  color:#e6edf7 !important;
+}
+#x-close:hover, #m-close:hover, #m-export:hover,
+.modal .secondary:hover, .btn-ghost:hover{
+  background:#223a6c !important;
+}
+
+/* Quita borde blanco que pueda venir de estilos previos */
+.modal, .modal *{
+  border-color: inherit;
+}
