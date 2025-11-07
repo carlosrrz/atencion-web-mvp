@@ -1,0 +1,157 @@
+[
+  {
+    "id": "q001",
+    "text": "En complejidad algorítmica, ¿qué notación describe mejor 'crece a lo sumo linealmente'?",
+    "options": ["Ω(n)", "o(n)", "O(n)", "Θ(n log n)"],
+    "correct": 2
+  },
+  {
+    "id": "q002",
+    "text": "Para trabajar en equipo con Git, ¿qué práctica es más segura?",
+    "options": [
+      "Trabajar todos en main sin revisiones",
+      "Crear ramas por funcionalidad y abrir PR",
+      "Subir binarios grandes al repo",
+      "Hacer commits con mensaje 'arreglos'"
+    ],
+    "correct": 1
+  },
+  {
+    "id": "q003",
+    "text": "¿Qué ayuda más a evitar distracciones al programar?",
+    "options": [
+      "Varias redes sociales abiertas",
+      "Una pestaña principal y anotar interrupciones",
+      "Brillo al máximo",
+      "Música con letras mientras escribes código"
+    ],
+    "correct": 1
+  },
+  {
+    "id": "q004",
+    "text": "La práctica más adecuada para contraseñas es…",
+    "options": [
+      "Reutilizar una contraseña fuerte",
+      "Guardarlas en un .txt sin cifrar",
+      "Usar gestor de contraseñas y 2FA",
+      "Compartirlas por correo con el equipo"
+    ],
+    "correct": 2
+  },
+  {
+    "id": "q005",
+    "text": "En el modelo OSI, ¿qué capa corresponde a 'Transporte'?",
+    "options": ["Capa 2", "Capa 3", "Capa 4", "Capa 7"],
+    "correct": 2
+  },
+  {
+    "id": "q006",
+    "text": "Para aprender estructuras de datos, ¿qué enfoque favorece la retención?",
+    "options": [
+      "Leer sin practicar",
+      "Implementar y probar funciones tras cada concepto",
+      "Memorizar definiciones antes de programar",
+      "Evitar errores para no perder tiempo"
+    ],
+    "correct": 1
+  },
+  {
+    "id": "q007",
+    "text": "Durante el estudio, salir de la pestaña por ≥2 s suele…",
+    "options": [
+      "Mejorar la precisión",
+      "Reducir atención y aumentar tiempos de respuesta",
+      "No tener efecto",
+      "Mejorar memoria a largo plazo"
+    ],
+    "correct": 1
+  },
+  {
+    "id": "q008",
+    "text": "¿Qué código HTTP indica una respuesta exitosa?",
+    "options": ["200", "301", "404", "500"],
+    "correct": 0
+  },
+  {
+    "id": "q009",
+    "text": "¿Qué tipo de JOIN devuelve solo las filas con coincidencias en ambas tablas?",
+    "options": ["INNER JOIN", "LEFT JOIN", "RIGHT JOIN", "FULL OUTER JOIN"],
+    "correct": 0
+  },
+  {
+    "id": "q010",
+    "text": "En SQL, ¿qué restricción evita duplicados en una columna?",
+    "options": ["PRIMARY KEY", "UNIQUE", "CHECK", "DEFAULT"],
+    "correct": 1
+  },
+  {
+    "id": "q011",
+    "text": "En ACID, ¿qué propiedad asegura 'todo o nada' en una transacción?",
+    "options": ["Atomicidad", "Consistencia", "Aislamiento", "Durabilidad"],
+    "correct": 0
+  },
+  {
+    "id": "q012",
+    "text": "Complejidad promedio de búsqueda en una tabla hash bien dimensionada:",
+    "options": ["O(1)", "O(log n)", "O(n)", "O(n log n)"],
+    "correct": 0
+  },
+  {
+    "id": "q013",
+    "text": "¿Qué estructura de datos implementa una política FIFO?",
+    "options": ["Pila", "Árbol", "Cola", "Grafo"],
+    "correct": 2
+  },
+  {
+    "id": "q014",
+    "text": "¿Qué opción tiene mayor especificidad en CSS?",
+    "options": ["Estilo inline", "Selector de id (#)", "Selector de clase (.)", "Selector de elemento"],
+    "correct": 0
+  },
+  {
+    "id": "q015",
+    "text": "¿Cuál de estos métodos HTTP es idempotente por definición?",
+    "options": ["POST", "GET", "PATCH", "CONNECT"],
+    "correct": 1
+  },
+  {
+    "id": "q016",
+    "text": "En el navegador, ¿qué mecanismo gestiona la ejecución de callbacks asíncronos en JS?",
+    "options": ["Event Loop", "Garbage Collector", "Render Tree", "WebAssembly Loader"],
+    "correct": 0
+  },
+  {
+    "id": "q017",
+    "text": "¿Qué protocolo es orientado a conexión y garantiza entrega ordenada?",
+    "options": ["TCP", "UDP", "ICMP", "ARP"],
+    "correct": 0
+  },
+  {
+    "id": "q018",
+    "text": "¿Qué afirma mejor sobre contenedores respecto a VMs?",
+    "options": [
+      "Comparten el kernel del SO anfitrión",
+      "Incluyen su propio kernel siempre",
+      "Requieren hipervisor de hardware",
+      "No pueden aislar procesos"
+    ],
+    "correct": 0
+  },
+  {
+    "id": "q019",
+    "text": "Para modificar parcialmente un recurso en una API REST, el método más adecuado es…",
+    "options": ["GET", "POST", "PUT", "PATCH"],
+    "correct": 3
+  },
+  {
+    "id": "q020",
+    "text": "Para mitigar XSS en apps web, la medida principal es…",
+    "options": [
+      "Escapar y sanitizar la salida/entrada HTML",
+      "Usar solo HTTPS",
+      "Ocultar errores del servidor",
+      "Minificar el JavaScript"
+    ],
+    "correct": 0
+  }
+]

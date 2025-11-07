@@ -1,86 +1,25 @@
 // src/exam.js
 // Test corto de distracción (5 preguntas). Mide RT y off-tab durante el test.
 
-const QUESTIONS = [
-  {
-    id: 'q1',
-    text: 'En un bloque de estudio eficaz para cursos técnicos, ¿qué combinación es más recomendable?',
-    options: [
-      'Lectura pasiva prolongada sin pausas',
-      'Bloques cortos con práctica activa entre secciones',
-      'Ver varios videos en paralelo',
-      'Responder mensajes durante el estudio para “descansar”'
-    ],
-    correct: 1
-  },
-  {
-    id: 'q2',
-    text: 'En complejidad algorítmica, ¿qué notación describe mejor “crece a lo sumo linealmente”?',
-    options: ['Ω(n)', 'o(n)', 'O(n)', 'Θ(n log n)'],
-    correct: 2
-  },
-  {
-    id: 'q3',
-    text: 'Para gestionar versiones en equipo, ¿qué práctica es más segura?',
-    options: [
-      'Trabajar todos en la rama main sin revisiones',
-      'Crear ramas por funcionalidad y abrir solicitudes de cambios (PR)',
-      'Subir archivos binarios grandes al repositorio',
-      'Hacer commits con mensajes genéricos como “arreglos”'
-    ],
-    correct: 1
-  },
-  {
-    id: 'q4',
-    text: '¿Cuál es una buena estrategia para evitar distracciones en sesiones de programación?',
-    options: [
-      'Mantener abiertas varias redes sociales para “pausas activas”',
-      'Usar una sola pestaña principal y registrar interrupciones para la pausa',
-      'Incrementar el brillo al máximo',
-      'Escuchar audios con letras mientras se escribe código'
-    ],
-    correct: 1
-  },
-  {
-    id: 'q5',
-    text: 'Respecto a contraseñas, ¿qué práctica es más adecuada?',
-    options: [
-      'Reutilizar la misma contraseña segura en varios servicios',
-      'Guardar contraseñas en un documento sin cifrar',
-      'Usar un gestor de contraseñas y 2FA cuando esté disponible',
-      'Compartir contraseñas con el equipo por correo'
-    ],
-    correct: 2
-  },
-  {
-    id: 'q6',
-    text: 'En redes, ¿qué capa del modelo OSI corresponde a “Transporte”?',
-    options: ['Capa 2', 'Capa 3', 'Capa 4', 'Capa 7'],
-    correct: 2
-  },
-  {
-    id: 'q7',
-    text: 'Para aprender estructuras de datos, ¿qué enfoque favorece la retención?',
-    options: [
-      'Leer un capítulo completo sin practicar',
-      'Implementar y probar pequeñas funciones tras cada concepto',
-      'Memorizar todas las definiciones antes de programar',
-      'Evitar cometer errores para no perder tiempo'
-    ],
-    correct: 1
-  },
-  {
-    id: 'q8',
-    text: 'Durante el estudio, salir repetidamente de la pestaña por ≥2 s suele…',
-    options: [
-      'Mejorar la precisión',
-      'Reducir atención y aumentar tiempos de respuesta',
-      'No tener efecto medible',
-      'Mejorar la memoria a largo plazo'
-    ],
-    correct: 1
+// --- Banco de preguntas dinámico ---
+let QUESTIONS = []; // se llenará desde JSON
+
+async function loadQuestions({ url = './src/questions.json', take = 8 } = {}) {
+  try {
+    const res = await fetch(url, { cache: 'no-store' });
+    const bank = await res.json();
+    // baraja y toma N
+    const shuffled = bank.slice().sort(()=>Math.random()-0.5);
+    QUESTIONS = shuffled.slice(0, take);
+  } catch (e) {
+    console.warn('[exam] No se pudo cargar questions.json; usando fallback embebido');
+    // Fallback mínimo si falla el fetch:
+    QUESTIONS = [
+      { id:'q_f1', text:'Fallback 1', options:['A','B','C','D'], correct:0 },
+      { id:'q_f2', text:'Fallback 2', options:['A','B','C','D'], correct:1 }
+    ];
   }
-];
+}
 
 
 const els = {
@@ -178,6 +117,11 @@ function pollOff() {
 
 /* ====== Inicio/avance/final ====== */
 function startTest() {
+  // pre-requisito: cámara lista
+  if (!window.__camReady) {
+    alert('Primero permite la cámara y confirma que está activa.');
+    return;
+  }
   state.running = true;
   state.i = 0;
   state.answers = [];
@@ -277,6 +221,17 @@ function downloadSummaryJSON(filename, obj) {
   const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = filename; a.click();
   URL.revokeObjectURL(a.href);
 }
+// Inicializa contadores y carga banco
+els.idx.textContent = '0';
+els.total.textContent = '0';
+els.rt.textContent = '0.0';
+
+(async () => {
+  await loadQuestions({ url: './src/questions.json', take: 8 });
+  els.total.textContent = String(QUESTIONS.length);
+  els.text.textContent = 'Presiona "Iniciar test" cuando el docente lo indique.';
+})();
+
 
 /* ====== Eventos ====== */
 els.start?.addEventListener('click', startTest);

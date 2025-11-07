@@ -1,54 +1,51 @@
 <!doctype html>
 <html lang="es">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Acceso — Proctoring</title>
-  <link rel="stylesheet" href="./src/styles.css" />
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>Ingreso</title>
+  <link rel="stylesheet" href="./src/styles.css"/>
   <style>
-    body{display:grid;min-height:100dvh;place-items:center}
-    .card{max-width:520px;width:min(92vw,520px)}
-    .row{display:flex;gap:10px;align-items:center;margin:8px 0}
-    .grid{display:grid;gap:10px;grid-template-columns:1fr 1fr}
-    input{width:100%;padding:10px;border:1px solid #e5e7eb;border-radius:10px}
-    .muted{color:#64748b}
+    .wrap{max-width:420px;margin:60px auto;padding:20px;background:#fff;border:1px solid #e5e7eb;border-radius:14px}
+    .row{display:flex;flex-direction:column;gap:8px}
+    input{padding:10px;border:1px solid #e5e7eb;border-radius:10px}
+    button{margin-top:8px}
   </style>
 </head>
 <body>
-  <div class="card">
-    <h2>Acceso</h2>
-    <p class="muted">Selecciona tu rol e ingresa el código.</p>
-
+  <div class="wrap">
+    <h2>Ingreso</h2>
     <div class="row">
-      <label><input type="radio" name="role" value="student" checked> Estudiante</label>
-      <label><input type="radio" name="role" value="prof"> Profesor</label>
+      <input id="user" placeholder="Usuario"/>
+      <input id="pass" type="password" placeholder="Contraseña"/>
+      <button id="btn" class="primary">Entrar</button>
+      <p class="help">Para demo: credenciales fijas por rol.</p>
     </div>
-
-    <div class="row">
-      <input id="code" placeholder="Código de acceso" />
-    </div>
-
-    <div class="row">
-      <button id="enter" class="primary">Entrar</button>
-    </div>
-
-    <p class="muted">Ejemplo: Estudiante = <code>1111</code> · Profesor = <code>7777</code></p>
   </div>
 
   <script type="module">
     import { setRole } from './src/roles.js';
 
-    // Cambia las credenciales aquí (una sola por rol):
-    const CODES = { student: '1111', prof: '7777' };
+    // Credenciales fijas de MVP (solo para demo)
+    const CREDS = {
+      student: { user: 'alumno', pass: 'alumno123' },
+      prof:    { user: 'profe',  pass: 'profe123'  }
+    };
 
-    const code = document.getElementById('code');
-    const enter = document.getElementById('enter');
+    const $ = (id)=>document.getElementById(id);
+    $('btn').addEventListener('click', ()=>{
+      const u = $('user').value.trim();
+      const p = $('pass').value.trim();
 
-    enter.addEventListener('click', () => {
-      const role = (document.querySelector('input[name="role"]:checked')?.value) || 'student';
-      if (code.value.trim() !== CODES[role]) { alert('Código incorrecto'); return; }
-      setRole(role);
-      location.href = role === 'prof' ? 'encargado.html' : 'estudiante.html';
+      if (u === CREDS.student.user && p === CREDS.student.pass){
+        setRole('student');
+        location.replace('estudiante.html');
+      } else if (u === CREDS.prof.user && p === CREDS.prof.pass){
+        setRole('prof');
+        location.replace('encargado.html');
+      } else {
+        alert('Credenciales inválidas');
+      }
     });
   </script>
 </body>

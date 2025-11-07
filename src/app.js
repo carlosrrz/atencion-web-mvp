@@ -407,6 +407,8 @@ async function startCamera() {
     
     cam.srcObject = stream;
     await cam.play?.();
+    window.__camReady = true;
+
 
     if (cam.readyState >= 2) syncCanvasToVideo();
     else cam.addEventListener('loadedmetadata', syncCanvasToVideo, { once: true });

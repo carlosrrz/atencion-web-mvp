@@ -1,3 +1,9 @@
+<script type="module">
+  import { requireRole } from './src/roles.js';
+  requireRole('student');
+</script>
+
+
 <!doctype html>
 <html lang="es">
 <head>
@@ -82,22 +88,7 @@
       </div>
     </section>
 
-    <!-- Derecha: métricas NO visibles al alumno (pero existen para panel del profe) -->
-    <aside>
-      <div class="card">
-        <h2>Monitoreo (no visible)</h2>
-        <p class="help">Estas métricas no se muestran al estudiante.</p>
-        <p>Pestaña: <span id="tab-state">—</span></p>
-        <p>Atención: <span id="attn-state">—</span></p>
-        <p>Labios: <span id="lips-state">—</span></p>
-        <p>FPS: <span id="fps">0</span>
-           <span id="fps-pill" class="pill pill-neutral">—</span>
-           · p95: <span id="p95">0.0</span> ms
-           <span id="p95-pill" class="pill pill-neutral">—</span></p>
-        <p>Rendimiento: <span id="perf-overall" class="pill pill-neutral">—</span></p>
-        <p>Off-tab (episodios): <span id="offtab-count">0</span> · Tiempo fuera: <span id="offtab-time">00:00</span></p>
-      </div>
-    </aside>
+    
   </main>
 
   <!-- Modal Resumen -->
