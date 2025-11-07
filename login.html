@@ -19,7 +19,6 @@
       <input id="user" placeholder="Usuario"/>
       <input id="pass" type="password" placeholder="Contraseña"/>
       <button id="btn" class="primary">Entrar</button>
-      <p class="help">Para demo: credenciales fijas por rol.</p>
     </div>
   </div>
 
@@ -28,8 +27,8 @@
 
     // Credenciales fijas de MVP (solo para demo)
     const CREDS = {
-      student: { user: 'alumno', pass: 'alumno123' },
-      prof:    { user: 'profe',  pass: 'profe123'  }
+      student: { user: 'alumno@ejemplo.com', pass: 'alumno123' },
+      prof:    { user: 'profesor@ejemplo.com',  pass: 'profesor123'  }
     };
 
     const $ = (id)=>document.getElementById(id);
