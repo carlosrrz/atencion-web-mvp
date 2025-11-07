@@ -234,78 +234,61 @@ tbody tr:hover{ transform: translateY(-2px); box-shadow: var(--shadow-md); }
 }
 
 
-/* === Login oscuro y tipografía legible === */
-body.login{
-  background: radial-gradient(900px 600px at 12% -10%, #16314d 0%, #0b1524 60%, #08101e 100%);
-  color:#eaf0ff;
+/* === Inputs siempre oscuros (login y resto) ====================== */
+input[type="text"],
+input[type="email"],
+input[type="password"],
+input[type="number"],
+input[type="search"]{
+  background: #0f1a2b !important;      /* base oscura siempre */
+  color: #e9f1ff !important;            /* texto claro */
+  border: 1px solid rgba(255,255,255,.12) !important;
+  border-radius: 14px;
 }
 
-body.login h1{
-  color:#eaf0ff;
-  text-shadow: 0 2px 20px rgba(0,0,0,.25);
+/* Placeholder legible */
+input::placeholder{
+  color: #b8c4d8 !important;
+  opacity: 1 !important;
 }
 
-body.login .card,
-body.login .auth-card{
-  background:#0f1b2d;
-  border:1px solid rgba(255,255,255,.10);
-  border-radius:16px;
-  box-shadow:0 20px 60px rgba(0,0,0,.35), inset 0 1px 0 rgba(255,255,255,.05);
+/* Enfoque con anillo suave */
+input:focus{
+  outline: none !important;
+  border-color: #60a5fa !important;
+  box-shadow: 0 0 0 6px rgba(96,165,250,.18) !important;
 }
 
-body.login input{
-  background:#0b1728;
-  color:#eef3ff;
-  border:1px solid rgba(255,255,255,.15);
-  padding:14px 16px;
-  border-radius:14px;
-}
-body.login input::placeholder{ color:#b9c6d8; }
-
-/* Botón principal del login */
-body.login .primary{
-  background:#2c6bff;
-  color:#fff;
-  border:1px solid #1e5bff;
-  box-shadow:0 10px 26px rgba(44,107,255,.35);
-}
-body.login .primary:hover{
-  filter:brightness(1.06);
-  transform:translateY(-1px);
+/* Corrige autofill de Chrome (evita fondo blanco) */
+input:-webkit-autofill,
+input:-webkit-autofill:hover,
+input:-webkit-autofill:focus{
+  -webkit-text-fill-color: #e9f1ff !important;
+  -webkit-box-shadow: 0 0 0px 1000px #0f1a2b inset !important;
+  transition: background-color 9999s ease-out 0s !important;
 }
 
-
-/* === Panel profesor: filas siempre legibles === */
-#tbl thead th{
-  color:#d6deed;
-  background:transparent;
-  border-bottom:1px solid rgba(255,255,255,.08);
+/* === Tabla del profesor: todas las filas oscuras ================= */
+#tbl th,
+#tbl td{
+  background: #0e1a2a !important;                 /* MISMO tono para TODAS */
+  color: #e8f0ff !important;
+  border-color: rgba(255,255,255,.08) !important;
 }
 
-#tbl tbody tr{
-  background:#0f1b2d !important;      /* mismo tono de la fila activa */
-  color:#eaf0ff !important;
-  opacity:1 !important;                /* quita el desvanecido */
-  box-shadow: inset 0 0 0 1px rgba(255,255,255,.06);
+/* Si tenías zebra striping, lo anulamos explícitamente */
+#tbl tbody tr:nth-child(even) td,
+#tbl tbody tr:nth-child(odd)  td{
+  background: #0e1a2a !important;
 }
 
-#tbl tbody tr td{
-  color:#eaf0ff !important;
+/* Hover apenas más brillante para feedback */
+#tbl tbody tr:hover td{
+  background: #152640 !important;
 }
 
-#tbl tbody tr:hover{
-  background:#13233a !important;       /* apenas más oscuro al pasar el cursor */
-  box-shadow: inset 0 0 0 1px rgba(255,255,255,.10);
+/* Botones "Ver" legibles sobre fondo oscuro (por si acaso) */
+#tbl .secondary,
+#tbl button{
+  color:#e9f1ff;
 }
-
-#tbl tbody tr + tr{
-  border-top:1px solid rgba(255,255,255,.04); /* separador sutil entre filas */
-}
-
-#tbl tbody tr button{
-  background:#244cff;
-  color:#fff;
-  border:1px solid #1e44ee;
-  box-shadow:0 4px 14px rgba(36,76,255,.25);
-}
-#tbl tbody tr button:hover{ filter:brightness(1.05); }
