@@ -292,3 +292,54 @@ input:-webkit-autofill:focus{
 #tbl button{
   color:#e9f1ff;
 }
+
+/* ===== Panel del profesor – modo oscuro consistente ===== */
+#tbl thead th {
+  color: #e6edf7;
+  background: #0b1324;
+  border-color: #1c2a48;
+}
+
+#tbl tbody tr {
+  background: #0e1a2f;
+  color: #e6edf7;
+  border-color: #1c2a48;
+}
+#tbl tbody tr:hover {
+  background: #102640;           /* resalta al pasar el cursor */
+}
+
+/* Celdas */
+#tbl td, #tbl th {
+  border-color: #1c2a48;
+}
+
+/* Botón "Ver" (si usa .secondary) */
+#tbl .secondary {
+  background: #1a2c53;
+  border: 1px solid #27406d;
+  color: #e6edf7;
+}
+#tbl .secondary:hover {
+  background: #223a6c;
+}
+
+/* “4 intentos” / badges */
+.pill, #count-pill {
+  background: #0e1a2f;
+  color: #e6edf7;
+  border: 1px solid #1c2a48;
+}
+
+/* Botones superiores */
+button.primary {
+  background: #2f6cf6;
+  color: #fff;
+}
+button.primary:hover { background: #2a5fe0; }
+button.secondary {
+  background: #0e1a2f;
+  color: #e6edf7;
+  border: 1px solid #1c2a48;
+}
+button.secondary:hover { background: #142441; }
