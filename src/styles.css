@@ -233,126 +233,79 @@ tbody tr:hover{ transform: translateY(-2px); box-shadow: var(--shadow-md); }
   *{ transition:none !important; animation:none !important; }
 }
 
-/* ===== Contraste del login (más oscuro y legible) ===== */
-/* Si puedes, envuelve tu formulario con <div class="card auth"> ... </div> */
 
-.auth h1 { color: var(--text); opacity: 1; }
-
-.auth input {
-  /* texto del campo */
-  color: #0f172a;          /* legible en fondo claro */
-}
-@media (prefers-color-scheme: dark){
-  .auth input { color: #e5eaf6; }  /* legible en oscuro */
+/* === Login oscuro y tipografía legible === */
+body.login{
+  background: radial-gradient(900px 600px at 12% -10%, #16314d 0%, #0b1524 60%, #08101e 100%);
+  color:#eaf0ff;
 }
 
-/* placeholder más oscuro */
-.auth input::placeholder{
-  color: #475569;  /* slate-600 */
-  opacity: 1;      /* Safari */
+body.login h1{
+  color:#eaf0ff;
+  text-shadow: 0 2px 20px rgba(0,0,0,.25);
 }
 
-/* Si NO puedes añadir la clase .auth, usa este fallback global: */
-/*
-.card h1 { color: var(--text); opacity: 1; }
-input { color:#0f172a; }
-@media (prefers-color-scheme: dark){ input { color:#e5eaf6; } }
-input::placeholder{ color:#475569; opacity:1; }
-*/
-
-/* ===== Tema oscuro nítido para Panel del profesor ===== */
-:root{
-  --bg:#0b1220;
-  --surface:#0f172a;
-  --surface-2:#101826;
-  --border:rgba(148,163,184,.18);
-  --line:rgba(148,163,184,.12);
-  --fg:#e6edf6;            /* texto principal */
-  --fg-muted:#cbd5e1;      /* celdas/auxiliar */
-  --fg-dim:#94a3b8;        /* notas/ayuda */
-  --accent:#3b82f6;
-  --accent-2:#60a5fa;
+body.login .card,
+body.login .auth-card{
+  background:#0f1b2d;
+  border:1px solid rgba(255,255,255,.10);
+  border-radius:16px;
+  box-shadow:0 20px 60px rgba(0,0,0,.35), inset 0 1px 0 rgba(255,255,255,.05);
 }
 
-body{ 
-  background:
-    radial-gradient(1200px 600px at -10% -10%, rgba(59,130,246,.25), transparent 60%),
-    radial-gradient(900px 500px at 110% -20%, rgba(147,197,253,.15), transparent 55%),
-    var(--bg);
-  color:var(--fg);
-}
-
-/* Topbar */
-.topbar{ background:transparent; border-bottom:1px solid var(--line); }
-.topbar h1{ color:var(--fg); }
-.topbar a{ color:var(--fg); opacity:.9; }
-.topbar a:hover{ opacity:1; }
-
-/* Controles superiores */
-.pill,
-#count-pill{
-  background: rgba(255,255,255,.06);
-  border:1px solid var(--border);
-  color:var(--fg);
-}
-button.secondary{
-  background: rgba(255,255,255,.06);
-  border:1px solid var(--border);
-  color:var(--fg);
-  transition: .15s ease;
-}
-button.secondary:hover{
-  background: rgba(59,130,246,.18);
-  border-color: rgba(59,130,246,.45);
-}
-
-/* Tabla */
-table{ width:100%; border-collapse:separate; border-spacing:0 8px; }
-th, td{ border:1px solid var(--line); }
-th{
-  background: rgba(255,255,255,.06);
-  color:var(--fg);
-  font-weight:700;
-}
-td{
-  background: rgba(255,255,255,.035);
-  color:var(--fg-muted);
-  font-weight:500;
-}
-tbody tr:hover td{
-  background: rgba(59,130,246,.10);
-  color:var(--fg);
-}
-
-/* Botón "Ver" dentro de la tabla */
-td button.secondary{
-  background: rgba(59,130,246,.14);
-  border-color: rgba(59,130,246,.45);
-  color:var(--fg);
-}
-td button.secondary:hover{
-  background: rgba(59,130,246,.22);
-}
-
-/* Modal detalle */
-.modal{
-  background: var(--surface);
-  color:var(--fg);
-  border:1px solid var(--border);
+body.login input{
+  background:#0b1728;
+  color:#eef3ff;
+  border:1px solid rgba(255,255,255,.15);
+  padding:14px 16px;
   border-radius:14px;
 }
-.modal header,
-.modal footer{
-  background: rgba(255,255,255,.04);
-  border-color: var(--border);
+body.login input::placeholder{ color:#b9c6d8; }
+
+/* Botón principal del login */
+body.login .primary{
+  background:#2c6bff;
+  color:#fff;
+  border:1px solid #1e5bff;
+  box-shadow:0 10px 26px rgba(44,107,255,.35);
 }
-.modal .body{ color:var(--fg-muted); }
-.modal .body h4{ color:var(--fg); }
+body.login .primary:hover{
+  filter:brightness(1.06);
+  transform:translateY(-1px);
+}
 
-/* Evidencias */
-.ev{ display:grid; grid-template-columns:repeat(auto-fill,minmax(160px,1fr)); gap:12px; }
-.ev img{ width:100%; border-radius:10px; border:1px solid var(--line); display:block; }
-.ev .muted{ color:var(--fg-dim); }
 
-/* En celdas con números pequeños que se pierden */
-td, th { font-size:16px; }
+/* === Panel profesor: filas siempre legibles === */
+#tbl thead th{
+  color:#d6deed;
+  background:transparent;
+  border-bottom:1px solid rgba(255,255,255,.08);
+}
+
+#tbl tbody tr{
+  background:#0f1b2d !important;      /* mismo tono de la fila activa */
+  color:#eaf0ff !important;
+  opacity:1 !important;                /* quita el desvanecido */
+  box-shadow: inset 0 0 0 1px rgba(255,255,255,.06);
+}
+
+#tbl tbody tr td{
+  color:#eaf0ff !important;
+}
+
+#tbl tbody tr:hover{
+  background:#13233a !important;       /* apenas más oscuro al pasar el cursor */
+  box-shadow: inset 0 0 0 1px rgba(255,255,255,.10);
+}
+
+#tbl tbody tr + tr{
+  border-top:1px solid rgba(255,255,255,.04); /* separador sutil entre filas */
+}
+
+#tbl tbody tr button{
+  background:#244cff;
+  color:#fff;
+  border:1px solid #1e44ee;
+  box-shadow:0 4px 14px rgba(36,76,255,.25);
+}
+#tbl tbody tr button:hover{ filter:brightness(1.05); }
