@@ -212,7 +212,7 @@ function setCamStatus(kind, msg, help=''){
     else camHelp.classList.add('hidden');
   }
 }
-function releaseStream(){ try { stream?.getTracks()?.forEach(t=>t.stop()); } catch{} stream=null; }
+function releaseStream(){ try { stream?.getTracks()?.forEach(t=>t.stop()); } catch{} stream=null; window.__camReady = false; }
 function syncCanvasToVideo(){ const w=cam.videoWidth||640, h=cam.videoHeight||360; canvas.width=w; canvas.height=h; }
 const fmtTime = (ms)=>{ const s=Math.floor(ms/1000); const mm=String(Math.floor(s/60)).padStart(2,'0'); const ss=String(s%60).padStart(2,'0'); return `${mm}:${ss}`; };
 
@@ -1069,6 +1069,20 @@ btnStop?.addEventListener('click', ()=>{
   try { localStorage.removeItem('proctor.last_exam'); } catch {}
   console.log('[proctor] intento guardado:', attempt);
 });
+
+// Enviar a la BD (persistencia real)
+try {
+  const res = await fetch('/api/attempt/create', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(attempt)   // tu objeto attempt actual
+  });
+  const data = await res.json();
+  console.log('[persist]', data);
+} catch (e) {
+  console.error('[persist] fallo al enviar a la BD', e);
+}
+
 
 
 // Re-apertura / dispositivos
