@@ -1,61 +1,91 @@
-import { pool } from '../../lib/db.js';
+// /api/attempt/create.js
+import { pool } from '../../lib/db.js'; // <- cambia a ../lib/db.js si moviste db.js dentro de /api
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
-    res.status(405).json({ error: 'Method not allowed' });
-    return;
+    return res.status(405).json({ ok: false, error: 'Method not allowed' });
   }
-  try {
-    // Asegura JSON aunque el runtime no lo parsee
-    const body =
-      typeof req.body === 'object' && req.body !== null
-        ? req.body
-        : JSON.parse(req.body || req.rawBody?.toString() || '{}');
 
-    if (!body?.id) {
-      res.status(400).json({ error: 'Missing attempt payload' });
-      return;
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+
+    const body = req.body || {};
+    const student = body.student || {};
+    const summary = body.summary || {};
+    const exam    = body.exam || null;
+    const evids   = Array.isArray(body.evidences) ? body.evidences : [];
+
+    const name  = (student.name || '').trim();
+    const code  = (student.code || '').trim();
+    const email = (student.email || '').trim();
+
+    // 1) Upsert del estudiante (requiere UNIQUE en students.code)
+    const stu = await client.query(
+      `INSERT INTO students (code, name, email)
+       VALUES ($1, $2, $3)
+       ON CONFLICT (code) DO UPDATE
+         SET name = EXCLUDED.name,
+             email = EXCLUDED.email
+       RETURNING id`,
+      [code || null, name || null, email || null]
+    );
+    const studentId = stu.rows[0].id;
+
+    // 2) Desglose de métricas del resumen
+    const startedAt = summary.started_at || summary.startedAt || new Date().toISOString();
+    const endedAt   = summary.ended_at   || summary.endedAt   || new Date().toISOString();
+    const duration  = summary.duration_ms ?? summary.durationMs ?? null;
+
+    const offEpisodes   = summary.tab_activity?.off_episodes ?? 0;
+    const lookEpisodes  = summary.attention?.lookaway_episodes ?? 0;
+    const speakEpisodes = summary.lips?.speak_episodes ?? 0;
+
+    const fpsMedian = summary.performance?.fps_median ?? null;
+    const p95ms     = summary.performance?.latency_p95_ms ?? null;
+
+    // 3) Insert del intento
+    const ins = await client.query(
+      `INSERT INTO attempts
+         (student_id, started_at, ended_at, duration_ms,
+          offtab_episodes, lookaway_episodes, speak_episodes,
+          fps_median, latency_p95_ms)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
+       RETURNING id`,
+      [studentId, startedAt, endedAt, duration,
+       offEpisodes, lookEpisodes, speakEpisodes,
+       fpsMedian, p95ms]
+    );
+    const attemptId = ins.rows[0].id;
+
+    // 4) Resultados del examen (opcional)
+    if (exam && exam.total != null && exam.correct != null) {
+      await client.query(
+        `INSERT INTO exam_attempts (attempt_id, correct, total)
+         VALUES ($1,$2,$3)`,
+        [attemptId, exam.correct, exam.total]
+      );
     }
 
-    const a = body;
-    const client = await pool.connect();
-    try {
-      await client.query('BEGIN');
-      await client.query(
-        `INSERT INTO attempts
-         (id, student_name, student_code, started_at, ended_at, duration_ms,
-          offtab_episodes, lookaway_episodes, speak_episodes, exam_correct, exam_total)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
-         ON CONFLICT (id) DO NOTHING`,
-        [
-          a.id, a.student?.name || null, a.student?.code || null,
-          a.startedAt, a.endedAt, a.durationMs ?? 0,
-          a.summary?.tab_activity?.off_episodes ?? 0,
-          a.summary?.attention?.lookaway_episodes ?? 0,
-          a.summary?.lips?.speak_episodes ?? 0,
-          a.exam?.correct ?? a.exam?.score ?? 0,
-          a.exam?.total ?? 0
-        ]
-      );
-
-      const evids = Array.isArray(a.evidences) ? a.evidences.slice(0, 24) : [];
-      for (const ev of evids) {
+    // 5) Evidencias (opcional)
+    if (evids.length) {
+      for (const it of evids.slice(0, 100)) {
+        const tMs = typeof it.t === 'number' ? it.t : Date.now();
         await client.query(
-          `INSERT INTO evidences (attempt_id, t, kind, note, data)
-           VALUES ($1,$2,$3,$4,$5)`,
-          [a.id, ev.t || new Date().toISOString(), ev.kind || null, ev.note || null, ev.data || null]
+          `INSERT INTO evidences (attempt_id, kind, t, data, note)
+           VALUES ($1, $2, to_timestamp($3/1000.0), $4, $5)`,
+          [attemptId, it.kind || null, tMs, it.data || null, it.note || null]
         );
       }
-      await client.query('COMMIT');
-      res.status(200).json({ ok: true, id: a.id, ev: evids.length });
-    } catch (e) {
-      await client.query('ROLLBACK');
-      throw e;
-    } finally {
-      client.release();
     }
+
+    await client.query('COMMIT');
+    return res.status(200).json({ ok: true, id: attemptId });
   } catch (err) {
-    console.error(err);
-    res.status(500).json({ ok: false, error: err.message || String(err) });
+    await client.query('ROLLBACK');
+    console.error('[api/attempt/create] error:', err);
+    return res.status(500).json({ ok: false, error: err.message });
+  } finally {
+    client.release();
   }
 }
