@@ -1,7 +1,8 @@
 {
-  "private": true,
+  "name": "atencion-web-mvp",
+  "version": "1.0.0",
   "type": "module",
   "dependencies": {
-    "@neondatabase/serverless": "^0.9.4"
+    "pg": "^8.11.5"
   }
 }

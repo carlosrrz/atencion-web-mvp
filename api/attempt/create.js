@@ -1,86 +1,58 @@
-// /api/attempt/create.js
-import { tx } from '../lib/db.js';
+// api/attempt/create.js
+import { pool } from '../../lib/db.js';
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
-    res.status(405).json({ ok: false, error: 'Method Not Allowed' });
+    res.status(405).json({ error: 'Method not allowed' });
     return;
   }
-
   try {
-    const a = req.body || {};
+    const body = req.body ?? JSON.parse(req.rawBody?.toString() || '{}'); // safety
+    if (!body?.id) {
+      res.status(400).json({ error: 'Missing attempt payload' });
+      return;
+    }
 
-    const exam = a.exam || {};
-    const s = a.summary || {};
-    const ta = s.tab_activity || {};
-    const att = s.attention || {};
-    const lip = s.lips || {};
-
-    const evids = Array.isArray(a.evidences)
-      ? a.evidences
-      : (Array.isArray(a.evidence) ? a.evidence : []);
-
-    const result = await tx(async (client) => {
-      // Inserta intento (id se genera en la BD)
-      const insAttempt = await client.query(
-        `
-        INSERT INTO attempts (
-          student_name, student_code, student_email,
-          started_at, ended_at, duration_ms,
-          offtab_episodes, lookaway_episodes, speak_episodes
-        )
-        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
-        RETURNING id
-        `,
+    const a = body;
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+      await client.query(
+        `INSERT INTO attempts
+         (id, student_name, student_code, started_at, ended_at, duration_ms,
+          offtab_episodes, lookaway_episodes, speak_episodes, exam_correct, exam_total)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
+         ON CONFLICT (id) DO NOTHING`,
         [
-          a.student?.name ?? null,
-          a.student?.code ?? null,
-          a.student?.email ?? null,
-          a.startedAt ?? a.startedAtISO ?? null,
-          a.endedAt ?? null,
-          a.durationMs ?? Math.round(s.duration_ms ?? 0),
-          ta.off_episodes ?? 0,
-          att.lookaway_episodes ?? 0,
-          lip.speak_episodes ?? 0,
+          a.id, a.student?.name || null, a.student?.code || null,
+          a.startedAt, a.endedAt, a.durationMs ?? 0,
+          a.summary?.tab_activity?.off_episodes ?? 0,
+          a.summary?.attention?.lookaway_episodes ?? 0,
+          a.summary?.lips?.speak_episodes ?? 0,
+          a.exam?.correct ?? a.exam?.score ?? 0,
+          a.exam?.total ?? 0
         ]
       );
 
-      const attemptId = insAttempt.rows[0].id;
-
-      // Examen (opcional)
-      const correct = (exam.correct ?? exam.score ?? null);
-      const total   = (exam.total ?? null);
-      if (correct != null && total != null) {
+      const evids = Array.isArray(a.evidences) ? a.evidences.slice(0, 24) : [];
+      for (const ev of evids) {
         await client.query(
-          `INSERT INTO exam_attempts (attempt_id, correct, total) VALUES ($1,$2,$3)`,
-          [attemptId, correct, total]
+          `INSERT INTO evidences (attempt_id, t, kind, note, data)
+           VALUES ($1,$2,$3,$4,$5)`,
+          [a.id, ev.t || new Date().toISOString(), ev.kind || null, ev.note || null, ev.data || null]
         );
       }
+      await client.query('COMMIT');
 
-      // Evidencias (opcional, recorta a 24 para no exceder payload)
-      const items = evids.slice(0, 24);
-      for (const it of items) {
-        await client.query(
-          `
-          INSERT INTO evidences (attempt_id, kind, data, t, note)
-          VALUES ($1,$2,$3,$4,$5)
-          `,
-          [
-            attemptId,
-            it.kind ?? null,
-            it.data ?? null,                                  // base64
-            it.t ? new Date(it.t).toISOString() : null,       // ms → ISO
-            it.note ?? null
-          ]
-        );
-      }
-
-      return attemptId;
-    });
-
-    res.status(200).json({ ok: true, id: result });
+      res.status(200).json({ ok: true, id: a.id, ev: evids.length });
+    } catch (e) {
+      await client.query('ROLLBACK');
+      throw e;
+    } finally {
+      client.release();
+    }
   } catch (err) {
-    console.error('[api/attempt/create] error', err);
-    res.status(500).json({ ok: false, error: String(err?.message || err) });
+    console.error(err);
+    res.status(500).json({ ok: false, error: err.message || String(err) });
   }
 }
