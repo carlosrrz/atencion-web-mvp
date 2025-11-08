@@ -423,3 +423,30 @@ button.secondary:hover { background: #142441; }
 .modal, .modal *{
   border-color: inherit;
 }
+
+/* ===== Opciones del examen ===== */
+.q-opts { display: grid; gap: 12px; }
+
+.q-opt {
+  display: flex; align-items: center; gap: 12px;
+  padding: 14px 16px;
+  min-height: 56px;
+  border: 1px solid #243142;
+  background: #0c1624;
+  border-radius: 14px;
+}
+
+.q-opt input[type="radio"]{
+  width: 18px; height: 18px;
+  accent-color: #3b82f6;
+  flex: 0 0 auto;
+  margin: 0;
+}
+
+.q-opt .text { flex: 1 1 auto; line-height: 1.3; }
+.q-opt .suffix { margin-left: 12px; opacity: .85; white-space: nowrap; }
+
+.q-opt:hover{
+  border-color: #334155;
+  background: #0f1c2d;
+}

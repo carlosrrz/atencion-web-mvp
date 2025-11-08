@@ -229,7 +229,7 @@ els.rt.textContent = '0.0';
 (async () => {
   await loadQuestions({ url: './src/questions.json', take: 8 });
   els.total.textContent = String(QUESTIONS.length);
-  els.text.textContent = 'Por favor, prenda su cámara y presione el botón "Iniciar monitoreo" antes de inciar el examen, de lo contrario no podrá realizarlo. Luego, presione "Iniciar test" cuando el docente lo indique.';
+  els.text.textContent = 'Por favor, prenda su cámara y presione el botón "Iniciar monitoreo" antes de inciar el examen, de lo contrario no podrá realizarlo. Luego, presione "Iniciar test" cuando el docente lo indique. Al finalizar el examen, presione el botón "Finzalizar y exportar" para cumplir correctamente con el monitoreo';
 })();
 
 
