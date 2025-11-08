@@ -1070,18 +1070,20 @@ btnStop?.addEventListener('click', ()=>{
   console.log('[proctor] intento guardado:', attempt);
 });
 
-// Enviar a la BD (persistencia real)
+
+// Envia a la BD (no bloquea la UI)
 try {
-  const res = await fetch('/api/attempt/create', {
+  fetch('/api/attempt/create', {
     method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify(attempt)   // tu objeto attempt actual
-  });
-  const data = await res.json();
-  console.log('[persist]', data);
-} catch (e) {
-  console.error('[persist] fallo al enviar a la BD', e);
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(attempt)
+  }).then(r => r.json()).then(resp => {
+    console.log('[persist] resultado:', resp);
+  }).catch(err => console.warn('[persist] fallo', err));
+} catch(e) {
+  console.warn('[persist] error', e);
 }
+
 
 
 
