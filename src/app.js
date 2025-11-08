@@ -1066,6 +1066,7 @@ btnStop?.addEventListener('click', ()=>{
   };
 
   saveAttempt(attempt);
+  saveAttemptRemote(attempt);   
   try { localStorage.removeItem('proctor.last_exam'); } catch {}
   console.log('[proctor] intento guardado:', attempt);
 });
@@ -1116,3 +1117,27 @@ navigator.mediaDevices?.addEventListener?.('devicechange', async ()=>{
   document.getElementById('open-privacy')
     ?.addEventListener('click', (e)=>{ e.preventDefault(); window.open('/privacidad.html','_blank','noopener'); });
 })();
+
+// ---- enviar intento al backend (Vercel) ----
+async function saveAttemptRemote(attempt) {
+  try {
+    // recorta evidencias para no pasar el límite de Vercel (payload)
+    const slim = {
+      ...attempt,
+      evidences: Array.isArray(attempt.evidences) ? attempt.evidences.slice(-12) : []
+    };
+
+    console.log('[proctor] POST /api/attempt/create', slim.id, 'ev:', slim.evidences.length);
+
+    const res = await fetch('/api/attempt/create', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(slim)
+    });
+
+    const data = await res.json().catch(() => ({}));
+    console.log('[proctor] API status', res.status, data);
+  } catch (err) {
+    console.error('[proctor] API error', err);
+  }
+}
