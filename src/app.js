@@ -1132,7 +1132,7 @@ async function saveAttemptRemote(attempt) {
     const res = await fetch('/api/attempt/create', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(slim)
+      body: JSON.stringify(attempt)
     });
 
     const data = await res.json().catch(() => ({}));

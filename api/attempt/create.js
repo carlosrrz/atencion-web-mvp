@@ -1,4 +1,3 @@
-// api/attempt/create.js
 import { pool } from '../../lib/db.js';
 
 export default async function handler(req, res) {
@@ -7,7 +6,12 @@ export default async function handler(req, res) {
     return;
   }
   try {
-    const body = req.body ?? JSON.parse(req.rawBody?.toString() || '{}'); // safety
+    // Asegura JSON aunque el runtime no lo parsee
+    const body =
+      typeof req.body === 'object' && req.body !== null
+        ? req.body
+        : JSON.parse(req.body || req.rawBody?.toString() || '{}');
+
     if (!body?.id) {
       res.status(400).json({ error: 'Missing attempt payload' });
       return;
@@ -43,7 +47,6 @@ export default async function handler(req, res) {
         );
       }
       await client.query('COMMIT');
-
       res.status(200).json({ ok: true, id: a.id, ev: evids.length });
     } catch (e) {
       await client.query('ROLLBACK');
