@@ -63,20 +63,35 @@ function renderQuestion() {
   els.total.textContent = String(QUESTIONS.length);
   els.text.textContent = q.text;
 
+  // Limpia el host de opciones
   els.options.innerHTML = '';
-  q.options.forEach((op, k) => {
-    const id = `q_${q.id}_${k}`;
-    const label = document.createElement('label');
-    label.innerHTML = `
-      <input type="radio" name="opt" value="${k}" id="${id}">
-      <span>${op}</span>
+
+  // Contenedor moderno para las opciones
+  const cont = document.createElement('div');
+  cont.className = 'q-opts';
+
+  // Permite tanto strings como objetos { label, suffix }
+  const norm = (op) => typeof op === 'string' ? { label: op } : op || {};
+
+  (q.options || []).forEach((op, k) => {
+    const o = norm(op);
+    const row = document.createElement('label');
+    row.className = 'q-opt';
+    row.innerHTML = `
+      <input type="radio" name="opt" value="${k}">
+      <span class="text">${o.label ?? ''}</span>
+      ${o.suffix ? `<span class="suffix">${o.suffix}</span>` : ''}
     `;
-    els.options.appendChild(label);
+    cont.appendChild(row);
   });
 
+  els.options.appendChild(cont);
+
+  // Resetea RT y marca inicio de la pregunta
   els.rt.textContent = '0.0';
   state.qStartTs = performance.now();
 }
+
 
 function getChosen() {
   const sel = els.options.querySelector('input[name="opt"]:checked');

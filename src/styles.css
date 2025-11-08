@@ -424,29 +424,32 @@ button.secondary:hover { background: #142441; }
   border-color: inherit;
 }
 
-/* ===== Opciones del examen ===== */
-.q-opts { display: grid; gap: 12px; }
+/* Contenedor de opciones */
+.q-opts{
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-top: 12px;
+}
 
-.q-opt {
-  display: flex; align-items: center; gap: 12px;
-  padding: 14px 16px;
-  min-height: 56px;
-  border: 1px solid #243142;
-  background: #0c1624;
+/* Cada opción */
+.q-opt{
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  border: 1px solid rgba(255,255,255,.08);
+  background: rgba(13, 23, 37, .8);
   border-radius: 14px;
+  cursor: pointer;
 }
 
-.q-opt input[type="radio"]{
-  width: 18px; height: 18px;
-  accent-color: #3b82f6;
-  flex: 0 0 auto;
-  margin: 0;
-}
+/* Radio + texto */
+.q-opt input{ width: 18px; height: 18px; }
+.q-opt .text{ flex: 1; }
 
-.q-opt .text { flex: 1 1 auto; line-height: 1.3; }
-.q-opt .suffix { margin-left: 12px; opacity: .85; white-space: nowrap; }
-
-.q-opt:hover{
-  border-color: #334155;
-  background: #0f1c2d;
+/* Sufijo a la derecha (p.ej. O(n), Θ(n log n)) */
+.q-opt .suffix{
+  opacity: .85;
+  white-space: nowrap;
 }
