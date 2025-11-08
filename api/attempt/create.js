@@ -70,12 +70,20 @@ export default async function handler(req, res) {
     // 5) Evidencias (opcional)
     if (evids.length) {
       for (const it of evids.slice(0, 100)) {
-        const tMs = typeof it.t === 'number' ? it.t : Date.now();
+        // it.t viene en milisegundos; lo convertimos a timestamptz
+        const tMs = Number(it.t ?? Date.now());
         await client.query(
-          `INSERT INTO evidences (attempt_id, kind, t, data, note)
-           VALUES ($1, $2, to_timestamp($3/1000.0), $4, $5)`,
-          [attemptId, it.kind || null, tMs, it.data || null, it.note || null]
+            `INSERT INTO evidences (attempt_id, kind, taken_at, image_base64, note)
+            VALUES ($1, $2, to_timestamp($3/1000.0), $4, $5)`,
+            [
+                attemptId,
+                it.kind || null,
+                tMs,
+                it.data || null,   // base64 de la imagen
+                it.note || null
+            ]
         );
+
       }
     }
 
