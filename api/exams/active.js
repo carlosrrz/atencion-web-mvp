@@ -1,7 +1,29 @@
-import { pool } from '../../lib/db.js';
+// api/exam/active.js
+import { getPool } from '../../lib/db.js';
 
 export default async function handler(req, res) {
-  const { rows:[ex] } = await pool.query('SELECT id,name,questions FROM exams WHERE is_active=true ORDER BY created_at DESC LIMIT 1');
-  if (!ex) return res.status(200).json({ ok:false, exam:null });
-  return res.status(200).json({ ok:true, exam: ex });
+  if (req.method !== 'GET') {
+    return res.status(405).json({ ok: false, error: 'Method not allowed' });
+  }
+  try {
+    const pool = getPool();
+    const { rows } = await pool.query(
+      `SELECT value FROM app_state WHERE key='active_exam' LIMIT 1`
+    );
+    if (!rows.length) {
+      return res.status(404).json({ ok: false, error: 'No hay examen activo' });
+    }
+
+    const raw = rows[0].value;
+    const data = typeof raw === 'string' ? JSON.parse(raw) : raw;
+
+    return res.status(200).json({
+      ok: true,
+      name: data.name,
+      questions: data.questions
+    });
+  } catch (e) {
+    console.error('[exam/active]', e);
+    return res.status(500).json({ ok: false, error: 'No se pudo leer el examen' });
+  }
 }

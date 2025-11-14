@@ -1,33 +1,39 @@
 // src/exam.js
 let QUESTIONS = [];
 
-async function loadQuestions({ url = './src/questions.json', take = 8 } = {}) {
-  // 1) intento con examen activo del backend
+async function loadQuestions({ take = 8 } = {}) {
+  let bank = null;
+
+  // 1) intento examen activo (BD)
   try {
-    const r = await fetch('/api/exams/active', { cache:'no-store' });
-    const j = await r.json();
-    if (j.ok && j.exam && Array.isArray(j.exam.questions) && j.exam.questions.length) {
-      const bank = j.exam.questions;
-      const shuffled = bank.slice().sort(()=>Math.random()-0.5);
-      QUESTIONS = shuffled.slice(0, Math.min(take, shuffled.length));
-      return;
+    const r = await fetch('/api/exam/active', { cache: 'no-store' });
+    if (r.ok) {
+      const j = await r.json();
+      if (j.ok && Array.isArray(j.questions) && j.questions.length) {
+        bank = j.questions;
+      }
     }
   } catch {}
 
-  // 2) fallback a tu JSON local
-  try {
-    const res = await fetch(url, { cache: 'no-store' });
-    const bank = await res.json();
-    const shuffled = bank.slice().sort(()=>Math.random()-0.5);
-    QUESTIONS = shuffled.slice(0, take);
-  } catch (e) {
-    console.warn('[exam] No se pudo cargar banco; fallback mínimo');
-    QUESTIONS = [
-      { id:'q_f1', text:'Fallback 1', options:['A','B','C','D'], correct:0 },
-      { id:'q_f2', text:'Fallback 2', options:['A','B','C','D'], correct:1 }
-    ];
+  // 2) fallback al archivo local
+  if (!bank) {
+    try {
+      const r = await fetch('./src/questions.json', { cache: 'no-store' });
+      bank = await r.json();
+    } catch {
+      // último fallback mínimo
+      bank = [
+        { id:'fallback_1', text:'Fallback 1', options:['A','B','C','D'], correct:0 },
+        { id:'fallback_2', text:'Fallback 2', options:['A','B','C','D'], correct:1 }
+      ];
+    }
   }
+
+  // baraja y toma N
+  const shuffled = bank.slice().sort(() => Math.random() - 0.5);
+  QUESTIONS = shuffled.slice(0, take);
 }
+
 
 
 

@@ -75,62 +75,77 @@
 
   <section class="card" style="margin-top:16px">
   <h3>Banco de examen (CSV/JSON)</h3>
-  <input id="examName" placeholder="Nombre del examen" class="input"/>
-  <input id="examFile" type="file" accept=".json,.csv" />
-  <button id="btnUploadExam" class="primary">Cargar y activar</button>
-  <div id="examMsg" style="margin-top:8px;opacity:.8"></div>
-</section>
+  <input id="exam-title" class="auth-input" placeholder="Nombre del examen">
+<input id="exam-file" type="file" accept=".json,.csv">
+<button id="exam-upload" class="primary">Cargar y activar</button>
 
 <script type="module">
-  const $ = s => document.querySelector(s);
+  const $ = (id)=>document.getElementById(id);
 
-  function csvToQuestions(csvText) {
-    // Espera cabecera: text,opt1,opt2,opt3,opt4,correct  (correct = 1..N)
-    const lines = csvText.split(/\r?\n/).map(x => x.trim()).filter(Boolean);
-    const [header, ...rows] = lines;
-    const cols = header.split(',').map(x=>x.trim());
-    const idx = {
-      text: cols.indexOf('text'),
-      correct: cols.indexOf('correct')
-    };
-    const optIdx = cols.filter(c=>c.startsWith('opt')).map(c=>cols.indexOf(c));
+  // Parser CSV simple (comas, sin casos raros de comillas anidadas)
+  function parseCSV(text) {
+    const lines = text.split(/\r?\n/).filter(Boolean);
     const out = [];
-    for (const r of rows) {
-      const parts = r.split(',');
-      const text = parts[idx.text];
-      const options = optIdx.map(i => parts[i]).filter(Boolean);
-      const correct = Number(parts[idx.correct]) - 1; // 1-based -> 0-based
-      if (text && options.length >= 2 && correct >= 0) out.push({ id: crypto.randomUUID(), text, options, correct });
+    // espera encabezados: id,text,opt1,opt2,opt3,opt4,correct_index
+    const headers = lines.shift().split(',');
+    const idx = (h)=>headers.indexOf(h);
+    for (const ln of lines) {
+      const cols = ln.split(',');
+      out.push({
+        id: cols[idx('id')],
+        text: cols[idx('text')],
+        options: [
+          cols[idx('opt1')],
+          cols[idx('opt2')],
+          cols[idx('opt3')],
+          cols[idx('opt4')],
+        ],
+        correct: Number(cols[idx('correct_index')])
+      });
     }
     return out;
   }
 
-  $('#btnUploadExam').onclick = async () => {
-    const name = $('#examName').value.trim() || 'Examen';
-    const file = $('#examFile').files[0];
-    if (!file) return $('#examMsg').textContent = 'Selecciona un archivo CSV o JSON';
+  $('exam-upload').addEventListener('click', async () => {
+    const name = $('exam-title').value.trim();
+    const file = $('exam-file').files[0];
+    if (!name) return alert('Pon un nombre');
+    if (!file) return alert('Selecciona un archivo .json o .csv');
 
-    let questions = [];
-    const text = await file.text();
-    if (file.name.endsWith('.json')) {
-      const parsed = JSON.parse(text);
-      questions = Array.isArray(parsed) ? parsed : parsed.questions;
-    } else {
-      questions = csvToQuestions(text);
-    }
-    if (!Array.isArray(questions) || questions.length === 0) {
-      $('#examMsg').textContent = 'El archivo no contiene preguntas válidas';
-      return;
+    let questions;
+    try {
+      const text = await file.text();
+      if (file.name.toLowerCase().endsWith('.json')) {
+        const arr = JSON.parse(text);
+        if (!Array.isArray(arr)) throw new Error('JSON inválido');
+        questions = arr;
+      } else {
+        questions = parseCSV(text);
+      }
+    } catch (e) {
+      console.error(e);
+      return alert('No pude leer el archivo. Verifica formato.');
     }
 
-    const r = await fetch('/api/exams/upload', {
-      method:'POST',
-      headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({ name, questions, activate:true })
-    });
-    const j = await r.json();
-    $('#examMsg').textContent = j.ok ? 'Examen cargado y activado ✅' : (`Error: ${j.error||'No se pudo'}`);
-  };
+    // Validación mínima
+    if (!questions.length || !questions[0].options || typeof questions[0].correct !== 'number') {
+      return alert('Estructura de preguntas inválida');
+    }
+
+    try {
+      const r = await fetch('/api/exam/set', {
+        method: 'POST',
+        headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({ name, questions })
+      });
+      const j = await r.json();
+      if (!r.ok || !j.ok) throw new Error(j.error || 'Fallo al guardar');
+      alert('Examen activado ✅');
+    } catch (e) {
+      console.error(e);
+      alert('Error guardando el examen');
+    }
+  });
 </script>
 
 
