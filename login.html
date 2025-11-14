@@ -89,8 +89,8 @@
       <div class="row">
         <input id="user" class="auth-input" placeholder="Usuario" autocomplete="username" />
         <input id="pass" class="auth-input" type="password" placeholder="Contraseña" autocomplete="current-password" />
-        <button id="btn" class="primary">Entrar</button>
-        <button id="btn-register" class="secondary">Crear cuenta</button>
+        <button id="btn" class="primary" type="button">Entrar</button>
+        <button id="btn-register" class="secondary" type="button">Crear cuenta</button>
       </div>
     </div>
   </main>
@@ -130,46 +130,70 @@
 
   <!-- ===== Lógica de Login + Registro (API real) ===== -->
 <script type="module">
-const $ = (s)=>document.querySelector(s);
+window.addEventListener('DOMContentLoaded', () => {
+  const $ = (s)=>document.querySelector(s);
 
-// LOGIN
-$('#btn').addEventListener('click', async () => {
-  const email = $('#user').value.trim();
-  const password = $('#pass').value.trim();
-  const r = await fetch('/api/auth/login', {
-    method:'POST',
-    headers:{'Content-Type':'application/json'},
-    body: JSON.stringify({ email, password })
+  // Elementos
+  const btnLogin      = $('#btn');
+  const btnOpenReg    = $('#btn-register');
+  const modal         = $('#create-modal');
+  const btnRegCreate  = $('#reg-create');
+  const btnRegCancel  = $('#reg-cancel');
+
+  function show(el){ el && el.classList.remove('hidden'); }
+  function hide(el){ el && el.classList.add('hidden'); }
+
+  // LOGIN
+  btnLogin?.addEventListener('click', async (e)=>{
+    e.preventDefault();
+    const email = $('#user')?.value.trim();
+    const password = $('#pass')?.value.trim();
+    if(!email || !password) return alert('Completa usuario y contraseña');
+
+    try{
+      const r = await fetch('/api/auth/login', {
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        credentials:'include',
+        body: JSON.stringify({ email, password })
+      });
+      const j = await r.json();
+      if(!j.ok) return alert(j.error || 'No se pudo iniciar sesión');
+
+      location.replace(j.user.role === 'prof' ? 'encargado.html' : 'estudiante.html');
+    }catch(err){
+      console.error(err);
+      alert('Error de red');
+    }
   });
-  const j = await r.json();
-  if(!j.ok){ alert(j.error || 'No se pudo iniciar sesión'); return; }
 
-  if (j.user.role === 'prof') location.replace('encargado.html');
-  else location.replace('estudiante.html');
-});
+  // ABRIR/CERRAR MODAL REGISTRO
+  btnOpenReg?.addEventListener('click', ()=> show(modal));
+  btnRegCancel?.addEventListener('click', ()=> hide(modal));
 
-// REGISTRO (usa los campos del modal que ya hiciste)
-$('#reg-create').addEventListener('click', async ()=>{
-  const name = $('#reg-name').value.trim();
-  const email = $('#reg-email').value.trim();
-  const password = $('#reg-pass').value.trim();
-  const role = $('#reg-role').value; // 'student' | 'prof'
+  // REGISTRO
+  btnRegCreate?.addEventListener('click', async ()=>{
+    const name     = $('#reg-name')?.value.trim();
+    const email    = $('#reg-email')?.value.trim();
+    const password = $('#reg-pass')?.value.trim();
+    const role     = $('#reg-role')?.value || 'student';
+    if(!name || !email || !password) return alert('Completa todos los campos');
 
-  const r = await fetch('/api/auth/register',{
-    method:'POST',
-    headers:{'Content-Type':'application/json'},
-    body: JSON.stringify({ name, email, password, role })
+    try{
+      const r = await fetch('/api/auth/register', {
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        credentials:'include',
+        body: JSON.stringify({ name, email, password, role })
+      });
+      const j = await r.json();
+      if(!j.ok) return alert(j.error || 'No se pudo registrar');
+
+      location.replace(j.user.role === 'prof' ? 'encargado.html' : 'estudiante.html');
+    }catch(err){
+      console.error(err);
+      alert('Error de red');
+    }
   });
-  const j = await r.json();
-  if(!j.ok){ alert(j.error || 'No se pudo registrar'); return; }
-
-  if (j.user.role === 'prof') location.replace('encargado.html');
-  else location.replace('estudiante.html');
 });
 </script>
-
-
-  <!-- ❗️IMPORTANTE: Elimina el bloque antiguo con setRole/CREDS (MVP).
-       Si lo dejas activo, se "pelea" con el login real y duplica listeners. -->
-</body>
-</html>
