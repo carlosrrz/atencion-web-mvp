@@ -129,79 +129,45 @@
   </dialog>
 
   <!-- ===== Lógica de Login + Registro (API real) ===== -->
-  <script type="module">
-    // Helpers sin colisión
-    const qs  = (s) => document.querySelector(s);
-    const qsi = (s) => /** @type {HTMLInputElement} */(document.querySelector(s));
+<script type="module">
+const $ = (s)=>document.querySelector(s);
 
-    async function doLogin() {
-      const email = qsi('#user').value.trim();
-      const password = qsi('#pass').value.trim();
-      if (!email || !password) {
-        alert('Completa usuario y contraseña');
-        return;
-      }
+// LOGIN
+$('#btn').addEventListener('click', async () => {
+  const email = $('#user').value.trim();
+  const password = $('#pass').value.trim();
+  const r = await fetch('/api/auth/login', {
+    method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({ email, password })
+  });
+  const j = await r.json();
+  if(!j.ok){ alert(j.error || 'No se pudo iniciar sesión'); return; }
 
-      const r = await fetch('/api/auth/login', {
-        method: 'POST',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({ email, password })
-      });
-      const j = await r.json();
-      if (!j.ok) return alert(j.error || 'No se pudo iniciar sesión');
+  if (j.user.role === 'prof') location.replace('encargado.html');
+  else location.replace('estudiante.html');
+});
 
-      // Redirección según rol
-      if (j.user.role === 'prof') location.replace('encargado.html');
-      else location.replace('estudiante.html');
-    }
+// REGISTRO (usa los campos del modal que ya hiciste)
+$('#reg-create').addEventListener('click', async ()=>{
+  const name = $('#reg-name').value.trim();
+  const email = $('#reg-email').value.trim();
+  const password = $('#reg-pass').value.trim();
+  const role = $('#reg-role').value; // 'student' | 'prof'
 
-    // Click en Entrar
-    qs('#btn')?.addEventListener('click', doLogin);
-    // Enter para enviar
-    ['#user','#pass'].forEach(sel => {
-      qsi(sel)?.addEventListener('keydown', (e) => {
-        if (e.key === 'Enter') doLogin();
-      });
-    });
+  const r = await fetch('/api/auth/register',{
+    method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({ name, email, password, role })
+  });
+  const j = await r.json();
+  if(!j.ok){ alert(j.error || 'No se pudo registrar'); return; }
 
-    // Abrir/cerrar modal de registro
-    const dlg = /** @type {HTMLDialogElement} */ (qs('#register-dialog'));
-    qs('#btn-register')?.addEventListener('click', () => dlg.showModal());
-    qs('#reg-cancel')?.addEventListener('click', () => dlg.close());
+  if (j.user.role === 'prof') location.replace('encargado.html');
+  else location.replace('estudiante.html');
+});
+</script>
 
-    // Registro
-    qs('#form-register')?.addEventListener('submit', async (e) => {
-      e.preventDefault();
-      const name     = qsi('#reg-name').value.trim();
-      const email    = qsi('#reg-email').value.trim();
-      const password = qsi('#reg-pass').value.trim();
-      const role     = qsi('#reg-role').value;
-      const msg      = qs('#reg-msg');
-
-      msg.textContent = '';
-
-      if (!name || !email || !password) {
-        msg.textContent = 'Completa todos los campos.';
-        return;
-      }
-
-      const r = await fetch('/api/auth/register', {
-        method: 'POST',
-        headers: {'Content-Type':'application/json'},
-        body: JSON.stringify({ name, email, password, role })
-      });
-      const j = await r.json();
-
-      if (!j.ok) {
-        msg.textContent = j.error || 'No se pudo registrar';
-        return;
-      }
-
-      msg.textContent = 'Cuenta creada. Redirigiendo…';
-      if (j.user.role === 'prof') location.replace('encargado.html');
-      else location.replace('estudiante.html');
-    });
-  </script>
 
   <!-- ❗️IMPORTANTE: Elimina el bloque antiguo con setRole/CREDS (MVP).
        Si lo dejas activo, se "pelea" con el login real y duplica listeners. -->
