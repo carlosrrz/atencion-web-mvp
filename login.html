@@ -4,7 +4,10 @@
   <meta charset="utf-8"/>
   <meta name="viewport" content="width=device-width,initial-scale=1"/>
   <title>Ingreso</title>
+
+  <!-- Tu hoja global -->
   <link rel="stylesheet" href="./src/styles.css"/>
+
   <style>
     /* ===== Fondo general (oscuro con sutil gradiente) ===== */
     body.auth {
@@ -18,12 +21,11 @@
       display: grid;
       place-items: center;
       padding: 28px 16px;
+      font-family: system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Cantarell, "Helvetica Neue", Arial, "Noto Sans", "Source Sans Pro", sans-serif;
     }
-
-    /* ===== Contenedor ===== */
     .wrap { width: 100%; max-width: 560px; }
 
-    /* ===== Card de login ===== */
+    /* ===== Card ===== */
     .auth-card {
       background:#0b1324;
       border:1px solid #13233f;
@@ -33,61 +35,58 @@
         0 8px 28px rgba(2,8,23,.45),
         inset 0 1px rgba(255,255,255,.04);
     }
-
-    .auth-card h2{
-      margin: 0 0 18px 0;
-      font-size: 28px;
-      line-height: 1.2;
-      color:#e6edf7;
-      letter-spacing:.2px;
-    }
+    .auth-card h2{ margin:0 0 18px; font-size:28px; color:#e6edf7; letter-spacing:.2px; }
 
     /* ===== Form ===== */
-    .row{display:flex;flex-direction:column;gap:12px}
+    .row{ display:flex; flex-direction:column; gap:12px }
+    .row.right{ align-items:flex-end; gap:10px }
 
     .auth-input{
-      width:100%;
-      height:56px;
-      padding:14px 16px;
-      border-radius:14px;
-      border:1px solid #1c2a48;
-      background:#0e1a2f;
-      color:#e6edf7;
-      outline:none;
+      width:100%; height:56px; padding:14px 16px; border-radius:14px;
+      border:1px solid #1c2a48; background:#0e1a2f; color:#e6edf7; outline:none;
       transition: box-shadow .15s ease, border-color .15s ease, background .15s ease;
     }
     .auth-input::placeholder{ color:#b9c6dc; opacity:.9; }
+    .auth-input:focus{ border-color:#335bd8; box-shadow:0 0 0 3px rgba(51,91,216,.25); background:#0f1e37; }
 
-    .auth-input:focus{
-      border-color:#335bd8;
-      box-shadow:0 0 0 3px rgba(51,91,216,.25);
-      background:#0f1e37;
-    }
-
-    /* Botón primario (por si tu styles.css no define .primary) */
     .primary{
-      height:56px;
-      border:0;
-      border-radius:14px;
-      background:#2f6cf6;
-      color:#fff;
-      font-weight:600;
-      font-size:18px;
-      cursor:pointer;
+      height:56px; border:0; border-radius:14px; background:#2f6cf6; color:#fff;
+      font-weight:600; font-size:18px; cursor:pointer;
       transition: transform .06s ease, box-shadow .15s ease, background .15s ease;
       box-shadow:0 10px 24px rgba(47,108,246,.34);
     }
     .primary:hover{ background:#2a5fe0; }
     .primary:active{ transform:translateY(1px); box-shadow:0 6px 16px rgba(47,108,246,.34); }
+    .secondary{
+      height:48px; border:1px solid #29406d; border-radius:12px; background:#0e1a2f; color:#e6edf7;
+      padding:0 16px; cursor:pointer;
+    }
+
+    /* ===== Modales (respaldo) ===== */
+    .hidden{ display:none }
+    .modal{
+      position:fixed; inset:0; display:grid; place-items:center;
+      background:rgba(3,10,24,.62); backdrop-filter: blur(3px); z-index:50;
+    }
+    .modal-card{
+      width:min(640px, 92vw);
+      background:#0b1324; border:1px solid #13233f; border-radius:18px; padding:22px;
+      box-shadow:0 18px 48px rgba(0,0,0,.5);
+    }
+    .modal-card h3{ margin:0 0 12px; }
+    .check-badge{
+      margin:6px auto 12px; width:56px; height:56px; border-radius:9999px;
+      background:#0ea5a5; display:grid; place-items:center;
+    }
+    .muted{ opacity:.9 }
   </style>
 </head>
 <body class="auth">
   <main class="wrap">
     <div class="auth-card">
       <h2>Ingreso</h2>
-
       <div class="row">
-        <input id="user" class="auth-input" placeholder="Usuario" autocomplete="username" />
+        <input id="user" class="auth-input" placeholder="Usuario (correo)" autocomplete="username" />
         <input id="pass" class="auth-input" type="password" placeholder="Contraseña" autocomplete="current-password" />
         <button id="btn" class="primary" type="button">Entrar</button>
         <button id="btn-register" class="secondary" type="button">Crear cuenta</button>
@@ -95,86 +94,114 @@
     </div>
   </main>
 
- <!-- Modal de registro (oculto por defecto) -->
-<div id="reg-modal" class="modal hidden">
-  <div class="modal-card">
-    <h3>Crear cuenta</h3>
-
-    <input id="reg-name"  class="auth-input" placeholder="Nombre" />
-    <input id="reg-email" class="auth-input" placeholder="Correo" autocomplete="username" />
-    <input id="reg-pass"  class="auth-input" type="password" placeholder="Contraseña" autocomplete="new-password" />
-    <select id="reg-role" class="auth-input">
-      <option value="student">Estudiante</option>
-      <option value="prof">Profesor</option>
-    </select>
-
-    <div class="row right">
-      <button id="reg-cancel" class="secondary">Cancelar</button>
-      <button id="reg-submit" class="primary">Crear</button>
+  <!-- Modal de registro -->
+  <div id="reg-modal" class="modal hidden">
+    <div class="modal-card">
+      <h3>Crear cuenta</h3>
+      <div class="row">
+        <input id="reg-name"  class="auth-input" placeholder="Nombre" />
+        <input id="reg-email" class="auth-input" placeholder="Correo" autocomplete="username" />
+        <input id="reg-pass"  class="auth-input" type="password" placeholder="Contraseña" autocomplete="new-password" />
+        <select id="reg-role" class="auth-input">
+          <option value="student">Estudiante</option>
+          <option value="prof">Profesor</option>
+        </select>
+        <div class="row right">
+          <button id="reg-cancel" class="secondary" type="button">Cancelar</button>
+          <button id="reg-submit" class="primary" type="button">Crear</button>
+        </div>
+      </div>
     </div>
   </div>
-</div>
 
-<script type="module">
-  import { setSession } from './src/roles.js';
+  <!-- Modal de confirmación -->
+  <div id="info-modal" class="modal hidden">
+    <div class="modal-card" style="text-align:center">
+      <div class="check-badge">
+        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+          <path d="M20 6L9 17l-5-5" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+      </div>
+      <h3 id="info-title">Cuenta creada</h3>
+      <p id="info-body" class="muted">Ya puedes iniciar sesión con tu correo y contraseña.</p>
+      <div class="row right">
+        <button id="info-ok" class="primary" type="button">Entendido</button>
+      </div>
+    </div>
+  </div>
 
-  const $  = (id)=>document.getElementById(id);
-  const show = el => el.classList.remove('hidden');
-  const hide = el => el.classList.add('hidden');
+  <script type="module">
+    import { setSession } from './src/roles.js';
 
-  // LOGIN
-  $('btn').addEventListener('click', async () => {
-    const email = $('user').value.trim();
-    const password = $('pass').value.trim();
-    let r, j;
-    try {
-      r = await fetch('/api/auth/login', {
-        method:'POST',
-        headers:{'Content-Type':'application/json'},
-        body: JSON.stringify({ email, password })
-      });
-      j = await r.json();
-    } catch {
-      alert('Error de red'); return;
-    }
-    if (!r.ok || !j.ok) return alert(j?.error || 'Login fallido');
+    const $  = (id)=>document.getElementById(id);
+    const show = el => el.classList.remove('hidden');
+    const hide = el => el.classList.add('hidden');
 
-    setSession(j.user);                          // <-- guardamos {id,name,email,role}
-    location.replace(j.user.role === 'prof' ? 'encargado.html' : 'estudiante.html');
-  });
+    // ===== LOGIN =====
+    $('btn').addEventListener('click', async () => {
+      const email = $('user').value.trim();
+      const password = $('pass').value.trim();
+      if (!email || !password) return alert('Completa usuario y contraseña');
 
-  // Enter
-  ['user','pass'].forEach(id=>{
-    $(id).addEventListener('keydown', e => { if (e.key === 'Enter') $('btn').click(); });
-  });
+      let r, j;
+      try {
+        r = await fetch('/api/auth/login', {
+          method:'POST',
+          headers:{'Content-Type':'application/json'},
+          body: JSON.stringify({ email, password })
+        });
+        j = await r.json();
+      } catch {
+        alert('Error de red'); return;
+      }
+      if (!r.ok || !j.ok) return alert(j?.error || 'Login fallido');
 
-  // ABRIR / CERRAR MODAL REGISTRO
-  $('btn-register').addEventListener('click', () => show($('reg-modal')));
-  $('reg-cancel').addEventListener('click', () => hide($('reg-modal')));
+      setSession(j.user); // { id, name, email, role }
+      location.replace(j.user.role === 'prof' ? 'encargado.html' : 'estudiante.html');
+    });
 
-  // SUBMIT REGISTRO
-  $('reg-submit').addEventListener('click', async () => {
-    const name  = $('reg-name').value.trim();
-    const email = $('reg-email').value.trim();
-    const password = $('reg-pass').value.trim();
-    const role  = $('reg-role').value;
+    // Enter para enviar
+    ['user','pass'].forEach(id=>{
+      $(id).addEventListener('keydown', e => { if (e.key === 'Enter') $('btn').click(); });
+    });
 
-    if (!name || !email || !password) return alert('Completa todos los campos');
+    // ===== REGISTRO =====
+    $('btn-register').addEventListener('click', () => show($('reg-modal')));
+    $('reg-cancel').addEventListener('click', () => hide($('reg-modal')));
 
-    let r, j;
-    try {
-      r = await fetch('/api/auth/register', {
-        method:'POST',
-        headers:{'Content-Type':'application/json'},
-        body: JSON.stringify({ name, email, password, role })
-      });
-      j = await r.json();
-    } catch {
-      alert('Error de red'); return;
-    }
-    if (!r.ok || !j.ok) return alert(j?.error || 'No se pudo registrar');
+    $('reg-submit').addEventListener('click', async () => {
+      const name  = $('reg-name').value.trim();
+      const email = $('reg-email').value.trim();
+      const password = $('reg-pass').value.trim();
+      const role  = $('reg-role').value;
 
-    setSession(j.user);
-    location.replace(j.user.role === 'prof' ? 'encargado.html' : 'estudiante.html');
-  });
-</script>
+      if (!name || !email || !password) return alert('Completa todos los campos');
+
+      let r, j;
+      try {
+        r = await fetch('/api/auth/register', {
+          method:'POST',
+          headers:{'Content-Type':'application/json'},
+          body: JSON.stringify({ name, email, password, role })
+        });
+        j = await r.json();
+      } catch {
+        alert('Error de red'); return;
+      }
+      if (!r.ok || !j.ok) return alert(j?.error || 'No se pudo registrar');
+
+      // ✅ Sin auto-login: cerrar modal, prellenar y mostrar confirmación
+      hide($('reg-modal'));
+      $('user').value = email;
+      $('pass').value = '';
+      $('user').focus();
+
+      $('info-title').textContent = 'Cuenta creada satisfactoriamente';
+      $('info-body').textContent  = 'Ingresa con tu correo y contraseña para continuar.';
+      show($('info-modal'));
+    });
+
+    $('info-ok').addEventListener('click', () => hide($('info-modal')));
+  </script>
+</body>
+</html>
