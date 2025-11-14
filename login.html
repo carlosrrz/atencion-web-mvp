@@ -85,85 +85,125 @@
   <main class="wrap">
     <div class="auth-card">
       <h2>Ingreso</h2>
+
       <div class="row">
-        <input id="user" class="auth-input" placeholder="Usuario" autocomplete="username"/>
-        <input id="pass" class="auth-input" type="password" placeholder="Contraseña" autocomplete="current-password"/>
+        <input id="user" class="auth-input" placeholder="Usuario" autocomplete="username" />
+        <input id="pass" class="auth-input" type="password" placeholder="Contraseña" autocomplete="current-password" />
         <button id="btn" class="primary">Entrar</button>
         <button id="btn-register" class="secondary">Crear cuenta</button>
-
-<script type="module">
-  const $id = (id) => document.getElementById(id);
-
-  $id('btn').addEventListener('click', async () => {
-    const email = $id('user').value.trim();
-    const password = $id('pass').value.trim();
-
-    const r = await fetch('/api/auth/login', {
-      method: 'POST',
-      headers: {'Content-Type':'application/json'},
-      body: JSON.stringify({ email, password })
-    });
-    const j = await r.json();
-    if (!j.ok) return alert(j.error || 'No se pudo iniciar sesión');
-
-    if (j.user.role === 'prof') location.replace('encargado.html');
-    else location.replace('estudiante.html');
-  });
-
-  $id('btn-register').addEventListener('click', async () => {
-    const email = prompt('Email:');
-    const password = prompt('Contraseña:');
-    const name = prompt('Nombre:');
-    const role = confirm('¿Cuenta de profesor? Aceptar=PROF / Cancelar=STUDENT') ? 'prof' : 'student';
-
-    const r = await fetch('/api/auth/register', {
-      method: 'POST',
-      headers: {'Content-Type':'application/json'},
-      body: JSON.stringify({ email, password, name, role })
-    });
-    const j = await r.json();
-    if (!j.ok) return alert(j.error || 'No se pudo registrar');
-
-    if (j.user.role === 'prof') location.replace('encargado.html');
-    else location.replace('estudiante.html');
-  });
-</script>
-
       </div>
     </div>
   </main>
 
+  <!-- ===== Modal de registro en la misma interfaz ===== -->
+  <dialog id="register-dialog" class="modal">
+    <form id="form-register" class="modal-card" method="dialog" novalidate>
+      <h3 style="margin:0 0 10px 0">Crear cuenta</h3>
+
+      <label>Nombre
+        <input id="reg-name" type="text" required />
+      </label>
+
+      <label>Correo
+        <input id="reg-email" type="email" autocomplete="email" required />
+      </label>
+
+      <label>Contraseña
+        <input id="reg-pass" type="password" autocomplete="new-password" minlength="6" required />
+      </label>
+
+      <label>Rol
+        <select id="reg-role">
+          <option value="student">Estudiante</option>
+          <option value="prof">Profesor</option>
+        </select>
+      </label>
+
+      <div class="row end" style="margin-top:12px">
+        <button type="button" id="reg-cancel" class="secondary">Cancelar</button>
+        <button type="submit" id="reg-submit" class="primary">Crear</button>
+      </div>
+
+      <p id="reg-msg" class="msg"></p>
+    </form>
+  </dialog>
+
+  <!-- ===== Lógica de Login + Registro (API real) ===== -->
   <script type="module">
-    import { setRole } from './src/roles.js';
+    // Helpers sin colisión
+    const qs  = (s) => document.querySelector(s);
+    const qsi = (s) => /** @type {HTMLInputElement} */(document.querySelector(s));
 
-    // Credenciales fijas de MVP (solo para demo)
-    const CREDS = {
-      student: { user: 'alumno@ejemplo.com',   pass: 'alumno123'   },
-      prof:    { user: 'profesor@ejemplo.com', pass: 'profesor123' }
-    };
-
-    const $ = (id)=>document.getElementById(id);
-
-    function tryLogin(){
-      const u = $('user').value.trim();
-      const p = $('pass').value.trim();
-
-      if (u === CREDS.student.user && p === CREDS.student.pass){
-        setRole('student');
-        location.replace('estudiante.html');
-      } else if (u === CREDS.prof.user && p === CREDS.prof.pass){
-        setRole('prof');
-        location.replace('encargado.html');
-      } else {
-        alert('Credenciales inválidas');
+    async function doLogin() {
+      const email = qsi('#user').value.trim();
+      const password = qsi('#pass').value.trim();
+      if (!email || !password) {
+        alert('Completa usuario y contraseña');
+        return;
       }
+
+      const r = await fetch('/api/auth/login', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({ email, password })
+      });
+      const j = await r.json();
+      if (!j.ok) return alert(j.error || 'No se pudo iniciar sesión');
+
+      // Redirección según rol
+      if (j.user.role === 'prof') location.replace('encargado.html');
+      else location.replace('estudiante.html');
     }
 
-    $('btn').addEventListener('click', tryLogin);
+    // Click en Entrar
+    qs('#btn')?.addEventListener('click', doLogin);
     // Enter para enviar
-    ['user','pass'].forEach(id=>{
-      $(id).addEventListener('keydown', e=>{ if (e.key === 'Enter') tryLogin(); });
+    ['#user','#pass'].forEach(sel => {
+      qsi(sel)?.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') doLogin();
+      });
+    });
+
+    // Abrir/cerrar modal de registro
+    const dlg = /** @type {HTMLDialogElement} */ (qs('#register-dialog'));
+    qs('#btn-register')?.addEventListener('click', () => dlg.showModal());
+    qs('#reg-cancel')?.addEventListener('click', () => dlg.close());
+
+    // Registro
+    qs('#form-register')?.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const name     = qsi('#reg-name').value.trim();
+      const email    = qsi('#reg-email').value.trim();
+      const password = qsi('#reg-pass').value.trim();
+      const role     = qsi('#reg-role').value;
+      const msg      = qs('#reg-msg');
+
+      msg.textContent = '';
+
+      if (!name || !email || !password) {
+        msg.textContent = 'Completa todos los campos.';
+        return;
+      }
+
+      const r = await fetch('/api/auth/register', {
+        method: 'POST',
+        headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({ name, email, password, role })
+      });
+      const j = await r.json();
+
+      if (!j.ok) {
+        msg.textContent = j.error || 'No se pudo registrar';
+        return;
+      }
+
+      msg.textContent = 'Cuenta creada. Redirigiendo…';
+      if (j.user.role === 'prof') location.replace('encargado.html');
+      else location.replace('estudiante.html');
     });
   </script>
+
+  <!-- ❗️IMPORTANTE: Elimina el bloque antiguo con setRole/CREDS (MVP).
+       Si lo dejas activo, se "pelea" con el login real y duplica listeners. -->
 </body>
 </html>
