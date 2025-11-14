@@ -89,6 +89,46 @@
         <input id="user" class="auth-input" placeholder="Usuario" autocomplete="username"/>
         <input id="pass" class="auth-input" type="password" placeholder="Contraseña" autocomplete="current-password"/>
         <button id="btn" class="primary">Entrar</button>
+        <button id="btn-register" class="secondary">Crear cuenta</button>
+
+<script type="module">
+  const $id = (id) => document.getElementById(id);
+
+  $id('btn').addEventListener('click', async () => {
+    const email = $id('user').value.trim();
+    const password = $id('pass').value.trim();
+
+    const r = await fetch('/api/auth/login', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ email, password })
+    });
+    const j = await r.json();
+    if (!j.ok) return alert(j.error || 'No se pudo iniciar sesión');
+
+    if (j.user.role === 'prof') location.replace('encargado.html');
+    else location.replace('estudiante.html');
+  });
+
+  $id('btn-register').addEventListener('click', async () => {
+    const email = prompt('Email:');
+    const password = prompt('Contraseña:');
+    const name = prompt('Nombre:');
+    const role = confirm('¿Cuenta de profesor? Aceptar=PROF / Cancelar=STUDENT') ? 'prof' : 'student';
+
+    const r = await fetch('/api/auth/register', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ email, password, name, role })
+    });
+    const j = await r.json();
+    if (!j.ok) return alert(j.error || 'No se pudo registrar');
+
+    if (j.user.role === 'prof') location.replace('encargado.html');
+    else location.replace('estudiante.html');
+  });
+</script>
+
       </div>
     </div>
   </main>

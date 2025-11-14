@@ -1,25 +1,34 @@
 // src/exam.js
-// Test corto de distracción (5 preguntas). Mide RT y off-tab durante el test.
-
-// --- Banco de preguntas dinámico ---
-let QUESTIONS = []; // se llenará desde JSON
+let QUESTIONS = [];
 
 async function loadQuestions({ url = './src/questions.json', take = 8 } = {}) {
+  // 1) intento con examen activo del backend
+  try {
+    const r = await fetch('/api/exams/active', { cache:'no-store' });
+    const j = await r.json();
+    if (j.ok && j.exam && Array.isArray(j.exam.questions) && j.exam.questions.length) {
+      const bank = j.exam.questions;
+      const shuffled = bank.slice().sort(()=>Math.random()-0.5);
+      QUESTIONS = shuffled.slice(0, Math.min(take, shuffled.length));
+      return;
+    }
+  } catch {}
+
+  // 2) fallback a tu JSON local
   try {
     const res = await fetch(url, { cache: 'no-store' });
     const bank = await res.json();
-    // baraja y toma N
     const shuffled = bank.slice().sort(()=>Math.random()-0.5);
     QUESTIONS = shuffled.slice(0, take);
   } catch (e) {
-    console.warn('[exam] No se pudo cargar questions.json; usando fallback embebido');
-    // Fallback mínimo si falla el fetch:
+    console.warn('[exam] No se pudo cargar banco; fallback mínimo');
     QUESTIONS = [
       { id:'q_f1', text:'Fallback 1', options:['A','B','C','D'], correct:0 },
       { id:'q_f2', text:'Fallback 2', options:['A','B','C','D'], correct:1 }
     ];
   }
 }
+
 
 
 const els = {
