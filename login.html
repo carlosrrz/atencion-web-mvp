@@ -130,70 +130,46 @@
 
   <!-- ===== Lógica de Login + Registro (API real) ===== -->
 <script type="module">
-window.addEventListener('DOMContentLoaded', () => {
-  const $ = (s)=>document.querySelector(s);
+  import { setRole } from './src/roles.js'; // si tus vistas usan roles.js
 
-  // Elementos
-  const btnLogin      = $('#btn');
-  const btnOpenReg    = $('#btn-register');
-  const modal         = $('#create-modal');
-  const btnRegCreate  = $('#reg-create');
-  const btnRegCancel  = $('#reg-cancel');
+  const $ = (id)=>document.getElementById(id);
 
-  function show(el){ el && el.classList.remove('hidden'); }
-  function hide(el){ el && el.classList.add('hidden'); }
+  $('btn').onclick = async () => {
+    const email = $('user').value.trim();
+    const password = $('pass').value.trim();
 
-  // LOGIN
-  btnLogin?.addEventListener('click', async (e)=>{
-    e.preventDefault();
-    const email = $('#user')?.value.trim();
-    const password = $('#pass')?.value.trim();
-    if(!email || !password) return alert('Completa usuario y contraseña');
-
-    try{
-      const r = await fetch('/api/auth/login', {
-        method:'POST',
-        headers:{'Content-Type':'application/json'},
-        credentials:'include',
+    let r, j;
+    try {
+      r = await fetch('/api/auth/login', {
+        method: 'POST',
+        headers: {'Content-Type':'application/json'},
         body: JSON.stringify({ email, password })
       });
-      const j = await r.json();
-      if(!j.ok) return alert(j.error || 'No se pudo iniciar sesión');
-
-      location.replace(j.user.role === 'prof' ? 'encargado.html' : 'estudiante.html');
-    }catch(err){
-      console.error(err);
-      alert('Error de red');
+      j = await r.json();
+    } catch (e) {
+      alert('Error de red'); return;
     }
+
+    if (!r.ok || !j.ok) {
+      alert(j?.error || 'Login fallido'); return;
+    }
+
+    // Persistencia (compat con guards antiguos)
+    localStorage.setItem('user', JSON.stringify(j.user));
+    localStorage.setItem('role', j.user.role);  // compat
+    try { setRole?.(j.user.role, j.user); } catch {}
+
+    // Redirección por rol
+    location.replace(j.user.role === 'prof' ? 'encargado.html' : 'estudiante.html');
+  };
+
+  // Enter para enviar
+  ['user','pass'].forEach(id=>{
+    $(id).addEventListener('keydown', e=>{ if (e.key === 'Enter') $('btn').click(); });
   });
 
-  // ABRIR/CERRAR MODAL REGISTRO
-  btnOpenReg?.addEventListener('click', ()=> show(modal));
-  btnRegCancel?.addEventListener('click', ()=> hide(modal));
-
-  // REGISTRO
-  btnRegCreate?.addEventListener('click', async ()=>{
-    const name     = $('#reg-name')?.value.trim();
-    const email    = $('#reg-email')?.value.trim();
-    const password = $('#reg-pass')?.value.trim();
-    const role     = $('#reg-role')?.value || 'student';
-    if(!name || !email || !password) return alert('Completa todos los campos');
-
-    try{
-      const r = await fetch('/api/auth/register', {
-        method:'POST',
-        headers:{'Content-Type':'application/json'},
-        credentials:'include',
-        body: JSON.stringify({ name, email, password, role })
-      });
-      const j = await r.json();
-      if(!j.ok) return alert(j.error || 'No se pudo registrar');
-
-      location.replace(j.user.role === 'prof' ? 'encargado.html' : 'estudiante.html');
-    }catch(err){
-      console.error(err);
-      alert('Error de red');
-    }
+  // Abrir modal de registro (si lo tienes)
+  document.getElementById('btn-register')?.addEventListener('click',()=>{
+    document.getElementById('reg-modal').classList.remove('hidden');
   });
-});
 </script>

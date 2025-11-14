@@ -1,20 +1,9 @@
 <script type="module">
-async function requireAuth(roleNeeded){
-  const r = await fetch('/api/auth/me', { credentials:'include' });
-  if(!r.ok){ location.replace('login.html'); return null; }
-  const j = await r.json();
-  if(!j.ok){ location.replace('login.html'); return null; }
-  if(roleNeeded && j.user.role !== roleNeeded){
-    location.replace('login.html'); return null;
-  }
-  // opcional: expón el usuario
-  window.__me = j.user;
-  return j.user;
-}
-
-// estudiante.html:
-await requireAuth('student');  // en encargado.html usa 'prof'
+  import { requireRole } from './src/roles.js';
+  requireRole(['student']); // o ['prof'] en encargado.html
 </script>
+
+
 
 
 
