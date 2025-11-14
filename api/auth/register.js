@@ -1,37 +1,38 @@
-// /api/auth/register.js
+// api/auth/register.js
 import bcrypt from 'bcryptjs';
-import { db } from '../../lib/db.js';
-import { signToken, setAuthCookie } from '../../lib/auth.js';
+import { getPool } from '../../lib/db.js';
 
 export default async function handler(req, res) {
-  if (req.method !== 'POST') return res.status(405).json({ ok:false, error:'Method not allowed' });
-
+  if (req.method !== 'POST') {
+    return res.status(405).json({ ok:false, error:'Method not allowed' });
+  }
   try {
     const { name, email, password, role } = req.body || {};
     if (!name || !email || !password) {
       return res.status(400).json({ ok:false, error:'Faltan campos' });
     }
-    const roleNorm = (role === 'prof') ? 'prof' : 'student';
+    const r = String(role || 'student').toLowerCase();
+    const normRole = (r === 'profesor' ? 'prof' : r === 'estudiante' ? 'student' : r);
 
-    const exists = await db.query('SELECT 1 FROM users WHERE email=$1', [email]);
-    if (exists.rowCount > 0) {
-      return res.status(409).json({ ok:false, error:'Correo ya registrado' });
+    const pool = getPool();
+    const { rows: exists } = await pool.query(
+      'SELECT 1 FROM users WHERE email=$1 LIMIT 1', [email.toLowerCase()]
+    );
+    if (exists.length) {
+      return res.status(409).json({ ok:false, error:'Ese correo ya está registrado' });
     }
 
     const hash = await bcrypt.hash(password, 10);
-    const ins = await db.query(
-      `INSERT INTO users(name,email,password_hash,role) VALUES($1,$2,$3,$4)
+    const { rows } = await pool.query(
+      `INSERT INTO users (name, email, role, password_hash)
+       VALUES ($1,$2,$3,$4)
        RETURNING id, name, email, role`,
-      [name, email, hash, roleNorm]
+      [name, email.toLowerCase(), normRole, hash]
     );
 
-    const user = ins.rows[0];
-    const token = signToken({ id:user.id, role:user.role });
-    setAuthCookie(res, token);
-
-    return res.status(200).json({ ok:true, user });
-  } catch (e) {
-    console.error('register error', e);
-    return res.status(500).json({ ok:false, error:'Error servidor' });
+    return res.status(200).json({ ok:true, user: rows[0] });
+  } catch (err) {
+    console.error('[auth/register] ERROR', err);
+    return res.status(500).json({ ok:false, error:'Register error' });
   }
 }

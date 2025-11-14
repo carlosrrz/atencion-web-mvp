@@ -12,10 +12,10 @@ export default async function handler(req, res) {
       return res.status(400).json({ ok:false, error:'Faltan credenciales' });
     }
 
-    const pool = getPool(); // lazy init
+    const pool = getPool();
     const { rows } = await pool.query(
       `SELECT id, name, email, role, password_hash
-       FROM users WHERE email=$1 LIMIT 1`,
+         FROM users WHERE email=$1 LIMIT 1`,
       [email.toLowerCase()]
     );
     if (!rows.length) {
