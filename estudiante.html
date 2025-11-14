@@ -1,21 +1,7 @@
 <script type="module">
-async function requireAuth(needRole) {
-  // importante: credentials:'include' para enviar la cookie HttpOnly
-  const r = await fetch('/api/auth/me', { credentials: 'include' });
-  if (!r.ok) { location.replace('login.html'); return null; }
-  const { user } = await r.json();
-  if (needRole && user.role !== needRole) { location.replace('login.html'); return null; }
-  return user;
-}
-
-const me = await requireAuth('student'); // o null si redirige
-if (!me) { /* salió del flujo */ }
-// Si quieres, rellena los campos del alumno:
-document.querySelector('#student-name')?.setAttribute('value', me.name ?? '');
-document.querySelector('#student-code')?.setAttribute('value', me.code ?? '');
-window.__me = me; // por si lo usa tu app más adelante
+  import { requireRole } from './src/roles.js';
+  requireRole('student');
 </script>
-
 
 
 <!doctype html>
