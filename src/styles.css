@@ -481,9 +481,16 @@ dialog.modal::backdrop {
   background: #0b1220;
   color: #e5e7eb;
 }
-.modal-card .row.end {
-  display: flex;
-  justify-content: flex-end;
-  gap: 10px;
+/* Oculto por defecto (por si algún estilo lo fuerza a verse) */
+dialog.modal:not([open]) { display: none; }
+
+/* Solo cuando está abierto, lo centramos */
+dialog.modal[open] {
+  display: flex;               /* o grid */
+  align-items: center;
+  justify-content: center;
 }
-.msg { margin-top: 6px; font-size: .9rem; color: #93c5fd; }
+
+/* (Resto de tus estilos del modal) */
+dialog.modal { border: none; padding: 0; background: transparent; }
+dialog.modal::backdrop { background: rgba(0,0,0,.55); backdrop-filter: blur(2px); }
