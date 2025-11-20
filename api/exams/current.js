@@ -7,10 +7,20 @@ export default async function handler(req, res) {
   }
   try {
     const pool = getPool();
+    await pool.query(
+      `CREATE TABLE IF NOT EXISTS settings(
+         key text PRIMARY KEY,
+         value jsonb,
+         updated_at timestamptz DEFAULT now()
+       )`
+    );
+
     const { rows } = await pool.query(
       `SELECT value FROM settings WHERE key='current_exam' LIMIT 1`
     );
-    if (!rows.length) return res.status(404).json({ ok:false, error:'No hay examen activo' });
+    if (!rows.length) {
+      return res.status(404).json({ ok:false, error:'No hay examen activo' });
+    }
     return res.status(200).json({ ok:true, ...rows[0].value });
   } catch (err) {
     console.error('[exam/current] ERROR', err);

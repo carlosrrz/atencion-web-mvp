@@ -1,41 +1,34 @@
 // src/exam.js
-let QUESTIONS = [];
+// Banco de preguntas dinámico + test con RT y off-tab local
 
-async function loadQuestions({ take = 8 } = {}) {
-  let bank = null;
+let QUESTIONS = []; // se llena con API o fallback
 
-  // 1) intento examen activo (BD)
+async function loadQuestions({ url = './src/questions.json', take = 8 } = {}) {
+  // 1) Intenta examen activo
   try {
-    const r = await fetch('/api/exam/active', { cache: 'no-store' });
+    const r = await fetch('/api/exam/current', { cache: 'no-store' });
     if (r.ok) {
       const j = await r.json();
-      if (j.ok && Array.isArray(j.questions) && j.questions.length) {
-        bank = j.questions;
-      }
+      const bank = j.questions || [];
+      const shuffled = bank.slice().sort(()=>Math.random()-0.5);
+      QUESTIONS = shuffled.slice(0, take);
+      return;
     }
   } catch {}
-
-  // 2) fallback al archivo local
-  if (!bank) {
-    try {
-      const r = await fetch('./src/questions.json', { cache: 'no-store' });
-      bank = await r.json();
-    } catch {
-      // último fallback mínimo
-      bank = [
-        { id:'fallback_1', text:'Fallback 1', options:['A','B','C','D'], correct:0 },
-        { id:'fallback_2', text:'Fallback 2', options:['A','B','C','D'], correct:1 }
-      ];
-    }
+  // 2) Fallback local
+  try {
+    const res = await fetch(url, { cache: 'no-store' });
+    const bank = await res.json();
+    const shuffled = bank.slice().sort(()=>Math.random()-0.5);
+    QUESTIONS = shuffled.slice(0, take);
+  } catch {
+    console.warn('[exam] fallback embebido');
+    QUESTIONS = [
+      { id:'q_f1', text:'Fallback 1', options:['A','B','C','D'], correct:0 },
+      { id:'q_f2', text:'Fallback 2', options:['A','B','C','D'], correct:1 }
+    ];
   }
-
-  // baraja y toma N
-  const shuffled = bank.slice().sort(() => Math.random() - 0.5);
-  QUESTIONS = shuffled.slice(0, take);
 }
-
-
-
 
 const els = {
   idx: document.getElementById('exam-idx'),
@@ -53,11 +46,9 @@ const els = {
 let state = {
   running: false,
   i: 0,
-  answers: [],            // {id, chosen, correct, rtMs}
+  answers: [],
   qStartTs: 0,
   testStartTs: 0,
-
-  // off-tab local al test
   offThresholdMs: 2000,
   offSince: null,
   offEpisodes: 0,
@@ -78,35 +69,21 @@ function renderQuestion() {
   els.total.textContent = String(QUESTIONS.length);
   els.text.textContent = q.text;
 
-  // Limpia el host de opciones
   els.options.innerHTML = '';
-
-  // Contenedor moderno para las opciones
-  const cont = document.createElement('div');
-  cont.className = 'q-opts';
-
-  // Permite tanto strings como objetos { label, suffix }
-  const norm = (op) => typeof op === 'string' ? { label: op } : op || {};
-
-  (q.options || []).forEach((op, k) => {
-    const o = norm(op);
-    const row = document.createElement('label');
-    row.className = 'q-opt';
-    row.innerHTML = `
-      <input type="radio" name="opt" value="${k}">
-      <span class="text">${o.label ?? ''}</span>
-      ${o.suffix ? `<span class="suffix">${o.suffix}</span>` : ''}
+  q.options.forEach((op, k) => {
+    const id = `q_${q.id}_${k}`;
+    const label = document.createElement('label');
+    label.className = 'q-opt';
+    label.innerHTML = `
+      <input type="radio" name="opt" value="${k}" id="${id}">
+      <span class="text">${op}</span>
     `;
-    cont.appendChild(row);
+    els.options.appendChild(label);
   });
 
-  els.options.appendChild(cont);
-
-  // Resetea RT y marca inicio de la pregunta
   els.rt.textContent = '0.0';
   state.qStartTs = performance.now();
 }
-
 
 function getChosen() {
   const sel = els.options.querySelector('input[name="opt"]:checked');
@@ -147,9 +124,8 @@ function pollOff() {
 
 /* ====== Inicio/avance/final ====== */
 function startTest() {
-  // pre-requisito: cámara lista
   if (!window.__camReady) {
-    alert('Primero permite la cámara y confirma que está activa.');
+    alert('Primero permite la cámara y confírmala activa.');
     return;
   }
   state.running = true;
@@ -162,12 +138,11 @@ function startTest() {
   clearTimeout(state._pollTimer);
   pollOff();
 
-  els.start.classList.add('hidden');
-  els.next.classList.remove('hidden');
-  els.finish.classList.add('hidden');
-  els.result.classList.add('hidden');
+  els.start?.classList.add('hidden');
+  els.next?.classList.remove('hidden');
+  els.finish?.classList.add('hidden');
+  els.result?.classList.add('hidden');
   els.instr?.classList.add('hidden');
-  els.instr?.classList.remove('hidden');
 
   renderQuestion();
 }
@@ -177,10 +152,9 @@ function nextQuestion() {
   if (state.i < QUESTIONS.length - 1) {
     state.i++;
     renderQuestion();
-    // Si llega a la última, cambiamos botones
     if (state.i === QUESTIONS.length - 1) {
-      els.next.classList.add('hidden');
-      els.finish.classList.remove('hidden');
+      els.next?.classList.add('hidden');
+      els.finish?.classList.remove('hidden');
     }
   }
 }
@@ -190,7 +164,6 @@ function finishTest() {
 
   state.running = false;
   clearTimeout(state._pollTimer);
-  // cerrar off si termina en off
   if (state.offSince != null) {
     const dur = performance.now() - state.offSince;
     state.offTotalMs += dur;
@@ -201,14 +174,10 @@ function finishTest() {
   const correct = state.answers.reduce((a, r) => a + r.correct, 0);
   const meanRT = state.answers.reduce((a, r) => a + r.rtMs, 0) / state.answers.length;
 
-  // Guarda un “resumen” de examen accesible por app.js al terminar la sesión
-window.__examSummary = { score: correct, total: state.answers.length };
-// (opcional, por si la página se refresca) – se limpia al guardar el intento
-try { localStorage.setItem('proctor.last_exam', JSON.stringify(window.__examSummary)); } catch {}
+  window.__examSummary = { score: correct, total: state.answers.length };
+  try { localStorage.setItem('proctor.last_exam', JSON.stringify(window.__examSummary)); } catch {}
 
-
-  // Mostrar resumen
-  els.result.classList.remove('hidden');
+  els.result?.classList.remove('hidden');
   els.result.innerHTML = `
     <strong>Resultado:</strong><br>
     Puntaje: ${correct}/${state.answers.length} (${Math.round(100*correct/state.answers.length)}%)<br>
@@ -217,28 +186,18 @@ try { localStorage.setItem('proctor.last_exam', JSON.stringify(window.__examSumm
     Tiempo fuera de pestaña: ${fmtMMSS(state.offTotalMs)}
   `;
 
-  // Descargar archivos
-  downloadAnswersCSV('examen_respuestas.csv');
-  downloadSummaryJSON('examen_resumen.json', {
-    total: state.answers.length,
-    correct,
-    accuracy: correct / state.answers.length,
-    mean_rt_ms: Math.round(meanRT),
-    off_episodes: state.offEpisodes,
-    off_total_ms: Math.round(state.offTotalMs)
-  });
-  // ... justo antes de "els.start.classList.remove('hidden'); ..."
+  // Notifica a la app principal
   window.dispatchEvent(new CustomEvent('exam:finished', {
     detail: { correct, total: state.answers.length }
   }));
 
-  // Reset UI de botones
-  els.start.classList.remove('hidden');
-  els.next.classList.add('hidden');
-  els.finish.classList.add('hidden');
-  els.instr.classList.remove('hidden');
+  els.start?.classList.remove('hidden');
+  els.next?.classList.add('hidden');
+  els.finish?.classList.add('hidden');
+  els.instr?.classList.remove('hidden');
 }
 
+/* ====== Descargas locales opcionales ====== */
 function downloadAnswersCSV(filename) {
   const rows = [['id','chosen','correct','rt_ms']];
   for (const r of state.answers) rows.push([r.id, r.chosen, r.correct, Math.round(r.rtMs)]);
@@ -251,7 +210,8 @@ function downloadSummaryJSON(filename, obj) {
   const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = filename; a.click();
   URL.revokeObjectURL(a.href);
 }
-// Inicializa contadores y carga banco
+
+/* ====== Init ====== */
 els.idx.textContent = '0';
 els.total.textContent = '0';
 els.rt.textContent = '0.0';
@@ -259,16 +219,8 @@ els.rt.textContent = '0.0';
 (async () => {
   await loadQuestions({ url: './src/questions.json', take: 8 });
   els.total.textContent = String(QUESTIONS.length);
-  els.text.textContent = 'Por favor, prenda su cámara y presione el botón "Iniciar monitoreo" antes de inciar el examen, de lo contrario no podrá realizarlo. Luego, presione "Iniciar test" cuando el docente lo indique. Al finalizar el examen, presione el botón "Finzalizar y exportar" para cumplir correctamente con el monitoreo';
 })();
 
-
-/* ====== Eventos ====== */
 els.start?.addEventListener('click', startTest);
 els.next?.addEventListener('click', nextQuestion);
 els.finish?.addEventListener('click', finishTest);
-
-// Inicializa contadores
-els.idx.textContent = '0';
-els.total.textContent = String(QUESTIONS.length);
-els.rt.textContent = '0.0';
