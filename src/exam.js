@@ -86,21 +86,21 @@ function validateStudentFields() {
   if (!name || name.replace(/\s+/g,'').length < 3 || !NAME_RE.test(name)) {
     markInvalid(F.name, 'Nombre inválido (3–80 caracteres, solo letras/espacios/guiones).');
     F.name?.focus();
-    return { ok: false, error: 'Revisa el nombre.' };
+    return { ok: false, error: 'Ingresa el nombre correctamente' };
   }
 
   // código
   if (!CODE_RE.test(code)) {
     markInvalid(F.code, 'Código inválido (3–20, solo letras/números, guion o guion bajo).');
     F.code?.focus();
-    return { ok: false, error: 'Revisa el código.' };
+    return { ok: false, error: 'Ingresa el ID correctamente' };
   }
 
   // correo (opcional)
   if (email && !EMAIL_RE.test(email)) {
     markInvalid(F.email, 'Correo inválido.');
     F.email?.focus();
-    return { ok: false, error: 'Revisa el correo.' };
+    return { ok: false, error: 'Ingresa el correo correctamente' };
   }
 
   return {
