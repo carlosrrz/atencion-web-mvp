@@ -80,73 +80,59 @@
 <button id="exam-upload" class="primary">Cargar y activar</button>
 
 <script type="module">
-  const $ = (id)=>document.getElementById(id);
+  const $ = s => document.querySelector(s);
 
-  // Parser CSV simple (comas, sin casos raros de comillas anidadas)
-  function parseCSV(text) {
-    const lines = text.split(/\r?\n/).filter(Boolean);
-    const out = [];
-    // espera encabezados: id,text,opt1,opt2,opt3,opt4,correct_index
-    const headers = lines.shift().split(',');
-    const idx = (h)=>headers.indexOf(h);
-    for (const ln of lines) {
-      const cols = ln.split(',');
-      out.push({
-        id: cols[idx('id')],
-        text: cols[idx('text')],
-        options: [
-          cols[idx('opt1')],
-          cols[idx('opt2')],
-          cols[idx('opt3')],
-          cols[idx('opt4')],
-        ],
-        correct: Number(cols[idx('correct_index')])
-      });
+  async function parseFileToQuestions(file) {
+    const text = await file.text();
+    if (file.name.toLowerCase().endsWith('.json')) {
+      const j = JSON.parse(text);
+      const list = Array.isArray(j) ? j : (j.questions || []);
+      return list.map((q, i) => ({
+        id: q.id ?? `q_${i+1}`,
+        text: q.text ?? '',
+        options: (q.options ?? []).map(String),
+        correct: Number(q.correct ?? 0)
+      }));
+    } else if (file.name.toLowerCase().endsWith('.csv')) {
+      // CSV esperado: id,text,o1,o2,o3,o4,correct
+      const rows = text.trim().split(/\r?\n/).map(l => l.split(','));
+      const hdr = rows.shift().map(h => h.trim().toLowerCase());
+      const idx = (k) => hdr.indexOf(k);
+      const out = [];
+      for (const r of rows) {
+        out.push({
+          id: r[idx('id')] || '',
+          text: r[idx('text')] || '',
+          options: [r[idx('o1')], r[idx('o2')], r[idx('o3')], r[idx('o4')]].filter(Boolean),
+          correct: Number(r[idx('correct')] || 0)
+        });
+      }
+      return out;
     }
-    return out;
+    throw new Error('Formato no soportado. Usa .json o .csv');
   }
 
-  $('exam-upload').addEventListener('click', async () => {
-    const name = $('exam-title').value.trim();
-    const file = $('exam-file').files[0];
-    if (!name) return alert('Pon un nombre');
-    if (!file) return alert('Selecciona un archivo .json o .csv');
-
-    let questions;
+  $('#btn-exam-upload').addEventListener('click', async () => {
+    const name = $('#exam-name').value.trim() || 'Examen';
+    const file = $('#exam-file').files[0];
+    if (!file) return alert('Selecciona un archivo CSV/JSON');
     try {
-      const text = await file.text();
-      if (file.name.toLowerCase().endsWith('.json')) {
-        const arr = JSON.parse(text);
-        if (!Array.isArray(arr)) throw new Error('JSON inválido');
-        questions = arr;
-      } else {
-        questions = parseCSV(text);
-      }
-    } catch (e) {
-      console.error(e);
-      return alert('No pude leer el archivo. Verifica formato.');
-    }
-
-    // Validación mínima
-    if (!questions.length || !questions[0].options || typeof questions[0].correct !== 'number') {
-      return alert('Estructura de preguntas inválida');
-    }
-
-    try {
+      const questions = await parseFileToQuestions(file);
       const r = await fetch('/api/exam/set', {
         method: 'POST',
-        headers: {'Content-Type':'application/json'},
+        headers: { 'Content-Type':'application/json' },
         body: JSON.stringify({ name, questions })
       });
       const j = await r.json();
-      if (!r.ok || !j.ok) throw new Error(j.error || 'Fallo al guardar');
-      alert('Examen activado ✅');
+      if (!r.ok || !j.ok) throw new Error(j.error || 'Error guardando el examen');
+      alert(`Examen "${name}" activado (${j.saved} preguntas).`);
     } catch (e) {
       console.error(e);
-      alert('Error guardando el examen');
+      alert(e.message || 'Error guardando el examen');
     }
   });
 </script>
+
 
 
   <!-- Modal detalle -->
