@@ -1,34 +1,44 @@
 // src/exam.js
 // Banco de preguntas dinámico + test con RT y off-tab local
 
-let QUESTIONS = []; // se llena con API o fallback
+// src/exam.js
+let QUESTIONS = [];
 
-async function loadQuestions({ url = './src/questions.json', take = 8 } = {}) {
-  // 1) Intenta examen activo
+async function loadQuestions({ take = 8 } = {}) {
+  // 1) intento: banco activo desde el backend
   try {
-    const r = await fetch('/api/exam/current', { cache: 'no-store' });
-    if (r.ok) {
-      const j = await r.json();
-      const bank = j.questions || [];
-      const shuffled = bank.slice().sort(()=>Math.random()-0.5);
+    const r = await fetch('/api/exam/current', { cache:'no-store' });
+    if (!r.ok) throw new Error('no ok');
+    const data = await r.json();
+
+    const bank = Array.isArray(data?.questions) ? data.questions
+               : Array.isArray(data) ? data : [];
+
+    if (bank.length) {
+      const mapped = bank.map((q, i) => ({
+        id: q.id ?? `q_${i+1}`,
+        text: q.text ?? '',
+        options: (q.options ?? []).map(String),
+        correct: Number(q.correct ?? 0)
+      }));
+      const shuffled = mapped.slice().sort(() => Math.random() - 0.5);
       QUESTIONS = shuffled.slice(0, take);
       return;
     }
-  } catch {}
-  // 2) Fallback local
-  try {
-    const res = await fetch(url, { cache: 'no-store' });
-    const bank = await res.json();
-    const shuffled = bank.slice().sort(()=>Math.random()-0.5);
-    QUESTIONS = shuffled.slice(0, take);
+    throw new Error('empty bank');
   } catch {
-    console.warn('[exam] fallback embebido');
-    QUESTIONS = [
-      { id:'q_f1', text:'Fallback 1', options:['A','B','C','D'], correct:0 },
-      { id:'q_f2', text:'Fallback 2', options:['A','B','C','D'], correct:1 }
-    ];
+    // 2) fallback: tu archivo local
+    try {
+      const res = await fetch('./src/questions.json', { cache:'no-store' });
+      const bank = await res.json();
+      const shuffled = bank.slice().sort(() => Math.random() - 0.5);
+      QUESTIONS = shuffled.slice(0, take);
+    } catch {
+      QUESTIONS = [];
+    }
   }
 }
+
 
 const els = {
   idx: document.getElementById('exam-idx'),

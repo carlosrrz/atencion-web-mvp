@@ -75,33 +75,27 @@
 
   <section class="card" style="margin-top:16px">
   <h3>Banco de examen (CSV/JSON)</h3>
-  <input id="exam-title" class="auth-input" placeholder="Nombre del examen">
-  <input id="exam-file" type="file" accept=".json,.csv">
-  <!-- importante: type="button" para que no envíe ningún form -->
-  <button id="exam-upload" class="primary" type="button">Cargar y activar</button>
+  <input id="exam-title" class="auth-input" placeholder="Nombre del examen" />
+  <input id="exam-file" type="file" accept=".json,.csv" />
+  <button id="exam-upload" class="primary">Cargar y activar</button>
 </section>
-
-<!-- Modal de éxito -->
-<div id="ok-backdrop" class="backdrop" aria-hidden="true" style="display:none"></div>
-<div id="ok-modal" class="modal" role="dialog" aria-modal="true" aria-labelledby="ok-title" style="display:none">
-  <header>
-    <strong id="ok-title">Examen actualizado</strong>
-  </header>
-  <div class="body">
-    <div style="display:flex;align-items:center;gap:12px">
-      <div style="width:42px;height:42px;border-radius:999px;background:#16a34a;display:flex;align-items:center;justify-content:center;color:#fff;font-weight:700">✓</div>
-      <div id="ok-msg">Se activó el examen correctamente.</div>
-    </div>
-  </div>
-  <footer>
-    <button id="ok-close" class="secondary">Cerrar</button>
-  </footer>
-</div>
 
 <script type="module">
   const $ = s => document.querySelector(s);
 
-  // --- Parsear archivo a {id,text,options[],correct} ---
+  function toast(msg) {
+    const t = document.createElement('div');
+    t.textContent = msg;
+    Object.assign(t.style, {
+      position:'fixed', right:'16px', bottom:'16px',
+      background:'#0b1324', color:'#e6edf7', padding:'10px 14px',
+      border:'1px solid #13233f', borderRadius:'12px', zIndex:9999,
+      boxShadow:'0 12px 30px rgba(2,8,23,.35)'
+    });
+    document.body.appendChild(t);
+    setTimeout(()=> t.remove(), 2800);
+  }
+
   async function parseFileToQuestions(file) {
     const text = await file.text();
 
@@ -117,46 +111,25 @@
     }
 
     if (file.name.toLowerCase().endsWith('.csv')) {
-      // CSV con cabecera: id,text,o1,o2,o3,o4,correct
+      // CSV esperado: id,text,o1,o2,o3,o4,correct
       const rows = text.trim().split(/\r?\n/).map(l => l.split(','));
-      const hdr = rows.shift().map(h => h.trim().toLowerCase());
-      const idx = (k) => hdr.indexOf(k);
-      const out = [];
-      for (const r of rows) {
-        out.push({
-          id: r[idx('id')] || '',
-          text: r[idx('text')] || '',
-          options: [r[idx('o1')], r[idx('o2')], r[idx('o3')], r[idx('o4')]].filter(Boolean),
-          correct: Number(r[idx('correct')] || 0)
-        });
-      }
-      return out;
+      const hdr  = rows.shift().map(h => h.trim().toLowerCase());
+      const idx  = k => hdr.indexOf(k);
+      return rows.map(r => ({
+        id: r[idx('id')] || '',
+        text: r[idx('text')] || '',
+        options: [r[idx('o1')], r[idx('o2')], r[idx('o3')], r[idx('o4')]].filter(Boolean),
+        correct: Number(r[idx('correct')] || 0)
+      }));
     }
 
     throw new Error('Formato no soportado. Usa .json o .csv');
   }
 
-  // --- Modal éxito ---
-  const okBackdrop = $('#ok-backdrop');
-  const okModal    = $('#ok-modal');
-  const okMsg      = $('#ok-msg');
-  const okClose    = $('#ok-close');
-
-  function showOk(msg) {
-    okMsg.textContent = msg || 'Operación realizada correctamente.';
-    okBackdrop.style.display = 'block';
-    okModal.style.display = 'block';
-  }
-  okClose.addEventListener('click', () => {
-    okBackdrop.style.display = 'none';
-    okModal.style.display = 'none';
-  });
-  okBackdrop.addEventListener('click', e => { if (e.target === okBackdrop) okClose.click(); });
-
-  // --- Handler correcto con tus IDs: #exam-title / #exam-file / #exam-upload ---
-  $('#exam-upload')?.addEventListener('click', async () => {
-    const name = ($('#exam-title')?.value || 'Examen').trim();
-    const file = $('#exam-file')?.files?.[0];
+  $('#exam-upload').addEventListener('click', async (e) => {
+    e.preventDefault();
+    const name = ($('#exam-title').value || 'Examen').trim();
+    const file = $('#exam-file').files?.[0];
     if (!file) return alert('Selecciona un archivo CSV/JSON');
 
     try {
@@ -164,22 +137,22 @@
 
       const r = await fetch('/api/exam/set', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type':'application/json' },
         body: JSON.stringify({ name, questions })
       });
-      const j = await r.json();
 
+      // Asegúrate de que **siempre** sea JSON:
+      const j = await r.json().catch(() => ({ ok:false, error:'Respuesta no JSON' }));
       if (!r.ok || !j.ok) throw new Error(j.error || 'Error guardando el examen');
 
-      // Limpio el file input para evitar confusiones
-      $('#exam-file').value = '';
-      showOk(`Examen "${name}" activado (${j.saved} preguntas).`);
-    } catch (e) {
-      console.error(e);
-      alert(e.message || 'Error guardando el examen');
+      toast(`✅ Examen "${name}" activado (${j.saved} preguntas).`);
+    } catch (err) {
+      console.error(err);
+      alert(err.message || 'Error guardando el examen');
     }
   });
 </script>
+
 
 
 

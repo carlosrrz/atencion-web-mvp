@@ -7,23 +7,37 @@ export default async function handler(req, res) {
   }
   try {
     const pool = getPool();
-    await pool.query(
-      `CREATE TABLE IF NOT EXISTS settings(
-         key text PRIMARY KEY,
-         value jsonb,
-         updated_at timestamptz DEFAULT now()
-       )`
-    );
+    await pool.query(`
+      create table if not exists exam_banks(
+        id bigserial primary key,
+        name text not null,
+        payload jsonb not null,
+        created_at timestamptz default now()
+      );
+      create table if not exists current_exam(
+        id int primary key default 1,
+        bank_id bigint references exam_banks(id),
+        name text not null,
+        activated_at timestamptz default now()
+      );
+    `);
 
-    const { rows } = await pool.query(
-      `SELECT value FROM settings WHERE key='current_exam' LIMIT 1`
-    );
-    if (!rows.length) {
-      return res.status(404).json({ ok:false, error:'No hay examen activo' });
+    const { rows } = await pool.query(`
+      select b.name, b.payload
+      from current_exam c
+      left join exam_banks b on b.id = c.bank_id
+      where c.id = 1
+    `);
+
+    const row = rows[0];
+    if (!row || !row.payload) {
+      // sin examen activo → JSON válido
+      return res.status(200).json({ ok:true, name:'—', questions: [] });
     }
-    return res.status(200).json({ ok:true, ...rows[0].value });
+
+    return res.status(200).json({ ok:true, name: row.name, questions: row.payload });
   } catch (err) {
-    console.error('[exam/current] ERROR', err);
-    return res.status(500).json({ ok:false, error:'Error leyendo examen' });
+    console.error('[exam/current]', err);
+    return res.status(500).json({ ok:false, error:'Server error' });
   }
 }

@@ -1,51 +1,50 @@
 // api/exam/set.js
 import { getPool } from '../../lib/db.js';
 
-function normalizeQuestions(input) {
-  const arr = Array.isArray(input) ? input : (input?.questions || []);
-  return arr.map((q, i) => ({
-    id: q.id ?? `q_${i+1}`,
-    text: String(q.text ?? ''),
-    options: (q.options ?? []).map(String),
-    correct: Number(q.correct ?? 0)
-  })).filter(q => q.text && q.options.length >= 2);
-}
-
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
     return res.status(405).json({ ok:false, error:'Method not allowed' });
   }
   try {
-    const { name, questions } = req.body || {};
-    if (!name || !questions) {
-      return res.status(400).json({ ok:false, error:'Falta name o questions' });
-    }
-
-    const norm = normalizeQuestions(questions);
-    if (!norm.length) {
-      return res.status(400).json({ ok:false, error:'Questions vacío o inválido' });
+    const { name = 'Examen', questions = [] } = req.body || {};
+    if (!Array.isArray(questions) || questions.length === 0) {
+      return res.status(400).json({ ok:false, error:'questions vacío' });
     }
 
     const pool = getPool();
-    await pool.query(
-      `CREATE TABLE IF NOT EXISTS settings(
-         key text PRIMARY KEY,
-         value jsonb,
-         updated_at timestamptz DEFAULT now()
-       )`
+
+    // Tablas mínimas para banco/activación
+    await pool.query(`
+      create table if not exists exam_banks(
+        id bigserial primary key,
+        name text not null,
+        payload jsonb not null,
+        created_at timestamptz default now()
+      );
+      create table if not exists current_exam(
+        id int primary key default 1,
+        bank_id bigint references exam_banks(id),
+        name text not null,
+        activated_at timestamptz default now()
+      );
+      insert into current_exam(id, name) values (1, '—')
+      on conflict (id) do nothing;
+    `);
+
+    const { rows } = await pool.query(
+      `insert into exam_banks(name, payload) values ($1, $2) returning id`,
+      [name, JSON.stringify(questions)]
     );
+    const bankId = rows[0].id;
 
     await pool.query(
-      `INSERT INTO settings (key, value, updated_at)
-       VALUES ('current_exam', $1, now())
-       ON CONFLICT (key) DO UPDATE
-       SET value = EXCLUDED.value, updated_at = now()`,
-      [JSON.stringify({ name, questions: norm })]
+      `update current_exam set bank_id=$1, name=$2, activated_at=now() where id=1`,
+      [bankId, name]
     );
 
-    return res.status(200).json({ ok:true, saved: norm.length });
+    return res.status(200).json({ ok:true, id:bankId, saved: questions.length });
   } catch (err) {
-    console.error('[exam/set] ERROR', err);
-    return res.status(500).json({ ok:false, error:'Error guardando el examen' });
+    console.error('[exam/set]', err);
+    return res.status(500).json({ ok:false, error:'Server error' });
   }
 }
