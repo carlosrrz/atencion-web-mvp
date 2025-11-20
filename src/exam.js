@@ -2,42 +2,35 @@
 // Banco de preguntas dinámico + test con RT y off-tab local
 
 // src/exam.js
+// src/exam.js
 let QUESTIONS = [];
 
-async function loadQuestions({ take = 8 } = {}) {
-  // 1) intento: banco activo desde el backend
+export async function loadQuestions({ take = 8 } = {}) {
+  // 1) Intentar examen activo desde el backend
   try {
-    const r = await fetch('/api/exam/current', { cache:'no-store' });
-    if (!r.ok) throw new Error('no ok');
-    const data = await r.json();
-
-    const bank = Array.isArray(data?.questions) ? data.questions
-               : Array.isArray(data) ? data : [];
-
-    if (bank.length) {
-      const mapped = bank.map((q, i) => ({
-        id: q.id ?? `q_${i+1}`,
-        text: q.text ?? '',
-        options: (q.options ?? []).map(String),
-        correct: Number(q.correct ?? 0)
-      }));
-      const shuffled = mapped.slice().sort(() => Math.random() - 0.5);
-      QUESTIONS = shuffled.slice(0, take);
+    const r = await fetch('/api/exam/current', { cache: 'no-store' });
+    const j = await r.json();
+    if (j?.ok && Array.isArray(j.questions) && j.questions.length) {
+      QUESTIONS = j.questions;
       return;
     }
-    throw new Error('empty bank');
-  } catch {
-    // 2) fallback: tu archivo local
-    try {
-      const res = await fetch('./src/questions.json', { cache:'no-store' });
-      const bank = await res.json();
-      const shuffled = bank.slice().sort(() => Math.random() - 0.5);
-      QUESTIONS = shuffled.slice(0, take);
-    } catch {
-      QUESTIONS = [];
-    }
+  } catch (_) {}
+
+  // 2) Fallback a questions.json
+  try {
+    const res = await fetch('./src/questions.json', { cache: 'no-store' });
+    const bank = await res.json();
+    const shuffled = bank.slice().sort(() => Math.random() - 0.5);
+    QUESTIONS = shuffled.slice(0, take);
+  } catch (e) {
+    console.warn('[exam] fallback mínimo');
+    QUESTIONS = [
+      { id:'q_f1', text:'Fallback 1', options:['A','B','C','D'], correct:0 },
+      { id:'q_f2', text:'Fallback 2', options:['A','B','C','D'], correct:1 },
+    ];
   }
 }
+
 
 
 const els = {

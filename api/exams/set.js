@@ -6,45 +6,35 @@ export default async function handler(req, res) {
     return res.status(405).json({ ok:false, error:'Method not allowed' });
   }
   try {
-    const { name = 'Examen', questions = [] } = req.body || {};
-    if (!Array.isArray(questions) || questions.length === 0) {
-      return res.status(400).json({ ok:false, error:'questions vacío' });
+    const { name, questions } = req.body || {};
+    if (!name || !Array.isArray(questions) || !questions.length) {
+      return res.status(400).json({ ok:false, error:'payload inválido' });
     }
 
     const pool = getPool();
 
-    // Tablas mínimas para banco/activación
+    // Tabla para guardar el examen activo
     await pool.query(`
-      create table if not exists exam_banks(
-        id bigserial primary key,
-        name text not null,
-        payload jsonb not null,
-        created_at timestamptz default now()
-      );
-      create table if not exists current_exam(
-        id int primary key default 1,
-        bank_id bigint references exam_banks(id),
-        name text not null,
-        activated_at timestamptz default now()
-      );
-      insert into current_exam(id, name) values (1, '—')
-      on conflict (id) do nothing;
+      CREATE TABLE IF NOT EXISTS exam_defs(
+        id         text PRIMARY KEY,
+        name       text NOT NULL,
+        questions  jsonb NOT NULL,
+        created_at timestamptz DEFAULT now()
+      )
     `);
 
-    const { rows } = await pool.query(
-      `insert into exam_banks(name, payload) values ($1, $2) returning id`,
+    // Guarda/actualiza el “examen activo”
+    await pool.query(
+      `INSERT INTO exam_defs (id, name, questions)
+       VALUES ('active', $1, $2::jsonb)
+       ON CONFLICT (id) DO UPDATE
+       SET name = EXCLUDED.name, questions = EXCLUDED.questions, created_at = now()`,
       [name, JSON.stringify(questions)]
     );
-    const bankId = rows[0].id;
 
-    await pool.query(
-      `update current_exam set bank_id=$1, name=$2, activated_at=now() where id=1`,
-      [bankId, name]
-    );
-
-    return res.status(200).json({ ok:true, id:bankId, saved: questions.length });
+    return res.status(200).json({ ok:true, saved: questions.length, name });
   } catch (err) {
-    console.error('[exam/set]', err);
-    return res.status(500).json({ ok:false, error:'Server error' });
+    console.error('[exam/set] ERROR', err);
+    return res.status(500).json({ ok:false, error:'server error' });
   }
 }
