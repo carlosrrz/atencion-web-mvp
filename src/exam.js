@@ -45,6 +45,77 @@ const els = {
   instr: document.getElementById('exam-instr')
 };
 
+// ===== Validación de datos del estudiante =====
+const F = {
+  name : document.getElementById('student-name'),
+  code : document.getElementById('student-code'),
+  email: document.getElementById('student-email'), // opcional
+};
+
+// Regex de correo (estricto; sin '..' ni puntos al final/inicio del local part)
+const EMAIL_RE =
+/^(?!.*\.\.)(?!.*\.$)(?!^\.)[A-Za-z0-9](?:[A-Za-z0-9._%+-]{0,62}[A-Za-z0-9])?@[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?(?:\.[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?)+$/;
+
+// Nombre: letras (incluye tildes/ñ), espacios, apóstrofes y guiones.
+// 3–80 caracteres visibles (permitimos números por si los usan en el código paterno).
+const NAME_RE = /^[A-Za-zÁÉÍÓÚÜÑáéíóúüñ'´`-][A-Za-zÁÉÍÓÚÜÑáéíóúüñ0-9'´`.\- ]{1,78}[A-Za-zÁÉÍÓÚÜÑáéíóúüñ0-9'´`-]$/;
+
+// Código: 3–20, alfanumérico con - _ permitidos
+const CODE_RE = /^[A-Za-z0-9\-_]{3,20}$/;
+
+function markInvalid(el, msg) {
+  if (!el) return;
+  el.classList.add('is-invalid');
+  el.setAttribute('title', msg);
+}
+function clearInvalid(el) {
+  if (!el) return;
+  el.classList.remove('is-invalid');
+  el.removeAttribute('title');
+}
+
+function validateStudentFields() {
+  const name = (F.name?.value || '').trim();
+  const code = (F.code?.value || '').trim();
+  const email = (F.email?.value || '').trim().toLowerCase();
+
+  // limpia marcas anteriores
+  [F.name, F.code, F.email].forEach(clearInvalid);
+
+  // nombre
+  if (!name || name.replace(/\s+/g,'').length < 3 || !NAME_RE.test(name)) {
+    markInvalid(F.name, 'Nombre inválido (3–80 caracteres, solo letras/espacios/guiones).');
+    F.name?.focus();
+    return { ok: false, error: 'Revisa el nombre.' };
+  }
+
+  // código
+  if (!CODE_RE.test(code)) {
+    markInvalid(F.code, 'Código inválido (3–20, solo letras/números, guion o guion bajo).');
+    F.code?.focus();
+    return { ok: false, error: 'Revisa el código.' };
+  }
+
+  // correo (opcional)
+  if (email && !EMAIL_RE.test(email)) {
+    markInvalid(F.email, 'Correo inválido.');
+    F.email?.focus();
+    return { ok: false, error: 'Revisa el correo.' };
+  }
+
+  return {
+    ok: true,
+    data: { name, code, email: email || null }
+  };
+}
+
+// Validación en vivo (quita el rojo al teclear)
+[F.name, F.code, F.email].forEach(el => {
+  el?.addEventListener('input', () => clearInvalid(el));
+});
+
+
+
 let state = {
   running: false,
   i: 0,
@@ -126,10 +197,24 @@ function pollOff() {
 
 /* ====== Inicio/avance/final ====== */
 function startTest() {
-  if (!window.__camReady) {
-    alert('Primero permite la cámara y confírmala activa.');
+  // 1) Valida datos del estudiante
+  const v = validateStudentFields();
+  if (!v.ok) { 
+    alert(v.error || 'Revisa los datos del estudiante.');
     return;
   }
+
+  // (opcional) Guarda los datos para el intento/export
+  window.__student = v.data;
+  try { localStorage.setItem('proctor.student', JSON.stringify(v.data)); } catch {}
+
+  // 2) Pre-requisito: cámara lista (como ya tenías)
+  if (!window.__camReady) {
+    alert('Primero permite la cámara y confirma que está activa.');
+    return;
+  }
+
+  // 3) ... lo demás de tu startTest() (lo que ya tenías)
   state.running = true;
   state.i = 0;
   state.answers = [];
@@ -140,14 +225,16 @@ function startTest() {
   clearTimeout(state._pollTimer);
   pollOff();
 
-  els.start?.classList.add('hidden');
-  els.next?.classList.remove('hidden');
-  els.finish?.classList.add('hidden');
-  els.result?.classList.add('hidden');
+  els.start.classList.add('hidden');
+  els.next.classList.remove('hidden');
+  els.finish.classList.add('hidden');
+  els.result.classList.add('hidden');
   els.instr?.classList.add('hidden');
+  els.instr?.classList.remove('hidden');
 
   renderQuestion();
 }
+
 
 function nextQuestion() {
   if (!submitCurrent()) return;
@@ -219,9 +306,11 @@ els.total.textContent = '0';
 els.rt.textContent = '0.0';
 
 (async () => {
-  await loadQuestions({ url: './src/questions.json', take: 8 });
+  await loadQuestions({ take: 8 });
   els.total.textContent = String(QUESTIONS.length);
+  els.text.textContent = '...';
 })();
+
 
 els.start?.addEventListener('click', startTest);
 els.next?.addEventListener('click', nextQuestion);
