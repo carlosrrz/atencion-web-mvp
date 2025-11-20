@@ -99,7 +99,17 @@
     <div class="modal-card">
       <h3>Crear cuenta</h3>
       <div class="row">
-        <input id="reg-name"  class="auth-input" placeholder="Nombre" />
+        <input
+  id="reg-name"
+  class="auth-input"
+  placeholder="Nombre"
+  autocomplete="name"
+  minlength="2"
+  maxlength="60"
+  pattern="^[A-Za-zÁÉÍÓÚÜÑáéíóúüñ]+(?:[ '\-][A-Za-zÁÉÍÓÚÜÑáéíóúüñ]+)*$"
+  required
+/>
+
         <input
   id="reg-email"
   class="auth-input"
@@ -147,6 +157,12 @@
     const show = el => el.classList.remove('hidden');
     const hide = el => el.classList.add('hidden');
     const EMAIL_RE = /^(?!.*\.\.)(?!.*\.$)(?!^\.)[A-Za-z0-9](?:[A-Za-z0-9._%+-]{0,62}[A-Za-z0-9])?@[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?(?:\.[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?)+$/;
+    // Normaliza: colapsa espacios y recorta
+    const clean = (s) => s.normalize('NFKC').replace(/\s+/g, ' ').trim();
+    // Nombre 2–60, solo letras/espa/’/-
+    const NAME_RE =
+    /^(?=.{2,60}$)[A-Za-zÁÉÍÓÚÜÑáéíóúüñ]+(?:[ '\-][A-Za-zÁÉÍÓÚÜÑáéíóúüñ]+)*$/;
+
 
     // ===== LOGIN =====
     $('btn').addEventListener('click', async () => {
@@ -181,27 +197,27 @@
     $('reg-cancel').addEventListener('click', () => hide($('reg-modal')));
 
    $('reg-submit').addEventListener('click', async () => {
-    const name  = $('reg-name').value.trim();
-    const email = $('reg-email').value.trim().toLowerCase();
-    const password = $('reg-pass').value.trim();
-    const role  = $('reg-role').value;
+  const name  = clean($('reg-name').value);
+  const email = $('reg-email').value.trim().toLowerCase();
+  const password = $('reg-pass').value.trim();
+  const role  = $('reg-role').value;
 
-    if (!name || !email || !password) return alert('Completa todos los campos');
-    if (!EMAIL_RE.test(email)) return alert('Correo inválido. Evita puntos consecutivos (..) y formatos no válidos.');
-    if (password.length < 6)   return alert('La contraseña debe tener al menos 6 caracteres.');
+  if (!name || !email || !password) return alert('Completa todos los campos');
+  if (!NAME_RE.test(name)) return alert('Nombre inválido (usa solo letras, espacios, apóstrofo o guion; 2–60 caracteres).');
+  if (!EMAIL_RE.test(email)) return alert('Correo inválido.');
+  if (password.length < 6)   return alert('La contraseña debe tener al menos 6 caracteres.');
 
-    const r = await fetch('/api/auth/register', {
-      method:'POST',
-      headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({ name, email, password, role })
-    });
-    const j = await r.json();
-    if (!r.ok || !j.ok) return alert(j?.error || 'No se pudo registrar');
-
-    // Aquí mantén tu comportamiento (p.ej. mostrar modal “Cuenta creada” o volver al login)
-    alert('Cuenta creada correctamente. Ahora inicia sesión.');
-    hide(document.getElementById('reg-modal'));
+  const r = await fetch('/api/auth/register', {
+    method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({ name, email, password, role })
   });
+  const j = await r.json();
+  if (!r.ok || !j.ok) return alert(j?.error || 'No se pudo registrar');
+
+  alert('Cuenta creada correctamente. Ahora inicia sesión.');
+  document.getElementById('reg-modal').classList.add('hidden');
+});
 </script>
 </body>
 </html>
