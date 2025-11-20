@@ -75,73 +75,40 @@
 
   <section class="card" style="margin-top:16px">
   <h3>Banco de examen (CSV/JSON)</h3>
-  <input id="exam-title" class="auth-input" placeholder="Nombre del examen" />
-  <input id="exam-file" type="file" accept=".json,.csv" />
-  <button id="exam-upload" class="primary">Cargar y activar</button>
-</section>
+ <!-- Banco de examen -->
+<input id="exam-title" class="auth-input" placeholder="Nombre del examen">
+<input id="exam-file" type="file" accept=".json,.csv">
+<button id="exam-upload" class="primary">Cargar y activar</button>
 
 <script type="module">
-  const $ = (s) => document.querySelector(s);
+  const $ = s => document.querySelector(s);
 
   async function parseFileToQuestions(file) {
     const text = await file.text();
-    const lower = file.name.toLowerCase();
-
-    if (lower.endsWith('.json')) {
+    if (file.name.toLowerCase().endsWith('.json')) {
       const j = JSON.parse(text);
       const list = Array.isArray(j) ? j : (j.questions || []);
       return list.map((q, i) => ({
-        id: q.id ?? `q_${i + 1}`,
+        id: q.id ?? `q_${i+1}`,
         text: q.text ?? '',
         options: (q.options ?? []).map(String),
-        correct: Number(q.correct ?? 0),
+        correct: Number(q.correct ?? 0)
+      }));
+    } else {
+      // CSV: id,text,o1,o2,o3,o4,correct
+      const rows = text.trim().split(/\r?\n/).map(l => l.split(','));
+      const hdr = rows.shift().map(h => h.trim().toLowerCase());
+      const idx = k => hdr.indexOf(k);
+      return rows.map(r => ({
+        id: r[idx('id')] || '',
+        text: r[idx('text')] || '',
+        options: [r[idx('o1')], r[idx('o2')], r[idx('o3')], r[idx('o4')]].filter(Boolean),
+        correct: Number(r[idx('correct')] || 0)
       }));
     }
-
-    if (lower.endsWith('.csv')) {
-      // CSV: id,text,o1,o2,o3,o4,correct
-      const rows = text.trim().split(/\r?\n/).map((l) => l.split(','));
-      const hdr = rows.shift().map((h) => h.trim().toLowerCase());
-      const idx = (k) => hdr.indexOf(k);
-      const out = [];
-      for (const r of rows) {
-        out.push({
-          id: r[idx('id')] || '',
-          text: r[idx('text')] || '',
-          options: [r[idx('o1')], r[idx('o2')], r[idx('o3')], r[idx('o4')]].filter(Boolean),
-          correct: Number(r[idx('correct')] || 0),
-        });
-      }
-      return out;
-    }
-
-    throw new Error('Formato no soportado. Usa .json o .csv');
   }
 
-  // Modal de éxito (simple)
-  function showOk(msg = 'Examen guardado') {
-    const m = document.createElement('div');
-    m.style.position = 'fixed';
-    m.style.inset = '0';
-    m.style.display = 'grid';
-    m.style.placeItems = 'center';
-    m.style.background = 'rgba(0,0,0,.45)';
-    m.style.zIndex = '9999';
-    m.innerHTML = `
-      <div style="
-        background:#0b1324;border:1px solid #13233f;border-radius:16px;
-        color:#e6edf7;padding:20px 24px; min-width:320px; text-align:center;
-        box-shadow:0 12px 32px rgba(2,8,23,.45)
-      ">
-        <div style="font-size:48px; line-height:1; margin-bottom:8px">✅</div>
-        <div style="margin-bottom:16px">${msg}</div>
-        <button id="okbtn" class="primary" style="height:40px;padding:0 16px">Aceptar</button>
-      </div>`;
-    document.body.appendChild(m);
-    m.querySelector('#okbtn').onclick = () => m.remove();
-  }
-
-  $('#exam-upload').addEventListener('click', async (e) => {
+  $('#exam-upload')?.addEventListener('click', async (e) => {
     e.preventDefault();
     const name = ($('#exam-title')?.value || 'Examen').trim();
     const file = $('#exam-file')?.files?.[0];
@@ -149,24 +116,22 @@
 
     try {
       const questions = await parseFileToQuestions(file);
-
-      const r = await fetch('/api/exam/set', {
+      const r = await fetch('/api/exams/set', {           // <-- PLURAL
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name, questions }),
+        headers: { 'Content-Type':'application/json' },
+        body: JSON.stringify({ name, questions })
       });
+      const j = await r.json().catch(() => null);
+      if (!r.ok || !j?.ok) throw new Error(j?.error || 'Error guardando el examen');
 
-      // IMPORTANTE: si el server responde HTML, esto lanzará excepción
-      const j = await r.json();
-
-      if (!r.ok || !j.ok) throw new Error(j.error || 'Error guardando el examen');
-      showOk(`Examen “${name}” activado (${j.saved} preguntas).`);
-    } catch (err) {
-      console.error(err);
-      alert(err.message || 'Error guardando el examen');
+      alert(`Examen "${name}" activado (${j.saved} preguntas).`);
+    } catch (e2) {
+      console.error(e2);
+      alert(e2.message || 'Respuesta no JSON');
     }
   });
 </script>
+
 
 
   <!-- Modal detalle -->

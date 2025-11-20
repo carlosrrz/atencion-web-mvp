@@ -3,31 +3,30 @@
 
 // src/exam.js
 // src/exam.js
+// src/exam.js
 let QUESTIONS = [];
 
-export async function loadQuestions({ take = 8 } = {}) {
-  // 1) Intentar examen activo desde el backend
+async function loadQuestions({ take = 8 } = {}) {
+  // 1) Intento con el examen activo del servidor
   try {
-    const r = await fetch('/api/exam/current', { cache: 'no-store' });
-    const j = await r.json();
-    if (j?.ok && Array.isArray(j.questions) && j.questions.length) {
-      QUESTIONS = j.questions;
-      return;
+    const r = await fetch('/api/exams/current', { cache: 'no-store' });
+    if (r.ok) {
+      const j = await r.json();
+      if (j?.ok && Array.isArray(j.questions) && j.questions.length) {
+        QUESTIONS = j.questions.slice(0, take);
+        return;
+      }
     }
-  } catch (_) {}
+  } catch {}
 
-  // 2) Fallback a questions.json
+  // 2) Fallback local
   try {
     const res = await fetch('./src/questions.json', { cache: 'no-store' });
     const bank = await res.json();
-    const shuffled = bank.slice().sort(() => Math.random() - 0.5);
+    const shuffled = bank.slice().sort(()=>Math.random()-0.5);
     QUESTIONS = shuffled.slice(0, take);
-  } catch (e) {
-    console.warn('[exam] fallback mínimo');
-    QUESTIONS = [
-      { id:'q_f1', text:'Fallback 1', options:['A','B','C','D'], correct:0 },
-      { id:'q_f2', text:'Fallback 2', options:['A','B','C','D'], correct:1 },
-    ];
+  } catch {
+    QUESTIONS = [{ id:'fallback1', text:'Sin banco disponible', options:['OK'], correct:0 }];
   }
 }
 
