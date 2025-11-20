@@ -29,3 +29,10 @@ export function logout(){
   localStorage.removeItem('role');
   location.replace('login.html');
 }
+
+export function clearSession() {
+  try {
+    sessionStorage.removeItem('proctor.user');
+    localStorage.removeItem('proctor.user');
+  } catch {}
+}

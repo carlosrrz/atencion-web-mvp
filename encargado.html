@@ -46,8 +46,13 @@
     <div class="wrap row" style="justify-content:space-between">
       <h1>Panel del profesor</h1>
       <nav class="row">
-        <a id="btn-logout" class="secondary">Salir</a>
-      </nav>
+  <!-- opción A (recomendada) -->
+  <button id="btn-logout" class="secondary" type="button">Salir</button>
+
+  <!-- opción B si quieres seguir con <a> -->
+  <!-- <a id="btn-logout" href="#" class="secondary">Salir</a> -->
+</nav>
+
     </div>
   </header>
 
@@ -110,9 +115,17 @@
 
   <script type="module">
     import { requireRole, clearSession } from './src/roles.js';
-
-    // solo profesores
     requireRole('prof');
+
+    const btnLogout = document.getElementById('btn-logout');
+if (btnLogout) {
+  btnLogout.addEventListener('click', async (e) => {
+    e.preventDefault();              // por si es <a>
+    try { await fetch('/api/auth/logout', { method: 'POST' }); } catch {}
+    clearSession();                  // borra sesión local (localStorage/sessionStorage)
+    location.href = 'login.html';    // redirige
+  });
+}
 
     const $ = (s)=>document.querySelector(s);
 
