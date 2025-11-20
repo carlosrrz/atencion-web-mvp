@@ -100,7 +100,17 @@
       <h3>Crear cuenta</h3>
       <div class="row">
         <input id="reg-name"  class="auth-input" placeholder="Nombre" />
-        <input id="reg-email" class="auth-input" placeholder="Correo" autocomplete="username" />
+        <input
+  id="reg-email"
+  class="auth-input"
+  type="email"
+  inputmode="email"
+  placeholder="Correo"
+  autocomplete="username"
+  pattern="^(?!.*\.\.)(?!.*\.$)(?!^\.)[A-Za-z0-9](?:[A-Za-z0-9._%+-]{0,62}[A-Za-z0-9])?@[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?(?:\.[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?)+$"
+  title="Correo inválido: sin puntos consecutivos ni punto al inicio/fin y dominio válido."
+/>
+
         <input id="reg-pass"  class="auth-input" type="password" placeholder="Contraseña" autocomplete="new-password" />
         <select id="reg-role" class="auth-input">
           <option value="student">Estudiante</option>
@@ -136,6 +146,7 @@
     const $  = (id)=>document.getElementById(id);
     const show = el => el.classList.remove('hidden');
     const hide = el => el.classList.add('hidden');
+    const EMAIL_RE = /^(?!.*\.\.)(?!.*\.$)(?!^\.)[A-Za-z0-9](?:[A-Za-z0-9._%+-]{0,62}[A-Za-z0-9])?@[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?(?:\.[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?)+$/;
 
     // ===== LOGIN =====
     $('btn').addEventListener('click', async () => {
@@ -169,39 +180,28 @@
     $('btn-register').addEventListener('click', () => show($('reg-modal')));
     $('reg-cancel').addEventListener('click', () => hide($('reg-modal')));
 
-    $('reg-submit').addEventListener('click', async () => {
-      const name  = $('reg-name').value.trim();
-      const email = $('reg-email').value.trim();
-      const password = $('reg-pass').value.trim();
-      const role  = $('reg-role').value;
+   $('reg-submit').addEventListener('click', async () => {
+    const name  = $('reg-name').value.trim();
+    const email = $('reg-email').value.trim().toLowerCase();
+    const password = $('reg-pass').value.trim();
+    const role  = $('reg-role').value;
 
-      if (!name || !email || !password) return alert('Completa todos los campos');
+    if (!name || !email || !password) return alert('Completa todos los campos');
+    if (!EMAIL_RE.test(email)) return alert('Correo inválido. Evita puntos consecutivos (..) y formatos no válidos.');
+    if (password.length < 6)   return alert('La contraseña debe tener al menos 6 caracteres.');
 
-      let r, j;
-      try {
-        r = await fetch('/api/auth/register', {
-          method:'POST',
-          headers:{'Content-Type':'application/json'},
-          body: JSON.stringify({ name, email, password, role })
-        });
-        j = await r.json();
-      } catch {
-        alert('Error de red'); return;
-      }
-      if (!r.ok || !j.ok) return alert(j?.error || 'No se pudo registrar');
-
-      // ✅ Sin auto-login: cerrar modal, prellenar y mostrar confirmación
-      hide($('reg-modal'));
-      $('user').value = email;
-      $('pass').value = '';
-      $('user').focus();
-
-      $('info-title').textContent = 'Cuenta creada satisfactoriamente';
-      $('info-body').textContent  = 'Ingresa con tu correo y contraseña para continuar.';
-      show($('info-modal'));
+    const r = await fetch('/api/auth/register', {
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ name, email, password, role })
     });
+    const j = await r.json();
+    if (!r.ok || !j.ok) return alert(j?.error || 'No se pudo registrar');
 
-    $('info-ok').addEventListener('click', () => hide($('info-modal')));
-  </script>
+    // Aquí mantén tu comportamiento (p.ej. mostrar modal “Cuenta creada” o volver al login)
+    alert('Cuenta creada correctamente. Ahora inicia sesión.');
+    hide(document.getElementById('reg-modal'));
+  });
+</script>
 </body>
 </html>
