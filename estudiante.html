@@ -9,7 +9,22 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Evaluación — Estudiante</title>
-  <link rel="stylesheet" href="./src/styles.css" />
+  <link rel="stylesheet" href="/src/styles.css?v=20251120">
+
+<!-- En encargado.html, dentro de <head>, debajo del link a styles.css -->
+<style>
+  /* Fuerza tema oscuro en esta página */
+  body { 
+    background:
+      radial-gradient(1200px 600px at 20% -10%, rgba(42,84,190,.22), transparent 60%),
+      radial-gradient(900px 500px at 110% 10%, rgba(1,35,80,.22), transparent 55%),
+      #0a1020;
+    color:#e6edf7;
+  }
+  .card, table th, table td { background:#0b1324; border-color:#13233f; }
+</style>
+
+
   <style>
     .grid-2{display:grid;grid-template-columns:1.2fr .8fr;gap:18px}
     .row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}

@@ -1,37 +1,44 @@
-<script type="module">
-  import { requireRole } from './src/roles.js';
-  requireRole(['prof']);
-</script>
-
 <!doctype html>
 <html lang="es">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Panel — Profesor</title>
-  <link rel="stylesheet" href="./src/styles.css" />
+
+  <!-- Ruta absoluta + cache buster -->
+  <link rel="stylesheet" href="/src/styles.css?v=20251120"/>
 
   <style>
     .wrap{max-width:1200px;margin:20px auto;padding:0 16px}
     table{width:100%;border-collapse:separate;border-spacing:0 6px}
-    th,td{padding:8px 10px;background:#fff;border:1px solid var(--border)}
-    th{background:#f8fafc;text-align:left}
+    th,td{padding:8px 10px;background:#fff0;border:1px solid var(--border)}
+    th{background:#0f1b34;text-align:left;color:#e6edf7}
+    td{background:#0c1428;color:#dfe7f6}
     .row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
-    .pill{display:inline-flex;align-items:center;padding:2px 8px;border-radius:999px;background:#f3f4f6;border:1px solid var(--border)}
+    .pill{display:inline-flex;align-items:center;padding:2px 8px;border-radius:999px;background:#0f1b34;border:1px solid var(--border);color:#cdd7ee}
     .muted{color:var(--muted);font-size:.92rem}
 
-    /* Modal sencillo (propio de esta página) */
+    /* --- modal de detalle --- */
     .backdrop{position:fixed;inset:0;background:rgba(0,0,0,.45);display:none;z-index:300}
-    .modal{position:fixed;left:50%;top:7%;transform:translateX(-50%);width:min(980px,94vw);background:#fff;border:1px solid var(--border);border-radius:14px;box-shadow:var(--shadow);display:none;z-index:301}
+    .modal{position:fixed;left:50%;top:7%;transform:translateX(-50%);
+      width:min(980px,94vw);background:#0b1324;border:1px solid var(--border);
+      border-radius:14px;box-shadow:var(--shadow);display:none;z-index:301;color:#e6edf7}
     .modal header,.modal footer{padding:12px 16px;border-bottom:1px solid var(--border)}
     .modal footer{border-top:1px solid var(--border);border-bottom:none;display:flex;justify-content:flex-end;gap:8px}
     .modal .body{padding:14px}
 
-    /* Grid de evidencias (usa nombres similares a tu styles.css) */
-    .ev-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:12px}
-    .ev-card{border:1px solid var(--border);border-radius:12px;padding:8px;background:#fff;box-shadow:0 2px 10px rgba(2,8,23,.05)}
-    .ev-card img{width:100%;height:auto;border-radius:8px;display:block}
-    .ev-note{font-size:.85rem;color:var(--muted);margin-top:6px}
+    /* --- toast sencillo --- */
+    .toast{position:fixed;right:16px;bottom:16px;background:#0b1324;color:#e6edf7;
+      border:1px solid #21365c;border-radius:12px;padding:12px 14px;box-shadow:0 10px 30px rgba(2,8,23,.4);
+      display:none;z-index:400}
+    .toast.ok{border-color:#2e7d32}
+    .toast.err{border-color:#b3261e}
+
+    /* sección banco */
+    .card{background:#0b1324;border:1px solid var(--border);border-radius:14px;padding:14px;margin:16px auto;color:#e6edf7}
+    .auth-input{width:100%;height:48px;padding:10px 12px;border-radius:12px;border:1px solid #1c2a48;background:#0e1a2f;color:#e6edf7}
+    .primary{height:44px;border:0;border-radius:12px;background:#2f6cf6;color:#fff;font-weight:600;padding:0 14px;cursor:pointer}
+    .secondary{height:44px;border:1px solid #21365c;border-radius:12px;background:#0f1b34;color:#e6edf7;padding:0 12px;cursor:pointer}
   </style>
 </head>
 <body>
@@ -39,7 +46,7 @@
     <div class="wrap row" style="justify-content:space-between">
       <h1>Panel del profesor</h1>
       <nav class="row">
-        <a href="login.html" class="secondary">Salir</a>
+        <a id="btn-logout" class="secondary">Salir</a>
       </nav>
     </div>
   </header>
@@ -48,7 +55,7 @@
     <div class="row" style="justify-content:space-between;margin-bottom:10px">
       <div class="row">
         <button id="btn-export-all" class="secondary">Exportar CSV (todos)</button>
-        <button id="btn-clear" class="secondary">Limpiar todo</button>
+        <button id="btn-clear" class="secondary">Limpiar cache local</button>
       </div>
       <span class="pill" id="count-pill">0 intentos</span>
     </div>
@@ -73,66 +80,15 @@
     </table>
   </main>
 
-  <section class="card" style="margin-top:16px">
-  <h3>Banco de examen (CSV/JSON)</h3>
- <!-- Banco de examen -->
-<input id="exam-title" class="auth-input" placeholder="Nombre del examen">
-<input id="exam-file" type="file" accept=".json,.csv">
-<button id="exam-upload" class="primary">Cargar y activar</button>
-
-<script type="module">
-  const $ = s => document.querySelector(s);
-
-  async function parseFileToQuestions(file) {
-    const text = await file.text();
-    if (file.name.toLowerCase().endsWith('.json')) {
-      const j = JSON.parse(text);
-      const list = Array.isArray(j) ? j : (j.questions || []);
-      return list.map((q, i) => ({
-        id: q.id ?? `q_${i+1}`,
-        text: q.text ?? '',
-        options: (q.options ?? []).map(String),
-        correct: Number(q.correct ?? 0)
-      }));
-    } else {
-      // CSV: id,text,o1,o2,o3,o4,correct
-      const rows = text.trim().split(/\r?\n/).map(l => l.split(','));
-      const hdr = rows.shift().map(h => h.trim().toLowerCase());
-      const idx = k => hdr.indexOf(k);
-      return rows.map(r => ({
-        id: r[idx('id')] || '',
-        text: r[idx('text')] || '',
-        options: [r[idx('o1')], r[idx('o2')], r[idx('o3')], r[idx('o4')]].filter(Boolean),
-        correct: Number(r[idx('correct')] || 0)
-      }));
-    }
-  }
-
-  $('#exam-upload')?.addEventListener('click', async (e) => {
-    e.preventDefault();
-    const name = ($('#exam-title')?.value || 'Examen').trim();
-    const file = $('#exam-file')?.files?.[0];
-    if (!file) return alert('Selecciona un archivo CSV/JSON');
-
-    try {
-      const questions = await parseFileToQuestions(file);
-      const r = await fetch('/api/exams/set', {           // <-- PLURAL
-        method: 'POST',
-        headers: { 'Content-Type':'application/json' },
-        body: JSON.stringify({ name, questions })
-      });
-      const j = await r.json().catch(() => null);
-      if (!r.ok || !j?.ok) throw new Error(j?.error || 'Error guardando el examen');
-
-      alert(`Examen "${name}" activado (${j.saved} preguntas).`);
-    } catch (e2) {
-      console.error(e2);
-      alert(e2.message || 'Respuesta no JSON');
-    }
-  });
-</script>
-
-
+  <!-- Banco de examen -->
+  <section class="card" style="max-width:1200px">
+    <h3>Banco de examen (CSV/JSON)</h3>
+    <div class="row" style="flex-direction:column;gap:10px">
+      <input id="exam-name" class="auth-input" placeholder="Nombre del examen" />
+      <input id="exam-file" type="file" accept=".json,.csv" class="auth-input" />
+      <button id="exam-upload" class="primary" style="align-self:flex-start">Cargar y activar</button>
+    </div>
+  </section>
 
   <!-- Modal detalle -->
   <div id="backdrop" class="backdrop" aria-hidden="true"></div>
@@ -149,44 +105,68 @@
     </footer>
   </div>
 
-  <script type="module">
-    // 🔗 Ajusta estas rutas si tus módulos están en otra carpeta
-    import { requireRole } from './src/roles.js';
-    import { loadAttempts, exportAllCSV, exportOneCSV, clearAll } from './src/store.js';
+  <!-- Toast -->
+  <div id="toast" class="toast"></div>
 
+  <script type="module">
+    import { requireRole, clearSession } from './src/roles.js';
+
+    // solo profesores
     requireRole('prof');
 
-    const tblBody   = document.querySelector('#tbl tbody');
-    const countPill = document.getElementById('count-pill');
-    const btnAll    = document.getElementById('btn-export-all');
-    const btnClr    = document.getElementById('btn-clear');
+    const $ = (s)=>document.querySelector(s);
 
-    const backdrop  = document.getElementById('backdrop');
-    const modal     = document.getElementById('modal');
-    const mTitle    = document.getElementById('m-title');
-    const mBody     = document.getElementById('m-body');
-    const mClose    = document.getElementById('m-close');
-    const mExport   = document.getElementById('m-export');
+    const tblBody   = $('#tbl tbody');
+    const countPill = $('#count-pill');
+    const btnAll    = $('#btn-export-all');
+    const btnClr    = $('#btn-clear');
 
-    let current = null;
+    const backdrop  = $('#backdrop');
+    const modal     = $('#modal');
+    const mTitle    = $('#m-title');
+    const mBody     = $('#m-body');
+    const mClose    = $('#m-close');
+    const mExport   = $('#m-export');
+    const toast     = $('#toast');
 
-    const fmtTime = (ms)=>{ const s=Math.floor((ms||0)/1000); const mm=String(Math.floor(s/60)).padStart(2,'0'); const ss=String(s%60).padStart(2,'0'); return `${mm}:${ss}`; };
-    const fmt     = (ts)=>{ try{ return new Date(ts).toLocaleString(); }catch{ return '—'; } };
-    const safe    = (v)=> (v==null || v==='') ? '—' : String(v);
+    // ---------- util ----------
+    const fmtTime = (ms)=>{ const ss=Math.floor((ms||0)/1000); const mm=String(Math.floor(ss/60)).padStart(2,'0'); const s=String(ss%60).padStart(2,'0'); return `${mm}:${s}`; };
+    const fmt = (ts)=>{ try{ return new Date(ts).toLocaleString(); }catch{ return '—'; } };
+    const safe = (v)=> (v==null || v==='') ? '—' : String(v);
 
-    function render(){
-      const arr = loadAttempts(); // usa la misma KEY del store
-      countPill.textContent = `${arr.length} intento${arr.length===1?'':'s'}`;
+    function showToast(msg, ok=true){
+      toast.textContent = msg;
+      toast.classList.remove('ok','err');
+      toast.classList.add(ok ? 'ok' : 'err');
+      toast.style.display = 'block';
+      setTimeout(()=>{ toast.style.display='none'; }, 2600);
+    }
 
-      tblBody.innerHTML = arr.map((a,i)=>{
-        const s   = a.summary || {};
-        const ta  = s.tab_activity || {};
-        const att = s.attention     || {};
-        const lip = s.lips          || {};
+    // ---------- datos ----------
+    let DATA = [];    // cache en memoria
+
+    async function fetchAttemptsFromCloud() {
+      const r = await fetch('/api/attempt/list?limit=200', { cache: 'no-store' });
+      // si el server devolviera HTML por error, esto tirará excepción que capturamos
+      const j = await r.json();
+      if (!r.ok || !j.ok) throw new Error(j.error || 'No se pudo cargar intentos');
+      return j.items || [];
+    }
+
+    function render(items){
+      DATA = items;
+      countPill.textContent = `${items.length} intento${items.length===1?'':'s'}`;
+
+      tblBody.innerHTML = items.map((a,i)=>{
+        // summary viene plano con episodios (por compat)
+        const off = a.summary?.off_episodes ?? 0;
+        const look = a.summary?.lookaway_episodes ?? 0;
+        const speak = a.summary?.speak_episodes ?? 0;
         const ex  = a.exam || {};
-        // compatibilidad: exam.correct o exam.score
-        const examTxt = (ex.correct!=null && ex.total!=null) ? `${ex.correct}/${ex.total}`
-                       : (ex.score!=null && ex.total!=null)   ? `${ex.score}/${ex.total}` : '—';
+        const examTxt = (ex.score != null && ex.total != null)
+          ? `${ex.score}/${ex.total}`
+          : (ex.correct != null && ex.total != null)
+            ? `${ex.correct}/${ex.total}` : '—';
 
         return `
           <tr>
@@ -196,73 +176,67 @@
             <td>${fmt(a.startedAt)}</td>
             <td>${fmt(a.endedAt)}</td>
             <td>${fmtTime(a.durationMs||0)}</td>
-            <td>${ta.off_episodes ?? 0}</td>
-            <td>${att.lookaway_episodes ?? 0}</td>
-            <td>${lip.speak_episodes ?? 0}</td>
+            <td>${off}</td>
+            <td>${look}</td>
+            <td>${speak}</td>
             <td>${examTxt}</td>
             <td><button class="secondary" data-id="${a.id}">Ver</button></td>
           </tr>`;
       }).join('');
     }
 
-    function openDetail(id){
-      const a = loadAttempts().find(x=>x.id===id);
-      if(!a) return;
-      current = a;
-
-      const s   = a.summary || {};
-      const ta  = s.tab_activity || {};
-      const att = s.attention     || {};
-      const occ = s.occlusion     || {};
-      const lip = s.lips          || {};
-      const perf= s.performance   || {};
-      const ex  = a.exam          || {};
-      const examTxt = (ex.correct!=null && ex.total!=null) ? `${ex.correct}/${ex.total}`
-                     : (ex.score!=null && ex.total!=null)   ? `${ex.score}/${ex.total}` : '—';
-
-      // 👇 Evidencias: usa plural y SI NO existe, hace fallback al singular
-      const evid = Array.isArray(a.evidences) ? a.evidences
-                 : (Array.isArray(a.evidence) ? a.evidence : []);
-
-      mTitle.textContent = `Intento ${a.id} — ${safe(a.student?.name)}`;
-      mBody.innerHTML = `
-        <div class="row" style="margin-bottom:8px">
-          <span class="pill">Inicio: ${fmt(a.startedAt)}</span>
-          <span class="pill">Fin: ${fmt(a.endedAt)}</span>
-          <span class="pill">Duración: ${fmtTime(a.durationMs||0)}</span>
-          <span class="pill">Examen: ${examTxt}</span>
-        </div>
-
-        <h4>Resumen</h4>
-        <ul>
-          <li>Off-tab (≥ ${Math.round((ta.threshold_ms ?? ta.offThresholdMs ?? 1500)/1000)}s): ${ta.off_episodes ?? 0} · tiempo: ${fmtTime(ta.off_total_ms||0)}</li>
-          <li>Mirada desviada: ${att.lookaway_episodes ?? 0} · tiempo: ${fmtTime(att.lookaway_total_ms||0)} · máx: ${fmtTime(att.lookaway_longest_ms||0)}</li>
-          <li>Rostro cubierto: ${occ.episodes ?? 0} · tiempo: ${fmtTime(occ.total_ms||0)}</li>
-          <li>Posible habla: ${lip.speak_episodes ?? 0} · tiempo: ${fmtTime(lip.speak_total_ms||0)}</li>
-          <li>Rendimiento: FPS≈${(perf.fps_median ?? 0)} · p95≈${(perf.latency_p95_ms ?? 0)} ms</li>
-        </ul>
-
-        <h4>Evidencias</h4>
-        <div class="ev-grid" id="ev-grid">
-          ${
-            evid.length
-              ? evid.map(it => `
-                  <div class="ev-card">
-                    <div class="pill pill-warn">${it.kind||'alerta'}</div>
-                    <img src="${it.data}" alt="${it.kind||'evidencia'}" />
-                    <div class="ev-note">${new Date(it.t||Date.now()).toLocaleTimeString()} — ${it.note||''}</div>
-                  </div>
-                `).join('')
-              : '<div class="muted">No hay evidencias capturadas.</div>'
-          }
-        </div>
-      `;
-
-      backdrop.style.display='block';
-      modal.style.display='block';
+    async function loadAndRender(){
+      try{
+        const items = await fetchAttemptsFromCloud();
+        render(items);
+      }catch(e){
+        console.error(e);
+        showToast('No se pudieron cargar los intentos', false);
+        render([]); // vacía
+      }
     }
 
-    // Delegación clicks en tabla
+    // ---------- ver detalle ----------
+    function findAttempt(id){ return DATA.find(x=>String(x.id)===String(id)); }
+
+    function openDetail(id){
+      const a = findAttempt(id);
+      if(!a) return;
+
+      // métricas básicas (con fallback por si tu summary viene en otro shape)
+const off   = a.summary?.tab_activity?.off_episodes ?? a.summary?.off_episodes ?? 0;
+const look  = a.summary?.attention?.lookaway_episodes ?? a.summary?.lookaway_episodes ?? 0;
+const speak = a.summary?.lips?.speak_episodes ?? a.summary?.speak_episodes ?? 0;
+
+// examen: acepta {score,total} o {correct,total}
+const ex = a.exam || {};
+const examTxt =
+  (ex.score   != null && ex.total != null) ? `${ex.score}/${ex.total}` :
+  (ex.correct != null && ex.total != null) ? `${ex.correct}/${ex.total}` :
+  '—';
+
+mBody.innerHTML = `
+  <div class="row" style="margin-bottom:8px">
+    <span class="pill">Inicio: ${fmt(a.startedAt)}</span>
+    <span class="pill">Fin: ${fmt(a.endedAt)}</span>
+    <span class="pill">Duración: ${fmtTime(a.durationMs || 0)}</span>
+    <span class="pill">Examen: ${examTxt}</span>
+  </div>
+
+  <h4>Resumen</h4>
+  <ul>
+    <li>Off-tab (episodios): ${off}</li>
+    <li>Mirada desviada (episodios): ${look}</li>
+    <li>Posible habla (episodios): ${speak}</li>
+  </ul>
+  <div class="muted">* Vista de detalle básica basada en los campos disponibles del backend.</div>
+`;
+
+backdrop.style.display = 'block';
+modal.style.display = 'block';
+    }
+
+    // delegación en tabla
     tblBody.addEventListener('click', (e)=>{
       const btn = e.target.closest('button');
       if (!btn) return;
@@ -270,17 +244,142 @@
       if (id) openDetail(id);
     });
 
-    // Controles modal / superiores
-    mClose.addEventListener('click', ()=>{ backdrop.style.display='none'; modal.style.display='none'; current=null; });
-    backdrop.addEventListener('click', (e)=>{ if(e.target===backdrop){ backdrop.style.display='none'; modal.style.display='none'; current=null; }});
-    mExport.addEventListener('click', ()=>{ if(current) exportOneCSV(current); });
-    btnAll.addEventListener('click', ()=> exportAllCSV());
-    btnClr.addEventListener('click', ()=>{
-      if(!confirm('¿Borrar todos los intentos guardados en este navegador?')) return;
-      clearAll(); render();
+    mClose.addEventListener('click', ()=>{ backdrop.style.display='none'; modal.style.display='none'; });
+    backdrop.addEventListener('click', (e)=>{ if(e.target===backdrop){ backdrop.style.display='none'; modal.style.display='none'; }});
+
+    // export CSV (todos / intento)
+    function toCSV(rows, headers){
+      const esc = v => `"${String(v??'').replaceAll('"','""')}"`;
+      const head = headers.map(esc).join(',');
+      const body = rows.map(r => headers.map(h => esc(r[h])).join(',')).join('\n');
+      return head + '\n' + body;
+    }
+
+    btnAll.addEventListener('click', ()=>{
+      if(!DATA.length){ showToast('No hay intentos', false); return; }
+      const rows = DATA.map(a=>({
+        id: a.id,
+        nombre: a.student?.name ?? '',
+        codigo: a.student?.code ?? '',
+        inicio: fmt(a.startedAt),
+        fin: fmt(a.endedAt),
+        duracion: fmtTime(a.durationMs||0),
+        off_tab_ep: a.summary?.off_episodes ?? 0,
+        mirada_ep:  a.summary?.lookaway_episodes ?? 0,
+        habla_ep:   a.summary?.speak_episodes ?? 0,
+        puntaje: (a.exam?.score ?? a.exam?.correct ?? ''),
+        total:   (a.exam?.total ?? '')
+      }));
+      const csv = toCSV(rows, ['id','nombre','codigo','inicio','fin','duracion','off_tab_ep','mirada_ep','habla_ep','puntaje','total']);
+      const blob = new Blob([csv], {type:'text/csv'});
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = 'intentos.csv';
+      a.click();
+      URL.revokeObjectURL(a.href);
     });
 
-    render();
+    mExport.addEventListener('click', ()=>{
+      const a = mTitle.textContent.match(/Intento\s+(\S+)/);
+      const id = a?.[1];
+      const row = findAttempt(id);
+      if(!row){ showToast('No encontrado', false); return; }
+      const rows = [{
+        id: row.id,
+        nombre: row.student?.name ?? '',
+        codigo: row.student?.code ?? '',
+        inicio: fmt(row.startedAt),
+        fin: fmt(row.endedAt),
+        duracion: fmtTime(row.durationMs||0),
+        off_tab_ep: row.summary?.off_episodes ?? 0,
+        mirada_ep:  row.summary?.lookaway_episodes ?? 0,
+        habla_ep:   row.summary?.speak_episodes ?? 0,
+        puntaje: (row.exam?.score ?? row.exam?.correct ?? ''),
+        total:   (row.exam?.total ?? '')
+      }];
+      const csv = toCSV(rows, Object.keys(rows[0]));
+      const blob = new Blob([csv], {type:'text/csv'});
+      const an = document.createElement('a');
+      an.href = URL.createObjectURL(blob);
+      an.download = `intento_${row.id}.csv`;
+      an.click();
+      URL.revokeObjectURL(an.href);
+    });
+
+    // limpiar cache local (no afecta BD)
+    btnClr.addEventListener('click', ()=>{
+      try{
+        localStorage.removeItem('proctor.attempts');
+        showToast('Cache local limpiada');
+      }catch{}
+    });
+
+    // ---------- subir examen ----------
+    async function parseFileToQuestions(file) {
+      const text = await file.text();
+      if (file.name.toLowerCase().endsWith('.json')) {
+        const j = JSON.parse(text);
+        const list = Array.isArray(j) ? j : (j.questions || []);
+        return list.map((q, i) => ({
+          id: q.id ?? `q_${i+1}`,
+          text: q.text ?? '',
+          options: (q.options ?? []).map(String),
+          correct: Number(q.correct ?? 0)
+        }));
+      } else if (file.name.toLowerCase().endsWith('.csv')) {
+        // CSV: id,text,o1,o2,o3,o4,correct
+        const rows = text.trim().split(/\r?\n/).map(l => l.split(','));
+        const hdr = rows.shift().map(h => h.trim().toLowerCase());
+        const idx = (k) => hdr.indexOf(k);
+        const out = [];
+        for (const r of rows) {
+          out.push({
+            id: r[idx('id')] || '',
+            text: r[idx('text')] || '',
+            options: [r[idx('o1')], r[idx('o2')], r[idx('o3')], r[idx('o4')]].filter(Boolean),
+            correct: Number(r[idx('correct')] || 0)
+          });
+        }
+        return out;
+      }
+      throw new Error('Formato no soportado. Usa .json o .csv');
+    }
+
+    $('#exam-upload').addEventListener('click', async ()=>{
+      const name = ($('#exam-name')?.value || 'Examen').trim();
+      const file = $('#exam-file')?.files?.[0];
+      if (!file) { showToast('Selecciona un archivo CSV/JSON', false); return; }
+
+      try{
+        const questions = await parseFileToQuestions(file);
+        const r = await fetch('/api/exams/set', {
+          method:'POST',
+          headers:{'Content-Type':'application/json'},
+          body: JSON.stringify({ name, questions })
+        });
+        // Manejo si el server accidentalmente responde HTML:
+        let j;
+        try { j = await r.json(); }
+        catch { throw new Error('Respuesta no JSON'); }
+
+        if (!r.ok || !j.ok) throw new Error(j.error || 'Error guardando el examen');
+
+        showToast(`Examen "${name}" activado (${j.saved} preguntas).`, true);
+      }catch(e){
+        console.error(e);
+        showToast(e.message || 'Error guardando el examen', false);
+      }
+    });
+
+    // ---------- logout ----------
+    $('#btn-logout').addEventListener('click', async ()=>{
+      try{ await fetch('/api/auth/logout', {method:'POST'}); }catch{}
+      clearSession();
+      location.replace('login.html');
+    });
+
+    // go!
+    loadAndRender();
   </script>
 </body>
 </html>
