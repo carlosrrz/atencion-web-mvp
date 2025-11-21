@@ -1,8 +1,10 @@
-// app.js — Mirada + Oclusión + Labios + Anti-blink + Off-tab + Resumen modal + Episodios en vivo
-import { createMetrics } from './metrics.js';
-import { createTabLogger } from './tab-logger.js';
+// app.js — Monitoreo + Evidencias + Resumen + Envío a backend
+// ------------------------------------------------------------------
+// Dependencias locales (si no existen, el fallback sigue funcionando)
+import { createMetrics }     from './metrics.js';
+import { createTabLogger }   from './tab-logger.js';
 
-// ===== saveAttempt robusto SIN top-level await =====
+// Opcional: sobreescribir saveAttempt/updateLastAttemptExam si existe store.js
 let saveAttempt = (attempt) => {
   try {
     const KEY = 'proctor.attempts.v1';
@@ -11,31 +13,37 @@ let saveAttempt = (attempt) => {
     localStorage.setItem(KEY, JSON.stringify(arr));
   } catch (e) { console.warn('[app] fallback saveAttempt error:', e); }
 };
+let updateLastAttemptExam; // opcional
 
-// Si store.js existe, sobreescribimos saveAttempt (y opcionalmente updateLastAttemptExam)
-let updateLastAttemptExam; // opcional; se usará con ?. más abajo
 (async () => {
   try {
-    const mod = await import('./store.js')
-      .catch(() => import('../store.js'))
-      .catch(() => import('../src/store.js'));
+    const mod =
+      (await import('./store.js').catch(() => null)) ||
+      (await import('../store.js').catch(() => null)) ||
+      (await import('../src/store.js').catch(() => null));
     if (mod?.saveAttempt) saveAttempt = mod.saveAttempt;
     if (mod?.updateLastAttemptExam) updateLastAttemptExam = mod.updateLastAttemptExam;
-    console.log('[app] saveAttempt listo (store.js encontrado)');
-  } catch (e) {
-    console.warn('[app] No se encontró store.js; usando fallback local');
+    console.log('[app] store.js activo');
+  } catch {
+    console.warn('[app] store.js no encontrado; usando fallback local');
   }
 })();
 
+// ------------------------------------------------------------------
 // MediaPipe
-import { FilesetResolver, FaceLandmarker } from "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.3";
+import {
+  FilesetResolver,
+  FaceLandmarker
+} from "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.3";
 
-// ===== Campos estudiante =====
+// ------------------------------------------------------------------
+// Inputs del estudiante
 const studentName  = document.getElementById('student-name');
 const studentCode  = document.getElementById('student-code');
 const studentEmail = document.getElementById('student-email');
 
-/* ===== DOM ===== */
+// ------------------------------------------------------------------
+// DOM principal
 const cam = document.getElementById('cam');
 const canvas = document.getElementById('canvas');
 const ctx = canvas.getContext('2d');
@@ -63,7 +71,7 @@ const fpsPill = document.getElementById('fps-pill');
 const p95Pill = document.getElementById('p95-pill');
 const perfAll = document.getElementById('perf-overall');
 
-/* Modal resumen */
+// Modal de resumen
 const summaryBackdrop = document.getElementById('summary-backdrop');
 const summaryModal    = document.getElementById('summary-modal');
 const summaryBody     = document.getElementById('summary-body');
@@ -71,7 +79,7 @@ const btnSumJSON      = document.getElementById('summary-download-json');
 const btnSumCSV       = document.getElementById('summary-download-csv');
 const btnSumClose     = document.getElementById('summary-close');
 
-/* Modal evidencias (opcional) */
+// Modal de evidencias (si lo usas en UI del alumno)
 const evBackdrop   = document.getElementById('evidence-backdrop');
 const evModal      = document.getElementById('evidence-modal');
 const evGrid       = document.getElementById('evidence-grid');
@@ -79,30 +87,35 @@ const btnEvid      = document.getElementById('btn-evidencias');
 const btnEvidClose = document.getElementById('btn-evid-close');
 const btnEvidDl    = document.getElementById('btn-evid-download');
 
-/* ===== Evidencias ===== */
+// ------------------------------------------------------------------
+// Evidencias
 function createEvidence(){
   const items = []; // {t, kind, note, data}
   function snap(kind, note){
     try{
+      if (!cam?.videoWidth) return; // cámara no lista
       const off = document.createElement('canvas');
-      off.width = 320; off.height = 180;
+      off.width = 320; off.height = Math.round(320*(cam.videoHeight/cam.videoWidth));
       off.getContext('2d').drawImage(cam,0,0,off.width,off.height);
       items.push({ t: Date.now(), kind, note, data: off.toDataURL('image/jpeg',0.9) });
       if (items.length > 80) items.shift();
-    }catch(e){}
+    }catch(e){ console.warn('[evidence] snap fail', e); }
   }
-  function list(){ return items.slice(); }
-  function clear(){ items.length=0; }
-  function downloadJSON(){
-    const blob = new Blob([JSON.stringify(items,null,2)],{type:'application/json'});
-    const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'evidencias.json'; a.click();
-    URL.revokeObjectURL(a.href);
-  }
-  return { snap, list, clear, downloadJSON };
+  return {
+    snap,
+    list:  () => items.slice(),
+    clear: () => { items.length=0; },
+    downloadJSON(){
+      const blob = new Blob([JSON.stringify(items,null,2)],{type:'application/json'});
+      const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'evidencias.json'; a.click();
+      URL.revokeObjectURL(a.href);
+    }
+  };
 }
 const evidence = createEvidence();
 
-/* ===== Parámetros (TU CONFIG “PRECISA”) ===== */
+// ------------------------------------------------------------------
+// Parámetros
 const DETECT_EVERY   = 2;
 const MIN_FACE_AREA  = 0.045;
 const OCCL_AREA_MIN  = 0.018;
@@ -118,10 +131,11 @@ const MOVE_YAW   = 0.12;
 const MOVE_PITCH = 0.12;
 const MOVE_EYE   = 0.10;
 
+// Histeresis mirada
 const SCORE_ENTER = 6;
 const SCORE_EXIT  = 2;
 
-/* ===== LABIOS (habla) ===== */
+// Labios
 const LIPS_SCORE_ENTER = 6;
 const LIPS_SCORE_EXIT  = 2;
 const LIPS_VEL_ALPHA = 0.5;
@@ -131,18 +145,15 @@ const LIPS_WIN_MS    = 900;
 const LIPS_OSC_MIN   = 2;
 const LIPS_MIN_AMP   = 0.060;
 
-/* ===== BLINK ===== */
+// Blink
 const BLINK_ENTER = 0.55;
 const BLINK_EXIT  = 0.35;
 const BLINK_MAX_MS = 280;
 
-/* ===== Estado ===== */
-let awayScore   = 0;
-let isLookAway  = false;
-let lastExamResult = null;
-
-let lipsScore   = 0;
-let lipsActive  = false;
+// ------------------------------------------------------------------
+// Estado
+let awayScore   = 0, isLookAway = false;
+let lipsScore   = 0, lipsActive = false;
 
 let isOccluded       = false;
 let occlSince        = null;
@@ -155,45 +166,46 @@ let stream = null;
 let running = false;
 let camRequested = false;
 let frameCount = 0;
-let sessionStart = 0;        // ← se setea al iniciar
+let sessionStart = 0;
 let startedAtISO = null;
 
 let landmarker = null;
 
-// Off-tab (visibilidad O foco)
+// Off-tab
 let offTabStart = null;
 let offTabEpisodes = 0;
 let offTabAccumMs = 0;
 
-const metrics = createMetrics();
+// Métricas y logger
+const metrics   = createMetrics();
 const tabLogger = createTabLogger({ offTabThresholdMs: 1500 });
 
-/* Calibración / baseline / auto-flip */
+// Calibración
 let calibrating = false;
 let calStart = 0;
-let calAR = [], calOFF = [], calYAW = [], calPITCH = [], calGAZE = [];
-let calGazeH = [], calGazeV = [];
-let calMouth = [];
-let invertSense = false;
-
+let ema = { ar:null, off:null, yaw:null, pitch:null, gaze:null, gH:null, gV:null, mouth:null };
 let base = { ar: 0.68, off: 0.18, yaw: 0.04, pitch: 0.04, gaze: 0.05, gH: 0.00, gV: 0.00, mouth: 0.02 };
 let thr  = {
   enter:{ ar:0.58, off:0.28, yaw:0.24, pitch:0.12, gaze:0.35, gH:0.28, gV:0.28, mouth:0.28 },
   exit: { ar:0.62, off:0.24, yaw:0.16, pitch:0.09, gaze:0.25, gH:0.20, gV:0.20, mouth:0.18 }
 };
-let ema = { ar:null, off:null, yaw:null, pitch:null, gaze:null, gH:null, gV:null, mouth:null };
+let invertSense = false;
 
-/* Velocidad & ventana de labios */
-let lipsPrev = null;    
+// Labios
+let lipsPrev = null;
 let lipsVelEMA = 0;
-let mouthHist = [];     
+let mouthHist = [];
 
-/* Episodios/tiempos (en vivo) */
+// Episodios
 let lookAwayStart = null, lookAwayEpisodes = 0, lookAwayAccumMs = 0, lookAwayLongestMs = 0;
 let lipsStart     = null, lipsEpisodes     = 0, lipsAccumMs     = 0, lipsLongestMs     = 0;
 let occlEpStart   = null, occlEpisodes     = 0, occlAccumMs     = 0, occlLongestMs     = 0;
 
-/* ===== Util ===== */
+// Examen
+let lastExamResult = null;
+
+// ------------------------------------------------------------------
+// Utils
 const insecureContext = () => !(location.protocol === 'https:' || location.hostname === 'localhost');
 const clamp01 = v => Math.max(0, Math.min(1, v));
 const isInTab = () => (document.visibilityState === 'visible') && document.hasFocus();
@@ -209,7 +221,7 @@ function setCamStatus(kind, msg, help=''){
 }
 function releaseStream(){ try { stream?.getTracks()?.forEach(t=>t.stop()); } catch{} stream=null; window.__camReady = false; }
 function syncCanvasToVideo(){ const w=cam.videoWidth||640, h=cam.videoHeight||360; canvas.width=w; canvas.height=h; }
-const fmtTime = (ms)=>{ const s=Math.floor(ms/1000); const mm=String(Math.floor(s/60)).padStart(2,'0'); const ss=String(s%60).padStart(2,'0'); return `${mm}:${ss}`; };
+const fmtTime = (ms)=>{ const s=Math.floor((ms||0)/1000); const mm=String(Math.floor(s/60)).padStart(2,'0'); const ss=String(s%60).padStart(2,'0'); return `${mm}:${ss}`; };
 
 const PERF={ fps:{green:24,amber:18}, p95:{green:200,amber:350} };
 const levelFPS=v=>v>=PERF.fps.green?'ok':v>=PERF.fps.amber?'warn':'err';
@@ -226,20 +238,16 @@ function updatePerfUI(){
   setPill(perfAll,worst(lf,lp), worst(lf,lp)==='ok'?'🟢 Óptimo': worst(lf,lp)==='warn'?'🟠 Atención':'🔴 Riesgo');
 }
 
-/* ===== Pose / Gaze helpers ===== */
-function yawMatA_colMajor(m){ return Math.abs(Math.atan2(m[8],  m[10])); }
-function yawMatB_colMajor(m){ return Math.abs(Math.atan2(-m[2], m[0])); }
-function pitchMatA_colMajor(m){ return Math.abs(Math.atan2(-m[9], m[10])); }
-function pitchMatB_colMajor(m){ return Math.abs(Math.atan2(m[6],  m[5])); }
+// ------------------------------------------------------------------
+// Pose / Gaze helpers (algunas aproximaciones)
 function yawFromEyes(lm){
-  const L = lm[33], R = lm[263];
+  const L = lm?.[33], R = lm?.[263];
   if (!L || !R) return 0;
-  const dz = (R.z - L.z);
-  const dx = (R.x - L.x) + 1e-6;
+  const dz = (R.z - L.z), dx = (R.x - L.x) + 1e-6;
   return Math.abs(Math.atan2(dz, dx));
 }
 function pitchFromFeatures(lm){
-  const L = lm[33], R = lm[263], nose = lm[1] || lm[4] || lm[0];
+  const L = lm?.[33], R = lm?.[263], nose = lm?.[1] || lm?.[4] || lm?.[0];
   if (!L || !R || !nose) return 0;
   const eyeMidY = (L.y + R.y) / 2;
   const eyeDist = Math.hypot(R.x - L.x, R.y - L.y) + 1e-6;
@@ -254,18 +262,23 @@ function lateralOffset(lm, minx, maxx){
 }
 function fracOutOfBounds(lm){
   let oob = 0;
-  for (const p of lm){
-    if (p.x < 0 || p.x > 1 || p.y < 0 || p.y > 1) oob++;
+  for (const p of lm){ if (p.x<0 || p.x>1 || p.y<0 || p.y>1) oob++; }
+  return lm?.length ? (oob / lm.length) : 1;
+}
+function pickBS(bs, name){ return bs?.categories?.find(c => c.categoryName === name)?.score ?? 0; }
+function blinkScore(bs){ return Math.max(pickBS(bs,'eyeBlinkLeft'), pickBS(bs,'eyeBlinkRight')); }
+function updateBlink(bs, ts){
+  const s = blinkScore(bs);
+  if (!blinkActive && s >= BLINK_ENTER){ blinkActive = true; blinkSince = ts; }
+  else if (blinkActive){
+    const dur = ts - (blinkSince ?? ts);
+    if ((s <= BLINK_EXIT) || (dur > BLINK_MAX_MS)){ blinkActive = false; blinkSince = null; }
   }
-  return lm.length ? (oob / lm.length) : 1;
 }
 function gazeMagnitude(bs){
   if (!bs?.categories?.length) return 0;
   const pick = (name) => bs.categories.find(c => c.categoryName === name)?.score ?? 0;
-  const parts = [
-    'eyeLookUpLeft','eyeLookUpRight','eyeLookDownLeft','eyeLookDownRight',
-    'eyeLookInLeft','eyeLookInRight','eyeLookOutLeft','eyeLookOutRight'
-  ];
+  const parts = ['eyeLookUpLeft','eyeLookUpRight','eyeLookDownLeft','eyeLookDownRight','eyeLookInLeft','eyeLookInRight','eyeLookOutLeft','eyeLookOutRight'];
   const s = parts.reduce((a,n)=>a + pick(n), 0);
   return Math.min(1, s / parts.length);
 }
@@ -279,35 +292,9 @@ function gazeHV(bs){
   const h = (hRight - hLeft) / 2, hAbs = Math.abs(h);
   const vUp = upL + upR, vDown = dnL + dnR;
   const v = (vUp - vDown) / 2, vAbs = Math.abs(v);
-  return { h, v, hAbs, vAbs };
+  return { hAbs, vAbs };
 }
-
-/* ===== Blendshapes helpers ===== */
-function pickBS(bs, name){ return bs?.categories?.find(c => c.categoryName === name)?.score ?? 0; }
-
-/* ===== BLINK ===== */
-function blinkScore(bs){
-  const L = pickBS(bs,'eyeBlinkLeft');
-  const R = pickBS(bs,'eyeBlinkRight');
-  return Math.max(L, R);
-}
-function updateBlink(bs, ts){
-  const s = blinkScore(bs);
-  if (!blinkActive && s >= BLINK_ENTER){
-    blinkActive = true;
-    blinkSince = ts;
-  } else if (blinkActive){
-    const dur = ts - (blinkSince ?? ts);
-    if ((s <= BLINK_EXIT) || (dur > BLINK_MAX_MS)){
-      blinkActive = false;
-      blinkSince = null;
-    }
-  }
-}
-
-/* ===== LABIOS ===== */
 function lipsComponents(bs){
-  if (!bs) return null;
   const jaw    = pickBS(bs,'jawOpen');
   const upper  = (pickBS(bs,'mouthUpperUpLeft') + pickBS(bs,'mouthUpperUpRight'))/2;
   const lower  = (pickBS(bs,'mouthLowerDownLeft') + pickBS(bs,'mouthLowerDownRight'))/2;
@@ -319,12 +306,7 @@ function lipsComponents(bs){
 }
 function mouthOpenScore(comp){
   if (!comp) return 0;
-  const raw =
-    0.50*comp.jaw +
-    0.22*((comp.upper + comp.lower)/2) +
-    0.18*comp.stretch +
-    0.10*((comp.funnel + comp.pucker)/2) -
-    0.10*comp.smile;
+  const raw = 0.50*comp.jaw + 0.22*((comp.upper + comp.lower)/2) + 0.18*comp.stretch + 0.10*((comp.funnel + comp.pucker)/2) - 0.10*comp.smile;
   return clamp01(raw);
 }
 function updateLipsVelocity(comp){
@@ -349,8 +331,7 @@ function lipsOscillationFeatures(){
   if (mouthHist.length < 4) return {amp:0, osc:0};
   const vals = mouthHist.map(x=>x.v);
   const amp = Math.max(...vals) - Math.min(...vals);
-  let osc = 0;
-  let prevDiff = null;
+  let osc = 0, prevDiff = null;
   for (let i=1;i<vals.length;i++){
     const diff = vals[i] - vals[i-1];
     if (prevDiff != null && Math.sign(diff) !== Math.sign(prevDiff)) osc++;
@@ -358,7 +339,6 @@ function lipsOscillationFeatures(){
   }
   return { amp, osc };
 }
-
 function adaptBaseline(ar, off, yaw, pitch, gaze, gH, gV, mouth){
   const ALPHA = 0.02;
   base.ar    = (1-ALPHA)*base.ar    + ALPHA*ar;
@@ -389,7 +369,8 @@ function adaptBaseline(ar, off, yaw, pitch, gaze, gH, gV, mouth){
   thr.exit.mouth  = Math.max(0.12, base.mouth + 0.08);
 }
 
-/* ===== Cámara + Modelo ===== */
+// ------------------------------------------------------------------
+// Cámara + modelo
 async function startCamera() {
   if (insecureContext()) { setCamStatus('warn','HTTPS requerido','Abre la app en HTTPS o localhost.'); return; }
   try {
@@ -399,7 +380,6 @@ async function startCamera() {
       video: { width: { ideal: 1280 }, height: { ideal: 720 }, facingMode: { ideal: 'user' } },
       audio: false
     });
-    
     cam.srcObject = stream;
     await cam.play?.();
     window.__camReady = true;
@@ -409,13 +389,16 @@ async function startCamera() {
 
     setCamStatus('ok', `Listo (${cam.videoWidth||1280}x${cam.videoHeight||720})`, 'La cámara está activa. Puedes Iniciar.');
 
+    // Modelo
     (async () => {
       try {
         if (!landmarker) {
           const wasmBase = "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.3/wasm";
           const fileset = await FilesetResolver.forVisionTasks(wasmBase);
           landmarker = await FaceLandmarker.createFromOptions(fileset, {
-            baseOptions: { modelAssetPath: "https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task" },
+            baseOptions: {
+              modelAssetPath: "https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task"
+            },
             runningMode: "VIDEO",
             numFaces: 1,
             outputFaceBlendshapes: true,
@@ -434,16 +417,15 @@ async function startCamera() {
   }
 }
 
-/* ===== UI en vivo de episodios ===== */
-let lookCntEl, lookTimeEl, occlCntEl, occlTimeEl, lipsCntEl, lipsTimeEl;
-function ensureLiveEpisodeUI(){
-  lookCntEl  = document.getElementById('lookaway-count');
-  lookTimeEl = document.getElementById('lookaway-time');
-  occlCntEl  = document.getElementById('occl-count');
-  occlTimeEl = document.getElementById('occl-time');
-  lipsCntEl  = document.getElementById('lips-count');
-  lipsTimeEl = document.getElementById('lips-time');
-}
+// ------------------------------------------------------------------
+// UI episodios en vivo (si tus spans existen)
+let lookCntEl = document.getElementById('lookaway-count');
+let lookTimeEl= document.getElementById('lookaway-time');
+let occlCntEl = document.getElementById('occl-count');
+let occlTimeEl= document.getElementById('occl-time');
+let lipsCntEl = document.getElementById('lips-count');
+let lipsTimeEl= document.getElementById('lips-time');
+
 function updateLiveEpisodeUI(nowTs){
   if (!nowTs) nowTs = performance.now();
   const lookMs = lookAwayAccumMs + (lookAwayStart ? (nowTs - lookAwayStart) : 0);
@@ -452,21 +434,22 @@ function updateLiveEpisodeUI(nowTs){
 
   lookCntEl  && (lookCntEl.textContent  = String(lookAwayEpisodes));
   lookTimeEl && (lookTimeEl.textContent = fmtTime(lookMs));
-
   occlCntEl  && (occlCntEl.textContent  = String(occlEpisodes));
   occlTimeEl && (occlTimeEl.textContent = fmtTime(occlMs));
-
   lipsCntEl  && (lipsCntEl.textContent  = String(lipsEpisodes));
   lipsTimeEl && (lipsTimeEl.textContent = fmtTime(lipsMs));
 }
 
-/* ===== Loop ===== */
+// ------------------------------------------------------------------
+// Loop principal
 function loop(){
   if (!running) return;
   if (cam.readyState < 2){ requestAnimationFrame(loop); return; }
 
+  // Dibujar frame (para tener referencia de la cámara en canvas si lo usas)
   try{ ctx.drawImage(cam,0,0,canvas.width,canvas.height); }catch{}
 
+  // Métricas
   try { const m0=metrics.onFrameStart?.(); metrics.onFrameEnd?.(m0??performance.now()); } catch {}
 
   frameCount++;
@@ -485,12 +468,11 @@ function loop(){
       const hiddenFor = offTabStart ? (now - offTabStart) : 0;
       attnState = hiddenFor >= 2000 ? 'distracción (fuera de pestaña)' : 'intermitente';
     } else if (isOccluded) {
-      attnState = 'posible desconcentración/desatención (rostro cubierto)';
+      attnState = 'posible desconcentración (rostro cubierto/fuera)';
     } else if (isLookAway) {
       attnState = 'mirada desviada';
     }
     attnEl && (attnEl.textContent = attnState);
-
     lipsEl && (lipsEl.textContent = lipsActive ? 'movimiento (posible habla)' : '—');
 
     const accum = offTabAccumMs + (offTabStart ? (now - offTabStart) : 0);
@@ -500,7 +482,7 @@ function loop(){
     updateLiveEpisodeUI(now);
   }
 
-  // ---- Detección robusta ----
+  // Detección
   if (landmarker && frameCount % DETECT_EVERY === 0) {
     const ts = performance.now();
     let prevLook = isLookAway, prevLips = lipsActive, prevOcc = isOccluded;
@@ -512,7 +494,7 @@ function loop(){
 
       if (bs) updateBlink(bs, ts);
 
-      // ===== OCLUSIÓN / SIN CARA =====
+      // Sin cara / oclusión
       if (!lm) {
         occlClearSince = null;
         if (!occlSince) occlSince = ts;
@@ -534,7 +516,7 @@ function loop(){
         for (const p of lm) { if(p.x<minx)minx=p.x; if(p.x>maxx)maxx=p.x; if(p.y<miny)miny=p.y; if(p.y>maxy)maxy=p.y; }
         const w = maxx - minx, h = maxy - miny, area = w * h;
 
-        // oclusión
+        // oclusión por tamaño / puntos fuera
         const oobFrac = fracOutOfBounds(lm);
         const occlNow = (area < OCCL_AREA_MIN) || (oobFrac > 0.35);
         if (occlNow) {
@@ -559,24 +541,15 @@ function loop(){
           const arRaw  = w / (h + 1e-6);
           const offRaw = lateralOffset(lm, minx, maxx);
 
-          // yaw/pitch
-          const yawEyes = yawFromEyes(lm);
-          let yawRaw = yawEyes;
-          let pitchRaw = pitchFromFeatures(lm);
+          // yaw / pitch
+          const yawRaw   = yawFromEyes(lm);
+          const pitchRaw = pitchFromFeatures(lm);
 
-          const M = out?.facialTransformationMatrixes?.[0];
-          if (M && typeof M[0] === 'number') {
-            const yA = yawMatA_colMajor(M), yB = yawMatB_colMajor(M);
-            const pA = pitchMatA_colMajor(M), pB = pitchMatB_colMajor(M);
-            yawRaw   = (Math.abs(yA - yawEyes)   <= Math.abs(yB - yawEyes))   ? yA : yB;
-            pitchRaw = (Math.abs(pA - pitchRaw)  <= Math.abs(pB - pitchRaw))  ? pA : pB;
-          }
-
-          // Gaze
+          // gaze
           const gazeRaw = gazeMagnitude(bs);
-          const { h:_, v:__, hAbs, vAbs } = gazeHV(bs);
+          const { hAbs, vAbs } = gazeHV(bs);
 
-          // LABIOS
+          // labios
           const comp     = lipsComponents(bs);
           const mouthRaw = mouthOpenScore(comp);
           updateLipsVelocity(comp);
@@ -604,25 +577,18 @@ function loop(){
           const movementFast = (dOFF > MOVE_OFF) || (dAR > MOVE_AR) || (dYAW > MOVE_YAW) || (dPIT > MOVE_PITCH) ||
                                (allowEyeMotion && ((dGH > MOVE_EYE) || (dGV > MOVE_EYE)));
 
-          // Calibración
+          // Calibración (medianas → baseline)
           if (calibrating) {
-            calAR.push(arRaw); calOFF.push(offRaw); calYAW.push(yawRaw); calPITCH.push(pitchRaw); calGAZE.push(gazeRaw);
-            calGazeH.push(hAbs); calGazeV.push(vAbs); calMouth.push(mouthRaw);
-            if ((performance.now() - calStart) >= CALIBRATION_MS && calAR.length >= 6) {
+            (window.__c || (window.__c = {ar:[],off:[],yaw:[],pit:[],gz:[],gH:[],gV:[],mo:[]})); // dbg opcional
+            __c.ar.push(arRaw); __c.off.push(offRaw); __c.yaw.push(yawRaw); __c.pit.push(pitchRaw);
+            __c.gz.push(gazeRaw); __c.gH.push(hAbs); __c.gV.push(vAbs); __c.mo.push(mouthRaw);
+            if ((performance.now() - calStart) >= CALIBRATION_MS && __c.ar.length >= 6) {
               const med = a => { const s=[...a].sort((x,y)=>x-y), m=Math.floor(s.length/2); return s.length%2?s[m]:(s[m-1]+s[m])/2; };
-              base.ar    = med(calAR);
-              base.off   = med(calOFF);
-              base.yaw   = med(calYAW);
-              base.pitch = med(calPITCH);
-              base.gaze  = med(calGAZE);
-              base.gH    = med(calGazeH);
-              base.gV    = med(calGazeV);
-              base.mouth = med(calMouth);
-              adaptBaseline(base.ar, base.off, base.yaw, base.pitch, base.gaze, base.gH, base.gV, base.mouth);
+              adaptBaseline(med(__c.ar), med(__c.off), med(__c.yaw), med(__c.pit), med(__c.gz), med(__c.gH), med(__c.gV), med(__c.mo));
               calibrating = false;
 
               const poseAwayEnter = (base.ar < thr.enter.ar) || (base.yaw > thr.enter.yaw) || (base.pitch > thr.enter.pitch);
-              const transAwayEnter= (base.off > thr.enter.off) && ((base.yaw > thr.exit.yaw*0.7) || (base.pitch > thr.exit.pitch*0.7));
+              const transAwayEnter= (base.off > thr.enter.off);
               const gazeAwayEnter = (base.gaze > thr.enter.gaze);
               invertSense = !!(poseAwayEnter || transAwayEnter || gazeAwayEnter);
             }
@@ -635,18 +601,17 @@ function loop(){
           const pitchAwayExit  = (pitchRaw < thr.exit.pitch);
           const poseAwayEnter  = yawAwayEnter || pitchAwayEnter || (arRaw < thr.enter.ar);
           const poseAwayExit   = yawAwayExit  && pitchAwayExit  && (arRaw > thr.exit.ar);
-          const transAwayEnter = (offRaw > thr.enter.off) && (yawRaw > thr.exit.yaw*0.7 || pitchRaw > thr.exit.pitch*0.7);
+          const transAwayEnter = (offRaw > thr.enter.off);
           const transAwayExit  = (offRaw < thr.exit.off);
 
-          const headFrontal = (yawRaw < thr.exit.yaw) && (pitchRaw < thr.exit.pitch);
-          const eyesAwayEnter = allowEyeMotion && headFrontal && (ema.gH > thr.enter.gH || ema.gV > thr.enter.gV);
-          const eyesAwayExit  = allowEyeMotion ? ((ema.gH < thr.exit.gH) && (ema.gV < thr.exit.gV)) : true;
+          const eyesAwayEnter  = allowEyeMotion && (ema.gH > thr.enter.gH || ema.gV > thr.enter.gV);
+          const eyesAwayExit   = allowEyeMotion ? ((ema.gH < thr.exit.gH) && (ema.gV < thr.exit.gV)) : true;
 
           const gazeAwayEnter  = allowEyeMotion && (ema.gaze > thr.enter.gaze);
           const gazeAwayExit   = allowEyeMotion ? (ema.gaze < thr.exit.gaze) : true;
 
           let enter = poseAwayEnter || transAwayEnter || eyesAwayEnter || gazeAwayEnter;
-          let exit  = (poseAwayExit && transAwayExit && eyesAwayExit && gazeAwayExit);
+          let exit  = poseAwayExit  && transAwayExit  && eyesAwayExit   && gazeAwayExit;
 
           if (invertSense) {
             const poseEnter = poseAwayEnter || transAwayEnter;
@@ -668,13 +633,9 @@ function loop(){
           if (!isOccluded) {
             awayNow = enter || (movementFast && !exit);
             backNow = exit && !movementFast;
-
-            if (!isLookAway && !movementFast) {
-              adaptBaseline(ema.ar, ema.off, ema.yaw, ema.pitch, ema.gaze, ema.gH, ema.gV, ema.mouth);
-            }
+            if (!isLookAway && !movementFast) adaptBaseline(ema.ar, ema.off, ema.yaw, ema.pitch, ema.gaze, ema.gH, ema.gV, ema.mouth);
           } else {
-            awayNow = false;
-            backNow = true;
+            awayNow = false; backNow = true;
             awayScore = 0;  isLookAway = false;
             lipsScore = 0;  lipsActive = false;
             lipsPrev = null; lipsVelEMA = 0;
@@ -683,72 +644,78 @@ function loop(){
         }
       }
 
-      // Histéresis temporal (mirada)
+      // Transiciones: Mirada
       if (!isOccluded) {
         if (awayNow)      awayScore = Math.min(SCORE_ENTER, awayScore + 3);
         else if (backNow) awayScore = Math.max(0, awayScore - 2);
         else              awayScore = Math.max(0, awayScore - 1);
-        if (!isLookAway && awayScore >= SCORE_ENTER){ 
-          isLookAway = true; 
-          evidence.snap?.('alert/lookAway','Mirada desviada'); 
+
+        if (!isLookAway && awayScore >= SCORE_ENTER){
+          isLookAway = true;
+          evidence.snap('alert/lookAway','Mirada desviada');
         }
-        if (isLookAway  && awayScore <= SCORE_EXIT)  isLookAway = false;
+        if (isLookAway && awayScore <= SCORE_EXIT){
+          isLookAway = false;
+        }
       }
 
-      // Histéresis temporal (labios)
+      // Transiciones: Labios
       if (!isOccluded) {
-        if (lipsNow)        lipsScore = Math.min(LIPS_SCORE_ENTER, lipsScore + 3);
-        else if (lipsBack)  lipsScore = Math.max(0, lipsScore - 2);
-        else                lipsScore = Math.max(0, lipsScore - 1);
-        if (!lipsActive && lipsScore >= LIPS_SCORE_ENTER){ 
-          lipsActive = true; 
-          evidence.snap?.('alert/speech','Posible habla'); 
+        if (lipsNow)       lipsScore = Math.min(LIPS_SCORE_ENTER, lipsScore + 3);
+        else if (lipsBack) lipsScore = Math.max(0, lipsScore - 2);
+        else               lipsScore = Math.max(0, lipsScore - 1);
+
+        if (!lipsActive && lipsScore >= LIPS_SCORE_ENTER){
+          lipsActive = true;
+          evidence.snap('alert/speech','Posible habla');
         }
-        if (lipsActive  && lipsScore <= LIPS_SCORE_EXIT)  lipsActive = false;
+        if (lipsActive && lipsScore <= LIPS_SCORE_EXIT){
+          lipsActive = false;
+        }
+      }
+
+      // Episodios: Mirada
+      if (!prevLook && isLookAway) {
+        lookAwayStart = ts;
+      } else if (prevLook && !isLookAway) {
+        if (lookAwayStart != null) {
+          const d = ts - lookAwayStart;
+          lookAwayAccumMs += d; lookAwayEpisodes += 1; if (d > lookAwayLongestMs) lookAwayLongestMs = d;
+          lookAwayStart = null;
+        }
+      }
+      // Episodios: Labios
+      if (!prevLips && lipsActive) {
+        lipsStart = ts;
+      } else if (prevLips && !lipsActive) {
+        if (lipsStart != null) {
+          const d = ts - lipsStart;
+          lipsAccumMs += d; lipsEpisodes += 1; if (d > lipsLongestMs) lipsLongestMs = d;
+          lipsStart = null;
+        }
+      }
+      // Episodios: Oclusión
+      if (!prevOcc && isOccluded) {
+        occlEpStart = ts;
+        evidence.snap('alert/occlusion','Rostro cubierto/fuera');
+      } else if (prevOcc && !isOccluded) {
+        if (occlEpStart != null) {
+          const d = ts - occlEpStart;
+          occlAccumMs += d; occlEpisodes += 1; if (d > occlLongestMs) occlLongestMs = d;
+          occlEpStart = null;
+        }
       }
 
     } catch (err) {
       // no romper el loop si detect falla
-    }
-
-    // ===== Episodios (transiciones) =====
-    // Mirada
-    if (!prevLook && isLookAway) {
-      lookAwayStart = ts;
-    } else if (prevLook && !isLookAway) {
-      if (lookAwayStart != null) {
-        const d = ts - lookAwayStart;
-        lookAwayAccumMs += d; lookAwayEpisodes += 1; if (d > lookAwayLongestMs) lookAwayLongestMs = d;
-        lookAwayStart = null;
-      }
-    }
-    // Labios
-    if (!prevLips && lipsActive) {
-      lipsStart = ts;
-    } else if (prevLips && !lipsActive) {
-      if (lipsStart != null) {
-        const d = ts - lipsStart;
-        lipsAccumMs += d; lipsEpisodes += 1; if (d > lipsLongestMs) lipsLongestMs = d;
-        lipsStart = null;
-      }
-    }
-    // Oclusión
-    if (!prevOcc && isOccluded) {
-      occlEpStart = ts;
-      evidence.snap?.('alert/occlusion','Rostro cubierto/fuera');
-    } else if (prevOcc && !isOccluded) {
-      if (occlEpStart != null) {
-        const d = ts - occlEpStart;
-        occlAccumMs += d; occlEpisodes += 1; if (d > occlLongestMs) occlLongestMs = d;
-        occlEpStart = null;
-      }
     }
   }
 
   requestAnimationFrame(loop);
 }
 
-/* ===== Off-tab: visibilidad O foco ===== */
+// ------------------------------------------------------------------
+// Off-tab (pestaña / foco)
 function handleTabStateChange(){
   if (!running) return;
   const now = performance.now();
@@ -765,44 +732,19 @@ function handleTabStateChange(){
 document.addEventListener('visibilitychange', handleTabStateChange);
 window.addEventListener('blur', handleTabStateChange);
 window.addEventListener('focus', handleTabStateChange);
-tabLogger.setOnAlert?.((type)=>{ if (type==='off_tab') evidence.snap?.('alert/off_tab','Fuera de pestaña ≥ umbral'); });
+tabLogger.setOnAlert?.((type)=>{ if (type==='off_tab') evidence.snap('alert/off_tab','Fuera de pestaña ≥ umbral'); });
 
-/* ===== Botones ===== */
-btnPermitir?.addEventListener('click', async ()=>{
-  camRequested = true;
-  await startCamera();
-});
-btnRetry?.addEventListener('click', ()=>{
-  releaseStream();
-  setCamStatus('neutral','Permiso pendiente','Presiona “Permitir cámara”.');
-});
+// ------------------------------------------------------------------
+// Botones
+btnPermitir?.addEventListener('click', async ()=>{ camRequested = true; await startCamera(); });
+btnRetry?.addEventListener('click', ()=>{ releaseStream(); setCamStatus('neutral','Permiso pendiente','Presiona “Permitir cámara”.'); });
 
+// Cerrar episodios al terminar
 function closeOpenEpisodes(nowTs){
-  // mirada
-  if (lookAwayStart != null){
-    const d = nowTs - lookAwayStart;
-    lookAwayAccumMs += d; lookAwayEpisodes += 1; if (d > lookAwayLongestMs) lookAwayLongestMs = d;
-    lookAwayStart = null;
-  }
-  // labios
-  if (lipsStart != null){
-    const d = nowTs - lipsStart;
-    lipsAccumMs += d; lipsEpisodes += 1; if (d > lipsLongestMs) lipsLongestMs = d;
-    lipsStart = null;
-  }
-  // oclusión
-  if (occlEpStart != null){
-    const d = nowTs - occlEpStart;
-    occlAccumMs += d; occlEpisodes += 1; if (d > occlLongestMs) occlLongestMs = d;
-    occlEpStart = null;
-  }
-  // off-tab
-  if (offTabStart != null){
-    const d = nowTs - offTabStart;
-    if (d >= 1500) offTabEpisodes += 1;
-    offTabAccumMs += d;
-    offTabStart = null;
-  }
+  if (lookAwayStart != null){ const d=nowTs - lookAwayStart; lookAwayAccumMs += d; lookAwayEpisodes += 1; if (d>lookAwayLongestMs) lookAwayLongestMs=d; lookAwayStart=null; }
+  if (lipsStart     != null){ const d=nowTs - lipsStart;     lipsAccumMs     += d; lipsEpisodes     += 1; if (d>lipsLongestMs)     lipsLongestMs=d;     lipsStart=null; }
+  if (occlEpStart   != null){ const d=nowTs - occlEpStart;   occlAccumMs     += d; occlEpisodes     += 1; if (d>occlLongestMs)   occlLongestMs=d;   occlEpStart=null; }
+  if (offTabStart   != null){ const d=nowTs - offTabStart;   if (d>=1500) offTabEpisodes += 1; offTabAccumMs += d; offTabStart=null; }
 }
 
 function buildSummaryObject(){
@@ -816,7 +758,6 @@ function buildSummaryObject(){
     offThresholdMs: 1500
   };
   const durationMs = Math.max(0, performance.now() - sessionStart);
-
   return {
     duration_ms: Math.round(durationMs),
     performance: {
@@ -827,9 +768,9 @@ function buildSummaryObject(){
     tab_activity: {
       off_episodes: tabSum.offEpisodes,
       off_total_ms: Math.round(tabSum.offTotalMs),
-      on_total_ms: Math.round(tabSum.onTotalMs),
-      longest_off_ms: Math.round(tabSum.longestOffMs),
-      threshold_ms: tabSum.offThresholdMs
+      on_total_ms: Math.round(tabSum.onTotalMs ?? 0),
+      longest_off_ms: Math.round(tabSum.longestOffMs ?? 0),
+      threshold_ms: tabSum.offThresholdMs ?? 1500
     },
     attention: {
       lookaway_episodes: lookAwayEpisodes,
@@ -859,26 +800,22 @@ function showSummaryModal(summary){
       <li>Cambios fuera de pestaña (≥ ${summary.tab_activity.threshold_ms/1000}s): <strong>${summary.tab_activity.off_episodes}</strong></li>
       <li>Tiempo fuera: <strong>${fmt(summary.tab_activity.off_total_ms)}</strong></li>
     </ul>
-
     <h4>Desatención por mirada</h4>
     <ul>
       <li>Episodios: <strong>${summary.attention.lookaway_episodes}</strong></li>
       <li>Tiempo total: <strong>${fmt(summary.attention.lookaway_total_ms)}</strong></li>
       <li>Episodio más largo: <strong>${fmt(summary.attention.lookaway_longest_ms)}</strong></li>
     </ul>
-
     <h4>Rostro cubierto</h4>
     <ul>
       <li>Episodios: <strong>${summary.occlusion.episodes}</strong></li>
       <li>Tiempo total: <strong>${fmt(summary.occlusion.total_ms)}</strong></li>
     </ul>
-
     <h4>Posible habla</h4>
     <ul>
       <li>Episodios: <strong>${summary.lips.speak_episodes}</strong></li>
       <li>Tiempo total: <strong>${fmt(summary.lips.speak_total_ms)}</strong></li>
     </ul>
-
     <h4>Rendimiento</h4>
     <ul>
       <li>FPS mediana: <strong>${summary.performance.fps_median}</strong></li>
@@ -889,13 +826,9 @@ function showSummaryModal(summary){
   summaryBackdrop?.classList.remove('hidden');
   summaryModal?.classList.remove('hidden');
 
-  // Descargas
   btnSumJSON?.addEventListener('click', ()=>{
     const blob = new Blob([JSON.stringify(summary, null, 2)], { type: 'application/json' });
-    const a = document.createElement('a');
-    a.href = URL.createObjectURL(blob);
-    a.download = 'resumen_sesion_total.json';
-    a.click();
+    const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'resumen_sesion_total.json'; a.click();
     URL.revokeObjectURL(a.href);
   }, { once:true });
 
@@ -922,10 +855,7 @@ function showSummaryModal(summary){
     ];
     const csv = rows.map(r => (Array.isArray(r)? r.join(',') : '')).join('\n');
     const blob = new Blob([csv], { type: 'text/csv' });
-    const a = document.createElement('a');
-    a.href = URL.createObjectURL(blob);
-    a.download = 'resumen_sesion_total.csv';
-    a.click();
+    const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'resumen_sesion_total.csv'; a.click();
     URL.revokeObjectURL(a.href);
   }, { once:true });
 
@@ -935,7 +865,7 @@ function showSummaryModal(summary){
   }, { once:true });
 }
 
-/* Evidencias UI (si existen en el HTML) */
+// Evidencias UI (si está el modal en la vista del estudiante)
 btnEvid?.addEventListener('click', ()=>{
   if (!evGrid) return;
   evGrid.innerHTML = '';
@@ -957,28 +887,27 @@ btnEvid?.addEventListener('click', ()=>{
 btnEvidClose?.addEventListener('click', ()=>{ evBackdrop?.classList.add('hidden'); evModal?.classList.add('hidden'); });
 btnEvidDl?.addEventListener('click', ()=> evidence.downloadJSON() );
 
-/* Start/Stop */
+// ------------------------------------------------------------------
+// Start / Stop
 btnStart?.addEventListener('click', ()=>{
   if (!stream){ alert('Primero permite la cámara.'); return; }
   running = true;
   frameCount = 0;
-
-  // tiempos
-  sessionStart = performance.now();          // ✅ importante
   startedAtISO = new Date().toISOString();
+  sessionStart = performance.now();
 
-  // recoger resultado del examen cuando ocurra
+  // recibir resultado del examen
   window.addEventListener('exam:finished', (e) => {
-    lastExamResult = e.detail;               // { correct, total }
+    lastExamResult = e.detail;               // { correct, total } u otro shape
     updateLastAttemptExam?.(lastExamResult);
   }, { once: true });
 
-  // Off-tab
+  // Reset Off-tab
   offTabStart   = isInTab() ? null : performance.now();
   offTabEpisodes= 0;
   offTabAccumMs = 0;
 
-  // reset detección y episodios
+  // Reset detección y episodios
   awayScore = 0; isLookAway = false; lookAwayStart = null; lookAwayEpisodes = 0; lookAwayAccumMs = 0; lookAwayLongestMs = 0;
   lipsScore = 0; lipsActive = false; lipsStart = null; lipsEpisodes = 0; lipsAccumMs = 0; lipsLongestMs = 0;
   isOccluded = false; occlSince = null; occlClearSince = null; occlEpStart = null; occlEpisodes = 0; occlAccumMs = 0; occlLongestMs = 0;
@@ -986,46 +915,33 @@ btnStart?.addEventListener('click', ()=>{
   blinkActive = false; blinkSince = null;
 
   calibrating = !!landmarker; calStart = performance.now();
-  calAR.length=0; calOFF.length=0; calYAW.length=0; calPITCH.length=0; calGAZE.length=0;
-  calGazeH.length=0; calGazeV.length=0; calMouth.length=0;
-  ema = { ar: null, off: null, yaw: null, pitch: null, gaze: null, gH: null, gV: null, mouth: null };
-  invertSense = false;
+  window.__c = {ar:[],off:[],yaw:[],pit:[],gz:[],gH:[],gV:[],mo:[]}; // para medianas
 
   evidence.clear();
   metrics.start();
-
   sessionStatus && (sessionStatus.textContent = 'Monitoreando');
   tabLogger.start?.();
 
-  ensureLiveEpisodeUI();
   updateLiveEpisodeUI(performance.now());
-
   requestAnimationFrame(loop);
 });
 
-btnStop?.addEventListener('click', ()=>{
+btnStop?.addEventListener('click', async ()=>{
   const now = performance.now();
-  // cierra episodios abiertos
   closeOpenEpisodes(now);
 
-  // detener pipeline/UI
   running = false;
   metrics.stop();
   sessionStatus && (sessionStatus.textContent = 'Detenida');
-
-  // export de actividad de pestaña
   tabLogger.stopAndDownloadCSV?.();
 
-  // resumen + modal
   const summary = buildSummaryObject();
   showSummaryModal(summary);
 
-  // examen (si no llegó el evento, intenta leer el último)
   if (!lastExamResult) {
     try { lastExamResult = JSON.parse(localStorage.getItem('proctor.last_exam') || 'null'); } catch {}
   }
 
-  // ===== Guardar intento (único) para el panel del profesor =====
   const attempt = {
     id: `att_${Date.now().toString(36)}`,
     student: {
@@ -1038,27 +954,29 @@ btnStop?.addEventListener('click', ()=>{
     durationMs: Math.round(summary.duration_ms),
     summary,
     exam: lastExamResult || null,
-    evidences: (typeof evidence?.list === 'function') ? evidence.list().slice(-24) : []
+    evidences: evidence.list().slice(-24)  // guarda últimas 24 con dataURL
   };
 
+  // 1) local
   saveAttempt(attempt);
-  saveAttemptRemote(attempt);   // ✅ llamado aquí, no en top-level
-  try { localStorage.removeItem('proctor.last_exam'); } catch {}
+  // 2) backend
+  await saveAttemptRemote(attempt);
 
+  try { localStorage.removeItem('proctor.last_exam'); } catch {}
   console.log('[proctor] intento guardado:', attempt);
 });
 
-// Re-apertura / dispositivos
+// ------------------------------------------------------------------
+// Re-apertura / cambios de dispositivos
 document.addEventListener('visibilitychange', async ()=>{
-  if (document.visibilityState==='visible' && !stream && camRequested){
-    await startCamera();
-  }
+  if (document.visibilityState==='visible' && !stream && camRequested){ await startCamera(); }
 });
 navigator.mediaDevices?.addEventListener?.('devicechange', async ()=>{
   if (!stream && camRequested) await startCamera();
 });
 
-/* ===== Init ===== */
+// ------------------------------------------------------------------
+// Init
 (function init(){
   if (!navigator.mediaDevices?.getUserMedia){ setCamStatus('err','No soportado','Usa Chrome/Edge.'); return; }
   if (insecureContext()){ setCamStatus('warn','HTTPS requerido','Abre con candado (HTTPS) o localhost.'); return; }
@@ -1066,20 +984,18 @@ navigator.mediaDevices?.addEventListener?.('devicechange', async ()=>{
   sessionStatus && (sessionStatus.textContent = 'Detenida');
   sessionTime && (sessionTime.textContent = '00:00');
   fpsEl&&(fpsEl.textContent='0'); p95El&&(p95El.textContent='0.0');
-  tabState&&(tabState.textContent='—'); attnEl&&(attnEl.textContent='—');
-  lipsEl&&(lipsEl.textContent='—');
+  tabState&&(tabState.textContent='—'); attnEl&&(attnEl.textContent='—'); lipsEl&&(lipsEl.textContent='—');
   offCntEl&&(offCntEl.textContent='0'); offTimeEl&&(offTimeEl.textContent='00:00');
-
-  ensureLiveEpisodeUI();
 
   document.getElementById('open-privacy')
     ?.addEventListener('click', (e)=>{ e.preventDefault(); window.open('/privacidad.html','_blank','noopener'); });
 })();
 
-// ---- enviar intento al backend (Vercel) ----
+// ------------------------------------------------------------------
+// Envío al backend
 async function saveAttemptRemote(attempt) {
   try {
-    // recorta evidencias para no pasar el límite de Vercel (payload)
+    // recorta evidencias para no pasar límites de payload
     const slim = {
       ...attempt,
       evidences: Array.isArray(attempt.evidences) ? attempt.evidences.slice(-12) : []
@@ -1090,10 +1006,10 @@ async function saveAttemptRemote(attempt) {
     const res = await fetch('/api/attempt/create', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(slim)            // ✅ ENVIAR slim
+      body: JSON.stringify(slim)
     });
 
-    const data = await res.json().catch(() => ({})); // evita “Respuesta no JSON”
+    const data = await res.json().catch(() => ({}));
     console.log('[proctor] API status', res.status, data);
   } catch (err) {
     console.error('[proctor] API error', err);

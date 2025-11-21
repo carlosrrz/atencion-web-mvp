@@ -216,24 +216,19 @@ async function fetchAttemptFull(id){
     function findAttempt(id){ return DATA.find(x => String(x.id) === String(id)); }
 
 async function openDetail(id){
-  // 1) intenta con el cache que ya tienes en memoria
+  // 1) base: lo que ya tienes en memoria
   let a = DATA.find(x => String(x.id) === String(id));
   if (!a) return;
 
-  // 2) si no hay evidencias en el objeto del listado, pedimos el detalle al backend
-  if (!Array.isArray(a.evidences) || a.evidences.length === 0) {
-    try {
-      const r = await fetch(`/api/attempt/get?id=${encodeURIComponent(a.id)}`, { cache: 'no-store' });
-      const j = await r.json();
-      if (r.ok && j.ok && j.item) {
-        a = { ...a, ...j.item };   // mezclamos (ahora debe venir a.evidences)
-      }
-    } catch (e) {
-      console.warn('[detail] no se pudo obtener evidencias', e);
-    }
+  // 2) carga el detalle (con evidences)
+  try {
+    const r = await fetch(`/api/attempt/get?id=${encodeURIComponent(a.id)}`, { cache: 'no-store' });
+    const j = await r.json();
+    if (r.ok && j.ok && j.item) a = { ...a, ...j.item };
+  } catch (e) {
+    console.warn('[detail] fallback sin evidences', e);
   }
 
-  // --- métricas / texto exam ---
   const off   = a.summary?.tab_activity?.off_episodes ?? a.summary?.off_episodes ?? 0;
   const look  = a.summary?.attention?.lookaway_episodes ?? a.summary?.lookaway_episodes ?? 0;
   const speak = a.summary?.lips?.speak_episodes ?? a.summary?.speak_episodes ?? 0;
@@ -244,14 +239,12 @@ async function openDetail(id){
     (ex.correct != null && ex.total != null) ? `${ex.correct}/${ex.total}` :
     '—';
 
-  // --- helper para distintas claves de imagen ---
   const srcOf = (it) =>
     it?.data || it?.image_base64 || it?.image || it?.img || it?.url || '';
 
   const evid = Array.isArray(a.evidences) ? a.evidences
              : (Array.isArray(a.evidence) ? a.evidence : []);
 
-  // 3) render
   mTitle.textContent = `Intento ${a.id} — ${a.student?.name || ''}`;
   mBody.innerHTML = `
     <div class="row" style="margin-bottom:8px">
@@ -289,10 +282,10 @@ async function openDetail(id){
       }
     </div>
   `;
-
   backdrop.style.display = 'block';
   modal.style.display = 'block';
 }
+
 
 // Delegación clicks en tabla (déjalo así)
 tblBody.addEventListener('click', (e)=>{
