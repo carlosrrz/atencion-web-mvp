@@ -1,79 +1,72 @@
 // api/exams/set.js
 import { getPool } from '../../lib/db.js';
 
-// mismas reglas que en el front (encargado.html)
-const EXAM_NAME_RE = /^[A-Za-zÁÉÍÓÚÜÑáéíóúüñ ]{3,60}$/;
-const EXAM_CODE_RE = /^[0-9]{4,8}$/;
-
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
     return res.status(405).json({ ok: false, error: 'Method not allowed' });
   }
 
+  // ---- Parsear body ----
   let body = req.body;
   if (typeof body === 'string') {
-    try {
-      body = JSON.parse(body);
-    } catch {
+    try { body = JSON.parse(body); }
+    catch {
       return res.status(400).json({ ok: false, error: 'JSON inválido' });
     }
   }
 
-  const rawName = (body?.name ?? '').trim();
-  const rawCode = (body?.accessCode ?? '').toString().trim();
-  const questions = Array.isArray(body?.questions) ? body.questions : [];
+  const name       = (body?.name || '').trim();
+  const accessCode = (body?.accessCode || '').trim();
+  const questions  = Array.isArray(body?.questions) ? body.questions : [];
 
-  if (!rawName) {
+  // ---- Validaciones básicas (mismas reglas que en el front) ----
+  if (!name) {
     return res.status(400).json({ ok: false, error: 'Falta nombre de examen' });
   }
-  if (!EXAM_NAME_RE.test(rawName)) {
-    return res.status(400).json({
-      ok: false,
-      error: 'Nombre de examen inválido (solo letras y espacios, 3–60 caracteres).'
-    });
+
+  if (!accessCode) {
+    return res.status(400).json({ ok: false, error: 'Falta código de examen' });
   }
 
-  if (!rawCode) {
-    return res.status(400).json({
-      ok: false,
-      error: 'Falta código de examen (4–8 dígitos).'
-    });
-  }
-  if (!EXAM_CODE_RE.test(rawCode)) {
-    return res.status(400).json({
-      ok: false,
-      error: 'Código de examen inválido (solo números, 4–8 dígitos).'
-    });
+  // solo números, 4–8 dígitos
+  if (!/^[0-9]{4,8}$/.test(accessCode)) {
+    return res.status(400).json({ ok: false, error: 'Código de examen inválido' });
   }
 
   if (!questions.length) {
-    return res.status(400).json({
-      ok: false,
-      error: 'No se recibieron preguntas para el examen'
-    });
+    return res.status(400).json({ ok: false, error: 'El examen no tiene preguntas' });
   }
 
+  const pool = getPool();
+
   try {
-    const pool = getPool();
+    await pool.query('BEGIN');
 
-    // Desactiva otros exámenes activos (opcional pero recomendable)
-    await pool.query('UPDATE exams SET is_active = FALSE WHERE is_active = TRUE');
+    // Desactivar exámenes anteriores
+    await pool.query('UPDATE exams SET is_active = false');
 
-    // Inserta nuevo examen con código y banco de preguntas
-    await pool.query(
-      `
-      INSERT INTO exams (id, name, access_code, is_active, questions)
-      VALUES (gen_random_uuid(), $1, $2, TRUE, $3)
-      `,
-      [rawName, rawCode, questions]
+    // Insertar nuevo examen activo con su código
+    const { rows } = await pool.query(
+      `INSERT INTO exams (id, name, questions, is_active, access_code)
+       VALUES (gen_random_uuid(), $1, $2::jsonb, true, $3)
+       RETURNING id`,
+      [name, JSON.stringify(questions), accessCode]
     );
 
+    await pool.query('COMMIT');
+
+    const examId = rows[0]?.id;
     return res.status(200).json({
       ok: true,
+      examId,
       saved: questions.length
     });
-  } catch (e) {
-    console.error('[api/exams/set] ERROR', e);
-    return res.status(500).json({ ok: false, error: 'Error de servidor' });
+  } catch (err) {
+    console.error('[exams/set] ERROR', err);
+    try { await pool.query('ROLLBACK'); } catch {}
+
+    return res
+      .status(500)
+      .json({ ok: false, error: 'Error de servidor al guardar el examen' });
   }
 }
