@@ -129,7 +129,31 @@
 
   <script type="module">
     import { requireRole, clearSession } from './src/roles.js';
-    requireRole('prof');
+requireRole('prof');
+
+// Evitar que la vista se "reviva" con el botón Atrás
+window.addEventListener('pageshow', (event) => {
+  const nav = performance.getEntriesByType('navigation')[0];
+  const isBackForward = event.persisted || nav?.type === 'back_forward';
+
+  if (isBackForward) {
+    location.reload();
+  }
+});
+
+
+    // Fuerza recarga cuando se vuelve con Atrás/Adelante
+window.addEventListener('pageshow', (event) => {
+  // event.persisted = true → la página vino del bfcache
+  const nav = performance.getEntriesByType('navigation')[0];
+  const isBackForward = event.persisted || nav?.type === 'back_forward';
+
+  if (isBackForward) {
+    // recarga desde el servidor → se vuelve a ejecutar requireRole(...)
+    location.reload();
+  }
+});
+
 
     const $ = (s)=>document.querySelector(s);
 

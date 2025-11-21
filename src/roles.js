@@ -21,18 +21,29 @@ export function getRole(){
 
 export function requireRole(roles){
   const r = getRole();
-  if (!r || !roles.includes(r)) location.replace('login.html');
+  // permitir string o array
+  const list = Array.isArray(roles) ? roles : [roles];
+  if (!r || !list.includes(r)) {
+    location.replace('login.html');
+  }
 }
 
 export function logout(){
-  localStorage.removeItem('user');
-  localStorage.removeItem('role');
+  try {
+    localStorage.removeItem('user');
+    localStorage.removeItem('role');
+    localStorage.removeItem('proctor.user');
+    sessionStorage.removeItem('proctor.user');
+  } catch {}
   location.replace('login.html');
 }
 
 export function clearSession() {
+  // misma limpieza que logout, pero SIN redirigir
   try {
-    sessionStorage.removeItem('proctor.user');
+    localStorage.removeItem('user');
+    localStorage.removeItem('role');
     localStorage.removeItem('proctor.user');
+    sessionStorage.removeItem('proctor.user');
   } catch {}
 }

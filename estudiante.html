@@ -1,6 +1,18 @@
 <script type="module">
   import { requireRole } from './src/roles.js';
   requireRole(['student']); // evita ver la página si no está logueado como student
+  // Fuerza recarga cuando se vuelve con Atrás/Adelante
+window.addEventListener('pageshow', (event) => {
+  // event.persisted = true → la página vino del bfcache
+  const nav = performance.getEntriesByType('navigation')[0];
+  const isBackForward = event.persisted || nav?.type === 'back_forward';
+
+  if (isBackForward) {
+    // recarga desde el servidor → se vuelve a ejecutar requireRole(...)
+    location.reload();
+  }
+});
+
 </script>
 
 <!doctype html>
@@ -142,8 +154,17 @@
 
   <!-- Gate de rol -->
 <script type="module">
-  import { requireRole } from './src/src/roles.js';
-  requireRole('student');
+import { requireRole, clearSession } from './src/roles.js';
+requireRole('student');
+
+window.addEventListener('pageshow', (event) => {
+  const nav = performance.getEntriesByType('navigation')[0];
+  const isBackForward = event.persisted || nav?.type === 'back_forward';
+
+  if (isBackForward) {
+    location.reload();
+  }
+});
 </script>
 
 <!-- Orden: helpers -> examen -> app -->
