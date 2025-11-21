@@ -460,17 +460,29 @@ const EXAM_NAME_RE = /^[A-Za-zÁÉÍÓÚÜÑáéíóúüñ ]{3,60}$/;
 
 
 
-    $('#exam-upload').addEventListener('click', async ()=> {
+   // Regex para código de examen: solo números, 4–8 dígitos
+const EXAM_CODE_RE = /^[0-9]{4,8}$/;
+
+$('#exam-upload').addEventListener('click', async ()=> {
   const rawName = ($('#exam-name')?.value || '').trim();
-  const file = $('#exam-file')?.files?.[0];
+  const rawCode = ($('#exam-code-input')?.value || '').trim();
+  const file    = $('#exam-file')?.files?.[0];
 
   if (!rawName) {
     showToast('Ingresa un nombre para el examen', false);
     return;
   }
-
   if (!EXAM_NAME_RE.test(rawName)) {
     showToast('Nombre de examen inválido (solo letras y espacios, 3–60 caracteres).', false);
+    return;
+  }
+
+  if (!rawCode) {
+    showToast('Ingresa un código de examen (4–8 dígitos).', false);
+    return;
+  }
+  if (!EXAM_CODE_RE.test(rawCode)) {
+    showToast('Código de examen inválido (solo números, 4–8 dígitos).', false);
     return;
   }
 
@@ -479,26 +491,23 @@ const EXAM_NAME_RE = /^[A-Za-zÁÉÍÓÚÜÑáéíóúüñ ]{3,60}$/;
     return;
   }
 
-  const name = rawName;
-
-  try{
+  try {
     const questions = await parseFileToQuestions(file);
     const r = await fetch('/api/exams/set', {
       method:'POST',
       headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({ name, questions })
+      body: JSON.stringify({ name: rawName, accessCode: rawCode, questions })
     });
     let j; try { j = await r.json(); } catch { throw new Error('Respuesta no JSON'); }
     if (!r.ok || !j.ok) throw new Error(j.error || 'Error guardando el examen');
-    showToast(`Examen "${name}" activado (${j.saved} preguntas).`, true);
-  }catch(e){
+    showToast(`Examen "${rawName}" activado (${j.saved} preguntas). Código: ${rawCode}`, true);
+  } catch(e) {
     console.error(e);
     showToast(e.message || 'Error guardando el examen', false);
   }
 });
 
-// Regex para código de examen: solo números, 4–8 dígitos
-const EXAM_CODE_RE = /^[0-9]{4,8}$/;
+
 
 $('#exam-upload').addEventListener('click', async ()=> {
   const rawName = ($('#exam-name')?.value || '').trim();
