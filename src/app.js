@@ -1071,22 +1071,7 @@ btnStop?.addEventListener('click', ()=>{
   console.log('[proctor] intento guardado:', attempt);
 });
 
-
-// Envia a la BD (no bloquea la UI)
-try {
-  fetch('/api/attempt/create', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(attempt)
-  }).then(r => r.json()).then(resp => {
-    console.log('[persist] resultado:', resp);
-  }).catch(err => console.warn('[persist] fallo', err));
-} catch(e) {
-  console.warn('[persist] error', e);
-}
-
-
-
+await saveAttemptRemote(attempt);
 
 // Re-apertura / dispositivos
 document.addEventListener('visibilitychange', async ()=>{
@@ -1132,10 +1117,10 @@ async function saveAttemptRemote(attempt) {
     const res = await fetch('/api/attempt/create', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(attempt)
+      body: JSON.stringify(slim)            // ✅ ENVIAR slim
     });
 
-    const data = await res.json().catch(() => ({}));
+    const data = await res.json().catch(() => ({})); // evita “Respuesta no JSON”
     console.log('[proctor] API status', res.status, data);
   } catch (err) {
     console.error('[proctor] API error', err);
