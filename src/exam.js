@@ -6,29 +6,40 @@
 // src/exam.js
 let QUESTIONS = [];
 
-async function loadQuestions({ take = 8 } = {}) {
-  // 1) Intento con el examen activo del servidor
-  try {
-    const r = await fetch('/api/exams/current', { cache: 'no-store' });
-    if (r.ok) {
+// ahora acepta examCode y devuelve bool
+async function loadQuestions({ take = 8, examCode = null } = {}) {
+  // si hay código, validamos contra el backend
+  if (examCode) {
+    try {
+      const r = await fetch('/api/exams/current', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ code: examCode })
+      });
       const j = await r.json();
-      if (j?.ok && Array.isArray(j.questions) && j.questions.length) {
+      if (r.ok && j?.ok && Array.isArray(j.questions) && j.questions.length) {
         QUESTIONS = j.questions.slice(0, take);
-        return;
+        return true;
       }
+      return false; // código incorrecto o examen no disponible
+    } catch {
+      return false;
     }
-  } catch {}
+  }
 
-  // 2) Fallback local
+  // Fallback local solo para desarrollo (sin código)
   try {
     const res = await fetch('./src/questions.json', { cache: 'no-store' });
     const bank = await res.json();
     const shuffled = bank.slice().sort(()=>Math.random()-0.5);
     QUESTIONS = shuffled.slice(0, take);
+    return true;
   } catch {
     QUESTIONS = [{ id:'fallback1', text:'Sin banco disponible', options:['OK'], correct:0 }];
+    return true;
   }
 }
+
 
 
 
@@ -198,25 +209,41 @@ function pollOff() {
 }
 
 /* ====== Inicio/avance/final ====== */
-function startTest() {
-  // 1) Valida datos del estudiante
+async function startTest() {
+  // 1) Valida datos del estudiante (como ya tenías)
   const v = validateStudentFields();
   if (!v.ok) { 
     alert(v.error || 'Revisa los datos del estudiante.');
     return;
   }
 
-  // (opcional) Guarda los datos para el intento/export
-  window.__student = v.data;
-  try { localStorage.setItem('proctor.student', JSON.stringify(v.data)); } catch {}
-
-  // 2) Pre-requisito: cámara lista (como ya tenías)
+  // 2) Verifica cámara
   if (!window.__camReady) {
     alert('Primero permite la cámara y confirma que está activa.');
     return;
   }
 
-  // 3) ... lo demás de tu startTest() (lo que ya tenías)
+  // 3) Código de examen
+  const codeInput = document.getElementById('exam-code');
+  const examCode = (codeInput?.value || '').trim();
+
+  if (!examCode) {
+    alert('Ingresa el código de examen que te dio el profesor.');
+    return;
+  }
+  if (!/^[0-9]{4,8}$/.test(examCode)) {
+    alert('Código inválido (solo números, 4–8 dígitos).');
+    return;
+  }
+
+  // 4) Cargar preguntas con ese código
+  const ok = await loadQuestions({ take: 8, examCode });
+  if (!ok) {
+    alert('Código incorrecto o examen no disponible. Consulta al profesor.');
+    return;
+  }
+
+  // si todo bien, ya tienes QUESTIONS y puedes seguir como antes
   state.running = true;
   state.i = 0;
   state.answers = [];
@@ -236,6 +263,10 @@ function startTest() {
 
   renderQuestion();
 }
+
+// y abajo, el listener se queda igual:
+els.start?.addEventListener('click', () => { startTest(); });
+
 
 
 function nextQuestion() {
@@ -307,12 +338,14 @@ els.idx.textContent = '0';
 els.total.textContent = '0';
 els.rt.textContent = '0.0';
 
+/*
 (async () => {
   await loadQuestions({ take: 8 });
   els.total.textContent = String(QUESTIONS.length);
   els.text.textContent = '...';
 })();
-
+*/
+els.text.textContent = 'El examen se cargará cuando ingreses el código.';
 
 els.start?.addEventListener('click', startTest);
 els.next?.addEventListener('click', nextQuestion);
