@@ -61,7 +61,9 @@ const EMAIL_RE =
 const NAME_RE = /^[A-Za-zÁÉÍÓÚÜÑáéíóúüñ'´`-][A-Za-zÁÉÍÓÚÜÑáéíóúüñ0-9'´`.\- ]{1,78}[A-Za-zÁÉÍÓÚÜÑáéíóúüñ0-9'´`-]$/;
 
 // Código: 3–20, alfanumérico con - _ permitidos
-const CODE_RE = /^[A-Za-z0-9\-_]{3,20}$/;
+// NUEVO: solo dígitos, de 3 a 20
+const CODE_RE = /^[0-9]{3,20}$/;
+
 
 function markInvalid(el, msg) {
   if (!el) return;

@@ -409,27 +409,47 @@
       }
       throw new Error('Formato no soportado. Usa .json o .csv');
     }
+    // Solo letras (incluye tildes/ñ) y espacios, entre 3 y 60 caracteres
+const EXAM_NAME_RE = /^[A-Za-zÁÉÍÓÚÜÑáéíóúüñ0-9 ]{3,60}$/;
 
-    $('#exam-upload').addEventListener('click', async ()=>{
-      const name = ($('#exam-name')?.value || 'Examen').trim();
-      const file = $('#exam-file')?.files?.[0];
-      if (!file) { showToast('Selecciona un archivo CSV/JSON', false); return; }
 
-      try{
-        const questions = await parseFileToQuestions(file);
-        const r = await fetch('/api/exams/set', {
-          method:'POST',
-          headers:{'Content-Type':'application/json'},
-          body: JSON.stringify({ name, questions })
-        });
-        let j; try { j = await r.json(); } catch { throw new Error('Respuesta no JSON'); }
-        if (!r.ok || !j.ok) throw new Error(j.error || 'Error guardando el examen');
-        showToast(`Examen "${name}" activado (${j.saved} preguntas).`, true);
-      }catch(e){
-        console.error(e);
-        showToast(e.message || 'Error guardando el examen', false);
-      }
+    $('#exam-upload').addEventListener('click', async ()=> {
+  const rawName = ($('#exam-name')?.value || '').trim();
+  const file = $('#exam-file')?.files?.[0];
+
+  if (!rawName) {
+    showToast('Ingresa un nombre para el examen', false);
+    return;
+  }
+
+  if (!EXAM_NAME_RE.test(rawName)) {
+    showToast('Nombre de examen inválido (solo letras y espacios, 3–60 caracteres).', false);
+    return;
+  }
+
+  if (!file) {
+    showToast('Selecciona un archivo CSV/JSON', false);
+    return;
+  }
+
+  const name = rawName;
+
+  try{
+    const questions = await parseFileToQuestions(file);
+    const r = await fetch('/api/exams/set', {
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ name, questions })
     });
+    let j; try { j = await r.json(); } catch { throw new Error('Respuesta no JSON'); }
+    if (!r.ok || !j.ok) throw new Error(j.error || 'Error guardando el examen');
+    showToast(`Examen "${name}" activado (${j.saved} preguntas).`, true);
+  }catch(e){
+    console.error(e);
+    showToast(e.message || 'Error guardando el examen', false);
+  }
+});
+
 
     // logout
     const btnLogout = document.getElementById('btn-logout');
