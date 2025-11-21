@@ -8,11 +8,8 @@ export default async function handler(req, res) {
 
   let body = req.body;
   if (typeof body === 'string') {
-    try {
-      body = JSON.parse(body);
-    } catch {
-      return res.status(400).json({ ok:false, error:'JSON inválido' });
-    }
+    try { body = JSON.parse(body); }
+    catch { return res.status(400).json({ ok:false, error:'JSON inválido' }); }
   }
 
   const code = (body?.code ?? '').toString().trim();
@@ -36,7 +33,6 @@ export default async function handler(req, res) {
     );
 
     if (!rows.length) {
-      // No hay examen activo con ese código
       return res.status(404).json({
         ok: false,
         error: 'Código incorrecto o examen no disponible'
