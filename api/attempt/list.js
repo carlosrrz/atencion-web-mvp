@@ -6,7 +6,6 @@ export default async function handler(req, res) {
     const limit = Math.min(parseInt(req.query.limit ?? '200', 10) || 200, 500);
     const pool = getPool();
 
-    // Ajusta nombres si tu esquema difiere
     const { rows } = await pool.query(`
       SELECT
         a.id,
@@ -18,7 +17,9 @@ export default async function handler(req, res) {
         a.offtab_episodes,
         a.lookaway_episodes,
         a.speak_episodes,
+        -- usamos el summary guardado, con fallback a lo calculado "simple"
         COALESCE(
+          a.summary,
           jsonb_build_object(
             'off_episodes', a.offtab_episodes,
             'lookaway_episodes', a.lookaway_episodes,
@@ -26,21 +27,22 @@ export default async function handler(req, res) {
           ),
           '{}'::jsonb
         ) AS summary,
+        -- puntaje del examen: primero exam_attempts, si no existe usamos summary->'exam'
         COALESCE(
           jsonb_build_object(
             'score', ea.correct,
             'total', ea.total
           ),
+          a.summary->'exam',
           '{}'::jsonb
         ) AS exam
       FROM attempts a
-      LEFT JOIN students s    ON s.id = a.student_id
+      LEFT JOIN students s       ON s.id = a.student_id
       LEFT JOIN exam_attempts ea ON ea.attempt_id = a.id
       ORDER BY a.created_at DESC
       LIMIT $1
     `, [limit]);
 
-    // Normalizamos el shape que usa tu front
     const items = rows.map(r => ({
       id: r.id,
       student: { name: r.student_name, code: r.student_code },
@@ -57,6 +59,7 @@ export default async function handler(req, res) {
     return res.status(500).json({ ok:false, error:'List attempts failed' });
   }
 }
+
 
 // api/attempt/list.js
 export async function GET(req) {
