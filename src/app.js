@@ -996,10 +996,9 @@ navigator.mediaDevices?.addEventListener?.('devicechange', async ()=>{
 async function saveAttemptRemote(attempt) {
   try {
     // recorta evidencias para no pasar límites de payload
-    const slim = {
-      ...attempt,
-      evidences: Array.isArray(attempt.evidences) ? attempt.evidences.slice(-12) : []
-    };
+    const slim = { ...attempt, evidences: (attempt.evidences||[]).slice(-12) };
+fetch('/api/attempt/create', { body: JSON.stringify(slim), ... })
+
 
     console.log('[proctor] POST /api/attempt/create', slim.id, 'ev:', slim.evidences.length);
 

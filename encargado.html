@@ -5,40 +5,51 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Panel — Profesor</title>
 
-  <!-- hoja principal (usa cache-buster opcional) -->
+  <!-- Tu CSS principal -->
   <link rel="stylesheet" href="/src/styles.css?v=20251120"/>
 
   <style>
-    .wrap{max-width:1200px;margin:20px auto;padding:0 16px}
-    table{width:100%;border-collapse:separate;border-spacing:0 6px}
-    th,td{padding:8px 10px;background:#fff0;border:1px solid var(--border)}
-    th{background:#0f1b34;text-align:left;color:#e6edf7}
-    td{background:#0c1428;color:#dfe7f6}
-    .row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
-    .pill{display:inline-flex;align-items:center;padding:2px 8px;border-radius:999px;background:#0f1b34;border:1px solid var(--border);color:#cdd7ee}
-    .pill-warn{background:#2a1a0f;border-color:#8a3; color:#e6f7d9}
-    .muted{color:var(--muted);font-size:.92rem}
+    :root{
+      --border:#21365c;
+      --muted:#9fb0d4;
+      --shadow:0 20px 40px rgba(2,8,23,.35);
+    }
+    body{background:#071021;color:#e6edf7}
 
-    /* Modal de detalle */
+    .wrap{max-width:1200px;margin:20px auto;padding:0 16px}
+    .row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+
+    h1{font-size:28px;margin:0}
+
+    table{width:100%;border-collapse:separate;border-spacing:0 6px}
+    th,td{padding:10px 12px;border:1px solid var(--border)}
+    th{background:#0f1b34;text-align:left}
+    td{background:#0b1324}
+
+    .pill{display:inline-flex;align-items:center;padding:4px 10px;border-radius:999px;background:#0f1b34;border:1px solid var(--border);color:#cdd7ee}
+    .muted{color:var(--muted)}
+    .topbar{background:#0b1324;border-bottom:1px solid var(--border);padding:12px 0}
+
+    .card{background:#0b1324;border:1px solid var(--border);border-radius:14px;padding:14px;margin:16px auto;color:#e6edf7}
+    .auth-input{width:100%;height:48px;padding:10px 12px;border-radius:12px;border:1px solid #1c2a48;background:#0e1a2f;color:#e6edf7}
+    .primary{height:44px;border:0;border-radius:12px;background:#2f6cf6;color:#fff;font-weight:600;padding:0 14px;cursor:pointer}
+    .secondary{height:36px;border:1px solid #21365c;border-radius:10px;background:#0f1b34;color:#e6edf7;padding:0 12px;cursor:pointer}
+
+    /* Modal */
     .backdrop{position:fixed;inset:0;background:rgba(0,0,0,.45);display:none;z-index:300}
-    .modal{position:fixed;left:50%;top:7%;transform:translateX(-50%);
-      width:min(980px,94vw);background:#0b1324;border:1px solid var(--border);
-      border-radius:14px;box-shadow:var(--shadow);display:none;z-index:301;color:#e6edf7}
+    .modal{position:fixed;left:50%;top:6%;transform:translateX(-50%);
+      width:min(980px,94vw);max-height:88vh;overflow:auto;
+      background:#0b1324;border:1px solid var(--border);
+      border-radius:14px;box-shadow:var(--shadow);display:none;z-index:301}
     .modal header,.modal footer{padding:12px 16px;border-bottom:1px solid var(--border)}
     .modal footer{border-top:1px solid var(--border);border-bottom:none;display:flex;justify-content:flex-end;gap:8px}
     .modal .body{padding:14px}
 
-    /* Grid de evidencias */
-    .ev-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:12px}
-    .ev-card{border:1px solid var(--border);border-radius:12px;padding:8px;background:#0b1324;box-shadow:0 2px 10px rgba(2,8,23,.12)}
-    .ev-card img{width:100%;height:auto;border-radius:8px;display:block}
-    .ev-note{font-size:.85rem;color:var(--muted);margin-top:6px}
-
-    /* Tarjeta banco examen + botones básicos */
-    .card{background:#0b1324;border:1px solid var(--border);border-radius:14px;padding:14px;margin:16px auto;color:#e6edf7}
-    .auth-input{width:100%;height:48px;padding:10px 12px;border-radius:12px;border:1px solid #1c2a48;background:#0e1a2f;color:#e6edf7}
-    .primary{height:44px;border:0;border-radius:12px;background:#2f6cf6;color:#fff;font-weight:600;padding:0 14px;cursor:pointer}
-    .secondary{height:44px;border:1px solid #21365c;border-radius:12px;background:#0f1b34;color:#e6edf7;padding:0 12px;cursor:pointer}
+    /* Evidencias */
+    .ev-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:14px;margin-top:6px}
+    .ev-card{background:#0f1b34;border:1px solid var(--border);border-radius:12px;overflow:hidden}
+    .ev-card img{width:100%;height:150px;object-fit:cover;background:#0b1324;display:block}
+    .ev-note{padding:8px 10px;color:#cbd6f0;font-size:.92rem;border-top:1px solid var(--border)}
 
     /* Toast */
     .toast{position:fixed;right:16px;bottom:16px;background:#0b1324;color:#e6edf7;
@@ -59,7 +70,7 @@
   </header>
 
   <main class="wrap">
-    <div class="row" style="justify-content:space-between;margin-bottom:10px">
+    <div class="row" style="justify-content:space-between;margin-bottom:12px">
       <div class="row">
         <button id="btn-export-all" class="secondary">Exportar CSV (todos)</button>
         <button id="btn-clear" class="secondary">Limpiar cache local</button>
@@ -121,12 +132,11 @@
 
     const $ = (s)=>document.querySelector(s);
 
-    // ---- UI refs
+    // UI refs
     const tblBody   = $('#tbl tbody');
     const countPill = $('#count-pill');
     const btnAll    = $('#btn-export-all');
     const btnClr    = $('#btn-clear');
-    const btnLogout = $('#btn-logout');
 
     const backdrop  = $('#backdrop');
     const modal     = $('#modal');
@@ -136,51 +146,46 @@
     const mExport   = $('#m-export');
     const toast     = $('#toast');
 
-    // ---- utils
+    // utils
     const fmtTime = (ms)=>{ const s=Math.floor((ms||0)/1000); const mm=String(Math.floor(s/60)).padStart(2,'0'); const ss=String(s%60).padStart(2,'0'); return `${mm}:${ss}`; };
-    const fmt     = (ts)=>{ try{ return new Date(ts).toLocaleString(); }catch{ return '—'; } };
-    const safe    = (v)=> (v==null || v==='') ? '—' : String(v);
+    const fmt = (ts)=>{ try{ return new Date(ts).toLocaleString(); }catch{ return '—'; } };
+    const safe = (v)=> (v==null || v==='') ? '—' : String(v);
 
     function showToast(msg, ok=true){
       toast.textContent = msg;
       toast.classList.remove('ok','err');
       toast.classList.add(ok ? 'ok' : 'err');
       toast.style.display = 'block';
-      setTimeout(()=>{ toast.style.display='none'; }, 2400);
+      setTimeout(()=>{ toast.style.display='none'; }, 2600);
     }
 
-    // ---- data
+    // datos
     let DATA = [];
-    let CURRENT = null;
+    let CURRENT_ATTEMPT = null;
 
     async function fetchAttemptsFromCloud() {
       const r = await fetch('/api/attempt/list?limit=200', { cache: 'no-store' });
-      const j = await r.json(); // si viene HTML fallará y lo atrapamos arriba
-      if (!r.ok || !j.ok) throw new Error(j.error || 'No se pudo cargar intentos');
+      let j;
+      try { j = await r.json(); }
+      catch { throw new Error('Respuesta no JSON'); }
+      if (!r.ok || !j.ok) throw new Error(j?.error || 'No se pudo cargar intentos');
       return j.items || [];
     }
-
-    // ↓ Nuevo: trae el intento completo (incluye evidences) por ID
-async function fetchAttemptFull(id){
-  const r = await fetch(`/api/attempt/get?id=${encodeURIComponent(id)}`, { cache:'no-store' });
-  let j; try { j = await r.json(); } catch { throw new Error('Respuesta no JSON'); }
-  if (!r.ok || !j.ok) throw new Error(j.error || 'No se pudo cargar el detalle');
-  return j.item;
-}
-
 
     function render(items){
       DATA = items;
       countPill.textContent = `${items.length} intento${items.length===1?'':'s'}`;
+
       tblBody.innerHTML = items.map((a,i)=>{
         const off   = a.summary?.off_episodes ?? a.summary?.tab_activity?.off_episodes ?? 0;
         const look  = a.summary?.lookaway_episodes ?? a.summary?.attention?.lookaway_episodes ?? 0;
         const speak = a.summary?.speak_episodes ?? a.summary?.lips?.speak_episodes ?? 0;
-        const ex = a.exam || {};
-        const examTxt =
-          (ex.score   != null && ex.total != null) ? `${ex.score}/${ex.total}` :
-          (ex.correct != null && ex.total != null) ? `${ex.correct}/${ex.total}` :
-          '—';
+
+        const ex  = a.exam || {};
+        const examTxt = (ex.score != null && ex.total != null)
+          ? `${ex.score}/${ex.total}`
+          : (ex.correct != null && ex.total != null)
+            ? `${ex.correct}/${ex.total}` : '—';
 
         return `
           <tr>
@@ -205,111 +210,98 @@ async function fetchAttemptFull(id){
         render(items);
       }catch(e){
         console.error(e);
-        showToast('No se pudieron cargar los intentos', false);
+        showToast(e.message || 'No se pudieron cargar los intentos', false);
         render([]);
       }
     }
 
-    // ---- detalle + evidencias
-    const srcOf = (it) => it?.data || it?.image_base64 || it?.image || it?.img || it?.url || '';
-
-    function findAttempt(id){ return DATA.find(x => String(x.id) === String(id)); }
-
- async function openDetail(id){
-    // 1) busca el intento base que ya tenías en memoria
-    let a = DATA.find(x => String(x.id) === String(id));
-    if (!a) return;
-
-    // 2) si el listado no trae evidencias, pedir el detalle al backend
-    if (!Array.isArray(a.evidences) || a.evidences.length === 0) {
-      try {
-        const r = await fetch(`/api/attempt/get?id=${encodeURIComponent(id)}`, { cache: 'no-store' });
-        const j = await r.json();
-        if (r.ok && j.ok && j.attempt) {
-          // mezcla: mantenemos lo que ya tenías + sobrescribimos con lo “full”
-          a = { ...a, ...j.attempt };
-        }
-      } catch (e) {
-        console.warn('[detail] fallo al traer evidencias', e);
-      }
+    // detalle (lazy-load evidencias)
+    function srcOf(it){
+      return it?.data || it?.image_base64 || it?.image || it?.img || it?.url || '';
     }
 
-    // util para sacar el src correcto venga como venga
-    const srcOf = (it) =>
-      it?.data || it?.image_base64 || it?.image || it?.img || it?.url || '';
+    async function openDetail(id){
+      let a = DATA.find(x => String(x.id) === String(id));
+      if (!a) return;
 
-    const off   = a.summary?.tab_activity?.off_episodes ?? a.summary?.off_episodes ?? 0;
-    const look  = a.summary?.attention?.lookaway_episodes ?? a.summary?.lookaway_episodes ?? 0;
-    const speak = a.summary?.lips?.speak_episodes ?? a.summary?.speak_episodes ?? 0;
-
-    const ex = a.exam || {};
-    const examTxt = (ex.score!=null && ex.total!=null) ? `${ex.score}/${ex.total}`
-                  : (ex.correct!=null && ex.total!=null) ? `${ex.correct}/${ex.total}` : '—';
-
-    // 3) render
-    mTitle.textContent = `Intento ${a.id} — ${a.student?.name || '—'}`;
-    mBody.innerHTML = `
-      <div class="row" style="margin-bottom:8px">
-        <span class="pill">Inicio: ${new Date(a.startedAt).toLocaleString()}</span>
-        <span class="pill">Fin: ${new Date(a.endedAt).toLocaleString()}</span>
-        <span class="pill">Duración: ${fmtTime(a.durationMs||0)}</span>
-        <span class="pill">Examen: ${examTxt}</span>
-      </div>
-
-      <h4>Resumen</h4>
-      <ul>
-        <li>Off-tab (≥ 2s): ${off}</li>
-        <li>Mirada desviada: ${look}</li>
-        <li>Posible habla: ${speak}</li>
-      </ul>
-
-      <h4>Evidencias</h4>
-      <div class="ev-grid" id="ev-grid">
-        ${
-          Array.isArray(a.evidences) && a.evidences.length
-          ? a.evidences.map(it => {
-              const src = srcOf(it);
-              return `
-                <div class="ev-card">
-                  <div class="pill pill-warn">${it.kind || 'alerta'}</div>
-                  ${src ? `<img src="${src}" alt="${it.kind||'evidencia'}" />`
-                        : `<div class="muted">Sin imagen adjunta</div>`}
-                  <div class="ev-note">
-                    ${new Date(it.t || it.taken_at || Date.now()).toLocaleTimeString()} — ${it.note || ''}
-                  </div>
-                </div>`;
-            }).join('')
-          : '<div class="muted">No hay evidencias capturadas.</div>'
+      // si no hay evidencias en el listado, pedir intento completo
+      if (!Array.isArray(a.evidences) || a.evidences.length === 0) {
+        try {
+          const r = await fetch(`/api/attempt/get?id=${encodeURIComponent(id)}`, { cache: 'no-store' });
+          const j = await r.json().catch(()=>({}));
+          if (r.ok && j.ok && j.attempt) {
+            a = { ...a, ...j.attempt };
+          }
+        } catch (e) {
+          console.warn('[detail] fallo al traer evidencias', e);
         }
-      </div>
-    `;
+      }
 
-    backdrop.style.display = 'block';
-    modal.style.display = 'block';
-  }
+      CURRENT_ATTEMPT = a;
 
-  // delegación de clicks (déjalo tal cual)
-  tblBody.addEventListener('click', (e)=>{
-    const btn = e.target.closest('button');
-    if (!btn) return;
-    const id = btn.dataset.id;
-    if (id) openDetail(id);
-  });
+      const off   = a.summary?.tab_activity?.off_episodes ?? a.summary?.off_episodes ?? 0;
+      const look  = a.summary?.attention?.lookaway_episodes ?? a.summary?.lookaway_episodes ?? 0;
+      const speak = a.summary?.lips?.speak_episodes ?? a.summary?.speak_episodes ?? 0;
 
+      const ex = a.exam || {};
+      const examTxt = (ex.score!=null && ex.total!=null) ? `${ex.score}/${ex.total}`
+                    : (ex.correct!=null && ex.total!=null) ? `${ex.correct}/${ex.total}` : '—';
 
+      mTitle.textContent = `Intento ${a.id} — ${a.student?.name || '—'}`;
 
-    // Delegación click en tabla
+      mBody.innerHTML = `
+        <div class="row" style="margin-bottom:8px">
+          <span class="pill">Inicio: ${fmt(a.startedAt)}</span>
+          <span class="pill">Fin: ${fmt(a.endedAt)}</span>
+          <span class="pill">Duración: ${fmtTime(a.durationMs||0)}</span>
+          <span class="pill">Examen: ${examTxt}</span>
+        </div>
+
+        <h4>Resumen</h4>
+        <ul>
+          <li>Off-tab (≥ 2s): ${off}</li>
+          <li>Mirada desviada: ${look}</li>
+          <li>Posible habla: ${speak}</li>
+        </ul>
+
+        <h4>Evidencias</h4>
+        <div class="ev-grid" id="ev-grid">
+          ${
+            Array.isArray(a.evidences) && a.evidences.length
+            ? a.evidences.map(it=>{
+                const src = srcOf(it);
+                return `
+                  <div class="ev-card">
+                    <div class="pill pill-warn">${it.kind || 'alerta'}</div>
+                    ${src ? `<img src="${src}" alt="${it.kind||'evidencia'}" />`
+                          : `<div class="muted" style="padding:10px">Sin imagen adjunta</div>`}
+                    <div class="ev-note">
+                      ${new Date(it.t || it.taken_at || Date.now()).toLocaleTimeString()} — ${it.note || ''}
+                    </div>
+                  </div>`;
+              }).join('')
+            : '<div class="muted">No hay evidencias capturadas.</div>'
+          }
+        </div>
+      `;
+
+      backdrop.style.display = 'block';
+      modal.style.display = 'block';
+    }
+
+    // delegación en tabla
     tblBody.addEventListener('click', (e)=>{
-      const btn = e.target.closest('button[data-id]');
+      const btn = e.target.closest('button');
       if (!btn) return;
-      openDetail(btn.dataset.id);
+      const id = btn.dataset.id;
+      if (id) openDetail(id);
     });
 
-    // Cerrar modal
-    mClose.addEventListener('click', ()=>{ backdrop.style.display='none'; modal.style.display='none'; CURRENT=null; });
-    backdrop.addEventListener('click', (e)=>{ if(e.target===backdrop){ backdrop.style.display='none'; modal.style.display='none'; CURRENT=null; }});
+    // cerrar modal
+    mClose.addEventListener('click', ()=>{ backdrop.style.display='none'; modal.style.display='none'; });
+    backdrop.addEventListener('click', (e)=>{ if(e.target===backdrop){ backdrop.style.display='none'; modal.style.display='none'; }});
 
-    // Exportar CSV (todos)
+    // exportar CSV todos
     function toCSV(rows, headers){
       const esc = v => `"${String(v??'').replaceAll('"','""')}"`;
       const head = headers.map(esc).join(',');
@@ -326,9 +318,9 @@ async function fetchAttemptFull(id){
         inicio: fmt(a.startedAt),
         fin: fmt(a.endedAt),
         duracion: fmtTime(a.durationMs||0),
-        off_tab_ep: a.summary?.off_episodes ?? a.summary?.tab_activity?.off_episodes ?? 0,
-        mirada_ep:  a.summary?.lookaway_episodes ?? a.summary?.attention?.lookaway_episodes ?? 0,
-        habla_ep:   a.summary?.speak_episodes ?? a.summary?.lips?.speak_episodes ?? 0,
+        off_tab_ep: a.summary?.tab_activity?.off_episodes ?? a.summary?.off_episodes ?? 0,
+        mirada_ep:  a.summary?.attention?.lookaway_episodes ?? a.summary?.lookaway_episodes ?? 0,
+        habla_ep:   a.summary?.lips?.speak_episodes ?? a.summary?.speak_episodes ?? 0,
         puntaje: (a.exam?.score ?? a.exam?.correct ?? ''),
         total:   (a.exam?.total ?? '')
       }));
@@ -341,38 +333,41 @@ async function fetchAttemptFull(id){
       URL.revokeObjectURL(a.href);
     });
 
-    // Exportar CSV (un intento)
+    // exportar CSV intento abierto
     mExport.addEventListener('click', ()=>{
-      const r = CURRENT;
-      if(!r){ showToast('No encontrado', false); return; }
+      const row = CURRENT_ATTEMPT;
+      if(!row){ showToast('Abre un intento primero', false); return; }
       const rows = [{
-        id: r.id,
-        nombre: r.student?.name ?? '',
-        codigo: r.student?.code ?? '',
-        inicio: fmt(r.startedAt),
-        fin: fmt(r.endedAt),
-        duracion: fmtTime(r.durationMs||0),
-        off_tab_ep: r.summary?.off_episodes ?? r.summary?.tab_activity?.off_episodes ?? 0,
-        mirada_ep:  r.summary?.lookaway_episodes ?? r.summary?.attention?.lookaway_episodes ?? 0,
-        habla_ep:   r.summary?.speak_episodes ?? r.summary?.lips?.speak_episodes ?? 0,
-        puntaje: (r.exam?.score ?? r.exam?.correct ?? ''),
-        total:   (r.exam?.total ?? '')
+        id: row.id,
+        nombre: row.student?.name ?? '',
+        codigo: row.student?.code ?? '',
+        inicio: fmt(row.startedAt),
+        fin: fmt(row.endedAt),
+        duracion: fmtTime(row.durationMs||0),
+        off_tab_ep: row.summary?.tab_activity?.off_episodes ?? row.summary?.off_episodes ?? 0,
+        mirada_ep:  row.summary?.attention?.lookaway_episodes ?? row.summary?.lookaway_episodes ?? 0,
+        habla_ep:   row.summary?.lips?.speak_episodes ?? row.summary?.speak_episodes ?? 0,
+        puntaje: (row.exam?.score ?? row.exam?.correct ?? ''),
+        total:   (row.exam?.total ?? '')
       }];
       const csv = toCSV(rows, Object.keys(rows[0]));
       const blob = new Blob([csv], {type:'text/csv'});
-      const a = document.createElement('a');
-      a.href = URL.createObjectURL(blob);
-      a.download = `intento_${r.id}.csv`;
-      a.click();
-      URL.revokeObjectURL(a.href);
+      const an = document.createElement('a');
+      an.href = URL.createObjectURL(blob);
+      an.download = `intento_${row.id}.csv`;
+      an.click();
+      URL.revokeObjectURL(an.href);
     });
 
-    // Limpiar cache local (solo localStorage)
+    // limpiar cache local (no afecta BD)
     btnClr.addEventListener('click', ()=>{
-      try{ localStorage.removeItem('proctor.attempts'); showToast('Cache local limpiada'); }catch{}
+      try{
+        localStorage.removeItem('proctor.attempts');
+        showToast('Cache local limpiada');
+      }catch{}
     });
 
-    // Subida de examen (CSV/JSON)
+    // subir examen
     async function parseFileToQuestions(file) {
       const text = await file.text();
       if (file.name.toLowerCase().endsWith('.json')) {
@@ -415,7 +410,7 @@ async function fetchAttemptFull(id){
           headers:{'Content-Type':'application/json'},
           body: JSON.stringify({ name, questions })
         });
-        let j; try{ j = await r.json(); }catch{ throw new Error('Respuesta no JSON'); }
+        let j; try { j = await r.json(); } catch { throw new Error('Respuesta no JSON'); }
         if (!r.ok || !j.ok) throw new Error(j.error || 'Error guardando el examen');
         showToast(`Examen "${name}" activado (${j.saved} preguntas).`, true);
       }catch(e){
@@ -424,15 +419,16 @@ async function fetchAttemptFull(id){
       }
     });
 
-    // Logout
-    btnLogout.addEventListener('click', async (e)=>{
+    // logout
+    const btnLogout = document.getElementById('btn-logout');
+    btnLogout?.addEventListener('click', async (e) => {
       e.preventDefault();
-      try{ await fetch('/api/auth/logout', {method:'POST'}); }catch{}
+      try { await fetch('/api/auth/logout', { method: 'POST' }); } catch {}
       clearSession();
-      location.replace('login.html');
+      location.href = 'login.html';
     });
 
-    // Go!
+    // go!
     loadAndRender();
   </script>
 </body>
