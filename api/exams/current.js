@@ -1,4 +1,4 @@
-// api/exams/current.js (idea general)
+// api/exams/current.js
 import { getPool } from '../../lib/db.js';
 
 export default async function handler(req, res) {
@@ -8,38 +8,51 @@ export default async function handler(req, res) {
 
   let body = req.body;
   if (typeof body === 'string') {
-    try { body = JSON.parse(body); } catch {
+    try {
+      body = JSON.parse(body);
+    } catch {
       return res.status(400).json({ ok:false, error:'JSON inválido' });
     }
   }
 
-  const code = (body.code || '').trim();
+  const code = (body?.code ?? '').toString().trim();
   if (!code) {
     return res.status(400).json({ ok:false, error:'Falta código' });
   }
 
-  const pool = getPool();
-  const { rows } = await pool.query(`
-    SELECT id, name, questions, access_code
-      FROM exams
-     WHERE is_active = true
-     ORDER BY created_at DESC
-     LIMIT 1
-  `);
+  try {
+    const pool = getPool();
 
-  if (!rows.length) {
-    return res.status(404).json({ ok:false, error:'No hay examen activo' });
+    const { rows } = await pool.query(
+      `
+      SELECT id, name, questions, access_code
+        FROM exams
+       WHERE is_active = TRUE
+         AND access_code = $1
+       ORDER BY created_at DESC
+       LIMIT 1
+      `,
+      [code]
+    );
+
+    if (!rows.length) {
+      // No hay examen activo con ese código
+      return res.status(404).json({
+        ok: false,
+        error: 'Código incorrecto o examen no disponible'
+      });
+    }
+
+    const ex = rows[0];
+
+    return res.status(200).json({
+      ok: true,
+      examId: ex.id,
+      name: ex.name,
+      questions: ex.questions
+    });
+  } catch (e) {
+    console.error('[api/exams/current] ERROR', e);
+    return res.status(500).json({ ok:false, error:'Error de servidor' });
   }
-
-  const ex = rows[0];
-  if (ex.access_code !== code) {
-    return res.status(403).json({ ok:false, error:'Código incorrecto' });
-  }
-
-  return res.status(200).json({
-    ok: true,
-    examId: ex.id,
-    name: ex.name,
-    questions: ex.questions
-  });
 }
