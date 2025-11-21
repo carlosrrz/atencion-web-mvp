@@ -160,6 +160,15 @@
       return j.items || [];
     }
 
+    // ↓ Nuevo: trae el intento completo (incluye evidences) por ID
+async function fetchAttemptFull(id){
+  const r = await fetch(`/api/attempt/get?id=${encodeURIComponent(id)}`, { cache:'no-store' });
+  let j; try { j = await r.json(); } catch { throw new Error('Respuesta no JSON'); }
+  if (!r.ok || !j.ok) throw new Error(j.error || 'No se pudo cargar el detalle');
+  return j.item;
+}
+
+
     function render(items){
       DATA = items;
       countPill.textContent = `${items.length} intento${items.length===1?'':'s'}`;
@@ -204,64 +213,74 @@
     // ---- detalle + evidencias
     const srcOf = (it) => it?.data || it?.image_base64 || it?.image || it?.img || it?.url || '';
 
-    function openDetail(id){
-      const a = DATA.find(x => String(x.id) === String(id));
-      if(!a) return;
-      CURRENT = a;
+    async function openDetail(id){
+  let a = findAttempt(id);
+  if (!a) return;
 
-      const off   = a.summary?.tab_activity?.off_episodes ?? a.summary?.off_episodes ?? 0;
-      const look  = a.summary?.attention?.lookaway_episodes ?? a.summary?.lookaway_episodes ?? 0;
-      const speak = a.summary?.lips?.speak_episodes ?? a.summary?.speak_episodes ?? 0;
-
-      const ex = a.exam || {};
-      const examTxt =
-        (ex.score   != null && ex.total != null) ? `${ex.score}/${ex.total}` :
-        (ex.correct != null && ex.total != null) ? `${ex.correct}/${ex.total}` :
-        '—';
-
-      const evid = Array.isArray(a.evidences) ? a.evidences
-                 : (Array.isArray(a.evidence) ? a.evidence : []);
-
-      mTitle.textContent = `Intento ${a.id} — ${safe(a.student?.name)}`;
-      mBody.innerHTML = `
-        <div class="row" style="margin-bottom:8px">
-          <span class="pill">Inicio: ${fmt(a.startedAt)}</span>
-          <span class="pill">Fin: ${fmt(a.endedAt)}</span>
-          <span class="pill">Duración: ${fmtTime(a.durationMs||0)}</span>
-          <span class="pill">Examen: ${examTxt}</span>
-        </div>
-
-        <h4>Resumen</h4>
-        <ul>
-          <li>Off-tab (episodios): ${off}</li>
-          <li>Mirada desviada (episodios): ${look}</li>
-          <li>Posible habla (episodios): ${speak}</li>
-        </ul>
-
-        <h4>Evidencias</h4>
-        <div class="ev-grid">
-          ${
-            evid.length
-              ? evid.map(it=>{
-                  const src = srcOf(it);
-                  return `
-                    <div class="ev-card">
-                      <div class="pill pill-warn">${it.kind || 'alerta'}</div>
-                      ${ src ? `<img src="${src}" alt="${it.kind||'evidencia'}">`
-                             : `<div class="muted">Sin imagen adjunta</div>` }
-                      <div class="ev-note">
-                        ${new Date(it.t || it.taken_at || Date.now()).toLocaleTimeString()} — ${it.note || ''}
-                      </div>
-                    </div>`;
-                }).join('')
-              : '<div class="muted">No hay evidencias capturadas.</div>'
-          }
-        </div>
-      `;
-
-      backdrop.style.display='block';
-      modal.style.display='block';
+  // si la lista no trae evidencias, pide el intento completo
+  try{
+    if (!Array.isArray(a.evidences) || a.evidences.length === 0){
+      const full = await fetchAttemptFull(id);
+      if (full) a = full;
     }
+  }catch(e){ console.warn('[detalle] fallback sin evidencias', e); }
+
+  const off   = a.summary?.tab_activity?.off_episodes ?? a.summary?.off_episodes ?? 0;
+  const look  = a.summary?.attention?.lookaway_episodes ?? a.summary?.lookaway_episodes ?? 0;
+  const speak = a.summary?.lips?.speak_episodes ?? a.summary?.speak_episodes ?? 0;
+
+  const ex = a.exam || {};
+  const examTxt =
+    (ex.score   != null && ex.total != null) ? `${ex.score}/${ex.total}` :
+    (ex.correct != null && ex.total != null) ? `${ex.correct}/${ex.total}` :
+    '—';
+
+  const evid = Array.isArray(a.evidences) ? a.evidences
+             : Array.isArray(a.evidence)  ? a.evidence  : [];
+
+  const srcOf = (it) => it?.data || it?.image_base64 || it?.image || it?.img || it?.url || '';
+
+  mTitle.textContent = `Intento ${a.id} — ${a.student?.name || '—'}`;
+  mBody.innerHTML = `
+    <div class="row" style="margin-bottom:8px">
+      <span class="pill">Inicio: ${fmt(a.startedAt)}</span>
+      <span class="pill">Fin: ${fmt(a.endedAt)}</span>
+      <span class="pill">Duración: ${fmtTime(a.durationMs||0)}</span>
+      <span class="pill">Examen: ${examTxt}</span>
+    </div>
+
+    <h4>Resumen</h4>
+    <ul>
+      <li>Off-tab (episodios): ${off}</li>
+      <li>Mirada desviada (episodios): ${look}</li>
+      <li>Posible habla (episodios): ${speak}</li>
+    </ul>
+
+    <h4>Evidencias</h4>
+    <div class="ev-grid">
+      ${
+        evid.length
+          ? evid.map(it=>{
+              const src = srcOf(it);
+              return `
+                <div class="ev-card">
+                  <div class="pill pill-warn">${it.kind || 'alerta'}</div>
+                  ${src ? `<img src="${src}" alt="${it.kind||'evidencia'}" />`
+                        : `<div class="muted">Sin imagen adjunta</div>`}
+                  <div class="ev-note">
+                    ${new Date(it.t || it.taken_at || Date.now()).toLocaleTimeString()} — ${it.note || ''}
+                  </div>
+                </div>`;
+            }).join('')
+          : '<div class="muted">No hay evidencias capturadas.</div>'
+      }
+    </div>
+  `;
+
+  backdrop.style.display='block';
+  modal.style.display='block';
+}
+
 
     // Delegación click en tabla
     tblBody.addEventListener('click', (e)=>{
