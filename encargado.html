@@ -72,9 +72,10 @@
   <main class="wrap">
     <div class="row" style="justify-content:space-between;margin-bottom:12px">
       <div class="row">
-        <button id="btn-export-all" class="secondary">Exportar CSV (todos)</button>
-        <button id="btn-clear" class="secondary">Limpiar cache local</button>
-      </div>
+  <button id="btn-export-all" class="secondary">Exportar CSV (todos)</button>
+  <button id="btn-clear" class="secondary">Borrar registros</button>
+</div>
+
       <span class="pill" id="count-pill">0 intentos</span>
     </div>
 
@@ -396,13 +397,33 @@ window.addEventListener('pageshow', (event) => {
       URL.revokeObjectURL(an.href);
     });
 
-    // limpiar cache local (no afecta BD)
-    btnClr.addEventListener('click', ()=>{
-      try{
-        localStorage.removeItem('proctor.attempts');
-        showToast('Cache local limpiada');
-      }catch{}
-    });
+    // borrar registros de la BD + limpiar cache local
+btnClr.addEventListener('click', async () => {
+  const ok = confirm(
+    'Esto eliminará TODOS los intentos registrados en el panel.\n¿Seguro que deseas continuar?'
+  );
+  if (!ok) return;
+
+  try {
+    const r = await fetch('/api/attempt/clear', { method: 'POST' });
+    const j = await r.json().catch(() => null);
+
+    if (!r.ok || !j?.ok) {
+      throw new Error(j?.error || 'No se pudieron borrar los intentos');
+    }
+
+    // limpia cache local por si acaso
+    try { localStorage.removeItem('proctor.attempts'); } catch {}
+
+    showToast(`Se eliminaron ${j.deleted ?? 0} intentos.`, true);
+
+    // recarga lista desde el servidor
+    await loadAndRender();
+  } catch (e) {
+    console.error(e);
+    showToast(e.message || 'Error al borrar los intentos', false);
+  }
+});
 
     // subir examen
     async function parseFileToQuestions(file) {
