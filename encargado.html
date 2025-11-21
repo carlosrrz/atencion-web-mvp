@@ -215,57 +215,59 @@ async function fetchAttemptFull(id){
 
     function findAttempt(id){ return DATA.find(x => String(x.id) === String(id)); }
 
-async function openDetail(id){
-  // 1) base: lo que ya tienes en memoria
-  let a = DATA.find(x => String(x.id) === String(id));
-  if (!a) return;
+ async function openDetail(id){
+    // 1) busca el intento base que ya tenías en memoria
+    let a = DATA.find(x => String(x.id) === String(id));
+    if (!a) return;
 
-  // 2) carga el detalle (con evidences)
-  try {
-    const r = await fetch(`/api/attempt/get?id=${encodeURIComponent(a.id)}`, { cache: 'no-store' });
-    const j = await r.json();
-    if (r.ok && j.ok && j.item) a = { ...a, ...j.item };
-  } catch (e) {
-    console.warn('[detail] fallback sin evidences', e);
-  }
+    // 2) si el listado no trae evidencias, pedir el detalle al backend
+    if (!Array.isArray(a.evidences) || a.evidences.length === 0) {
+      try {
+        const r = await fetch(`/api/attempt/get?id=${encodeURIComponent(id)}`, { cache: 'no-store' });
+        const j = await r.json();
+        if (r.ok && j.ok && j.attempt) {
+          // mezcla: mantenemos lo que ya tenías + sobrescribimos con lo “full”
+          a = { ...a, ...j.attempt };
+        }
+      } catch (e) {
+        console.warn('[detail] fallo al traer evidencias', e);
+      }
+    }
 
-  const off   = a.summary?.tab_activity?.off_episodes ?? a.summary?.off_episodes ?? 0;
-  const look  = a.summary?.attention?.lookaway_episodes ?? a.summary?.lookaway_episodes ?? 0;
-  const speak = a.summary?.lips?.speak_episodes ?? a.summary?.speak_episodes ?? 0;
+    // util para sacar el src correcto venga como venga
+    const srcOf = (it) =>
+      it?.data || it?.image_base64 || it?.image || it?.img || it?.url || '';
 
-  const ex = a.exam || {};
-  const examTxt =
-    (ex.score   != null && ex.total != null) ? `${ex.score}/${ex.total}` :
-    (ex.correct != null && ex.total != null) ? `${ex.correct}/${ex.total}` :
-    '—';
+    const off   = a.summary?.tab_activity?.off_episodes ?? a.summary?.off_episodes ?? 0;
+    const look  = a.summary?.attention?.lookaway_episodes ?? a.summary?.lookaway_episodes ?? 0;
+    const speak = a.summary?.lips?.speak_episodes ?? a.summary?.speak_episodes ?? 0;
 
-  const srcOf = (it) =>
-    it?.data || it?.image_base64 || it?.image || it?.img || it?.url || '';
+    const ex = a.exam || {};
+    const examTxt = (ex.score!=null && ex.total!=null) ? `${ex.score}/${ex.total}`
+                  : (ex.correct!=null && ex.total!=null) ? `${ex.correct}/${ex.total}` : '—';
 
-  const evid = Array.isArray(a.evidences) ? a.evidences
-             : (Array.isArray(a.evidence) ? a.evidence : []);
+    // 3) render
+    mTitle.textContent = `Intento ${a.id} — ${a.student?.name || '—'}`;
+    mBody.innerHTML = `
+      <div class="row" style="margin-bottom:8px">
+        <span class="pill">Inicio: ${new Date(a.startedAt).toLocaleString()}</span>
+        <span class="pill">Fin: ${new Date(a.endedAt).toLocaleString()}</span>
+        <span class="pill">Duración: ${fmtTime(a.durationMs||0)}</span>
+        <span class="pill">Examen: ${examTxt}</span>
+      </div>
 
-  mTitle.textContent = `Intento ${a.id} — ${a.student?.name || ''}`;
-  mBody.innerHTML = `
-    <div class="row" style="margin-bottom:8px">
-      <span class="pill">Inicio: ${fmt(a.startedAt)}</span>
-      <span class="pill">Fin: ${fmt(a.endedAt)}</span>
-      <span class="pill">Duración: ${fmtTime(a.durationMs||0)}</span>
-      <span class="pill">Examen: ${examTxt}</span>
-    </div>
+      <h4>Resumen</h4>
+      <ul>
+        <li>Off-tab (≥ 2s): ${off}</li>
+        <li>Mirada desviada: ${look}</li>
+        <li>Posible habla: ${speak}</li>
+      </ul>
 
-    <h4>Resumen</h4>
-    <ul>
-      <li>Off-tab (episodios): ${off}</li>
-      <li>Mirada desviada (episodios): ${look}</li>
-      <li>Posible habla (episodios): ${speak}</li>
-    </ul>
-
-    <h4>Evidencias</h4>
-    <div class="ev-grid">
-      ${
-        evid?.length
-          ? evid.map(it => {
+      <h4>Evidencias</h4>
+      <div class="ev-grid" id="ev-grid">
+        ${
+          Array.isArray(a.evidences) && a.evidences.length
+          ? a.evidences.map(it => {
               const src = srcOf(it);
               return `
                 <div class="ev-card">
@@ -273,27 +275,26 @@ async function openDetail(id){
                   ${src ? `<img src="${src}" alt="${it.kind||'evidencia'}" />`
                         : `<div class="muted">Sin imagen adjunta</div>`}
                   <div class="ev-note">
-                    ${new Date(it.t || it.taken_at || Date.now()).toLocaleTimeString()}
-                    — ${it.note || ''}
+                    ${new Date(it.t || it.taken_at || Date.now()).toLocaleTimeString()} — ${it.note || ''}
                   </div>
                 </div>`;
             }).join('')
           : '<div class="muted">No hay evidencias capturadas.</div>'
-      }
-    </div>
-  `;
-  backdrop.style.display = 'block';
-  modal.style.display = 'block';
-}
+        }
+      </div>
+    `;
 
+    backdrop.style.display = 'block';
+    modal.style.display = 'block';
+  }
 
-// Delegación clicks en tabla (déjalo así)
-tblBody.addEventListener('click', (e)=>{
-  const btn = e.target.closest('button');
-  if (!btn) return;
-  const id = btn.dataset.id;
-  if (id) openDetail(id);
-});
+  // delegación de clicks (déjalo tal cual)
+  tblBody.addEventListener('click', (e)=>{
+    const btn = e.target.closest('button');
+    if (!btn) return;
+    const id = btn.dataset.id;
+    if (id) openDetail(id);
+  });
 
 
 
