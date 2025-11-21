@@ -3,7 +3,7 @@ import { getPool } from '../../lib/db.js';
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
-    return res.status(405).json({ ok:false, error:'Method not allowed' });
+    return res.status(405).json({ ok: false, error: 'Method not allowed' });
   }
 
   let body = req.body;
@@ -11,18 +11,19 @@ export default async function handler(req, res) {
     try {
       body = JSON.parse(body);
     } catch {
-      return res.status(400).json({ ok:false, error:'JSON inválido' });
+      return res.status(400).json({ ok: false, error: 'JSON inválido' });
     }
   }
 
   const code = (body?.code ?? '').toString().trim();
   if (!code) {
-    return res.status(400).json({ ok:false, error:'Falta código' });
+    return res.status(400).json({ ok: false, error: 'Falta código' });
   }
 
   try {
     const pool = getPool();
 
+    // Busca examen ACTIVO que tenga exactamente ese código
     const { rows } = await pool.query(
       `
       SELECT id, name, questions, access_code
@@ -36,7 +37,6 @@ export default async function handler(req, res) {
     );
 
     if (!rows.length) {
-      // No hay examen activo con ese código
       return res.status(404).json({
         ok: false,
         error: 'Código incorrecto o examen no disponible'
@@ -53,6 +53,6 @@ export default async function handler(req, res) {
     });
   } catch (e) {
     console.error('[api/exams/current] ERROR', e);
-    return res.status(500).json({ ok:false, error:'Error de servidor' });
+    return res.status(500).json({ ok: false, error: 'Error de servidor' });
   }
 }
