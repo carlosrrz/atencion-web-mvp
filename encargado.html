@@ -409,8 +409,9 @@
       }
       throw new Error('Formato no soportado. Usa .json o .csv');
     }
-    // Solo letras (incluye tildes/ñ) y espacios, entre 3 y 60 caracteres
-const EXAM_NAME_RE = /^[A-Za-zÁÉÍÓÚÜÑáéíóúüñ0-9 ]{3,60}$/;
+// Solo letras (incluye tildes/ñ) y espacios, entre 3 y 60 caracteres
+const EXAM_NAME_RE = /^[A-Za-zÁÉÍÓÚÜÑáéíóúüñ ]{3,60}$/;
+
 
 
     $('#exam-upload').addEventListener('click', async ()=> {
