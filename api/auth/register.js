@@ -10,6 +10,10 @@ const NAME_RE =
 
 const clean = (s='') => s.normalize('NFKC').replace(/\s+/g,' ').trim();
 
+// antes: const role = body.role;
+const role = 'student';  // 🔒 siempre estudiante
+
+
 export default async function handler(req, res) {
   if (req.method !== 'POST')
     return res.status(405).json({ ok:false, error:'Method not allowed' });
