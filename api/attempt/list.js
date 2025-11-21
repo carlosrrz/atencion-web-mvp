@@ -7,41 +7,45 @@ export default async function handler(req, res) {
     const pool = getPool();
 
     const { rows } = await pool.query(`
-      SELECT
-        a.id,
-        s.name   AS student_name,
-        s.code   AS student_code,
-        a.started_at,
-        a.ended_at,
-        a.duration_ms,
-        a.offtab_episodes,
-        a.lookaway_episodes,
-        a.speak_episodes,
-        -- usamos el summary guardado, con fallback a lo calculado "simple"
-        COALESCE(
-          a.summary,
-          jsonb_build_object(
-            'off_episodes', a.offtab_episodes,
-            'lookaway_episodes', a.lookaway_episodes,
-            'speak_episodes', a.speak_episodes
-          ),
-          '{}'::jsonb
-        ) AS summary,
-        -- puntaje del examen: primero exam_attempts, si no existe usamos summary->'exam'
-        COALESCE(
+  SELECT
+    a.id,
+    s.name   AS student_name,
+    s.code   AS student_code,
+    a.started_at,
+    a.ended_at,
+    a.duration_ms,
+    a.offtab_episodes,
+    a.lookaway_episodes,
+    a.speak_episodes,
+    COALESCE(
+      a.summary,
+      jsonb_build_object(
+        'off_episodes', a.offtab_episodes,
+        'lookaway_episodes', a.lookaway_episodes,
+        'speak_episodes', a.speak_episodes
+      ),
+      '{}'::jsonb
+    ) AS summary,
+    -- 👇 SOLO usamos exam_attempts si tiene total (dato válido)
+    COALESCE(
+      CASE
+        WHEN ea.total IS NOT NULL THEN
           jsonb_build_object(
             'score', ea.correct,
             'total', ea.total
-          ),
-          a.summary->'exam',
-          '{}'::jsonb
-        ) AS exam
-      FROM attempts a
-      LEFT JOIN students s       ON s.id = a.student_id
-      LEFT JOIN exam_attempts ea ON ea.attempt_id = a.id
-      ORDER BY a.created_at DESC
-      LIMIT $1
-    `, [limit]);
+          )
+        ELSE NULL
+      END,
+      a.summary->'exam',
+      '{}'::jsonb
+    ) AS exam
+  FROM attempts a
+  LEFT JOIN students s       ON s.id = a.student_id
+  LEFT JOIN exam_attempts ea ON ea.attempt_id = a.id
+  ORDER BY a.created_at DESC
+  LIMIT $1
+`, [limit]);
+
 
     const items = rows.map(r => ({
       id: r.id,
