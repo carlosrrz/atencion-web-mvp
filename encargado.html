@@ -227,6 +227,50 @@ const examTxt =
   (ex.score   != null && ex.total != null) ? `${ex.score}/${ex.total}` :
   (ex.correct != null && ex.total != null) ? `${ex.correct}/${ex.total}` :
   '—';
+  // …dentro de openDetail(a) justo antes de asignar mBody.innerHTML:
+const evid = Array.isArray(a.evidences) ? a.evidences
+           : (Array.isArray(a.evidence) ? a.evidence : []);
+
+const srcOf = (it) =>
+  it?.data || it?.image_base64 || it?.image || it?.img || it?.url || '';
+
+mBody.innerHTML = `
+  <div class="row" style="margin-bottom:8px">
+    <span class="pill">Inicio: ${fmt(a.startedAt)}</span>
+    <span class="pill">Fin: ${fmt(a.endedAt)}</span>
+    <span class="pill">Duración: ${fmtTime(a.durationMs||0)}</span>
+    <span class="pill">Examen: ${examTxt}</span>
+  </div>
+
+  <h4>Resumen</h4>
+  <ul>
+    <li>Off-tab (episodios): ${off}</li>
+    <li>Mirada desviada (episodios): ${look}</li>
+    <li>Posible habla (episodios): ${speak}</li>
+  </ul>
+
+  <h4>Evidencias</h4>
+  <div class="ev-grid" id="ev-grid">
+    ${
+      evid.length
+        ? evid.map(it => {
+            const src = srcOf(it);
+            return `
+              <div class="ev-card">
+                <div class="pill pill-warn">${it.kind || 'alerta'}</div>
+                ${src ? `<img src="${src}" alt="${it.kind||'evidencia'}" />`
+                      : `<div class="muted">Sin imagen adjunta</div>`}
+                <div class="ev-note">
+                  ${new Date(it.t || it.taken_at || Date.now()).toLocaleTimeString()}
+                  — ${it.note || ''}
+                </div>
+              </div>`;
+          }).join('')
+        : '<div class="muted">No hay evidencias capturadas.</div>'
+    }
+  </div>
+`;
+
 
 mBody.innerHTML = `
   <div class="row" style="margin-bottom:8px">
