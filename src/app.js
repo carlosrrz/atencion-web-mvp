@@ -14,7 +14,6 @@ let saveAttempt = (attempt) => {
 
 // Si store.js existe, sobreescribimos saveAttempt (y opcionalmente updateLastAttemptExam)
 let updateLastAttemptExam; // opcional; se usará con ?. más abajo
-
 (async () => {
   try {
     const mod = await import('./store.js')
@@ -31,13 +30,10 @@ let updateLastAttemptExam; // opcional; se usará con ?. más abajo
 // MediaPipe
 import { FilesetResolver, FaceLandmarker } from "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.3";
 
-
-
+// ===== Campos estudiante =====
 const studentName  = document.getElementById('student-name');
 const studentCode  = document.getElementById('student-code');
 const studentEmail = document.getElementById('student-email');
-
-
 
 /* ===== DOM ===== */
 const cam = document.getElementById('cam');
@@ -125,7 +121,7 @@ const MOVE_EYE   = 0.10;
 const SCORE_ENTER = 6;
 const SCORE_EXIT  = 2;
 
-/* ===== LABIOS (habla) — iguales a tu versión ===== */
+/* ===== LABIOS (habla) ===== */
 const LIPS_SCORE_ENTER = 6;
 const LIPS_SCORE_EXIT  = 2;
 const LIPS_VEL_ALPHA = 0.5;
@@ -159,9 +155,8 @@ let stream = null;
 let running = false;
 let camRequested = false;
 let frameCount = 0;
-let sessionStart = 0;
+let sessionStart = 0;        // ← se setea al iniciar
 let startedAtISO = null;
-
 
 let landmarker = null;
 
@@ -409,7 +404,6 @@ async function startCamera() {
     await cam.play?.();
     window.__camReady = true;
 
-
     if (cam.readyState >= 2) syncCanvasToVideo();
     else cam.addEventListener('loadedmetadata', syncCanvasToVideo, { once: true });
 
@@ -443,19 +437,6 @@ async function startCamera() {
 /* ===== UI en vivo de episodios ===== */
 let lookCntEl, lookTimeEl, occlCntEl, occlTimeEl, lipsCntEl, lipsTimeEl;
 function ensureLiveEpisodeUI(){
-  // intenta ubicar la card "Estado"
-  const cards = Array.from(document.querySelectorAll('aside .card'));
-  const estadoCard = cards.find(c => c.querySelector('h3')?.textContent?.trim().toLowerCase() === 'estado') || cards[1] || document.body;
-
-  function ensureRow(html, id1, id2){
-    if (!document.getElementById(id1) || !document.getElementById(id2)){
-      const p = document.createElement('p');
-      p.innerHTML = html;
-      estadoCard.appendChild(p);
-    }
-  }
-
-
   lookCntEl  = document.getElementById('lookaway-count');
   lookTimeEl = document.getElementById('lookaway-time');
   occlCntEl  = document.getElementById('occl-count');
@@ -516,11 +497,10 @@ function loop(){
     offTimeEl && (offTimeEl.textContent = fmtTime(accum));
     offCntEl  && (offCntEl.textContent  = String(offTabEpisodes));
 
-    // ← actualización en vivo de episodios
     updateLiveEpisodeUI(now);
   }
 
-  // ---- Detección robusta (try/catch) ----
+  // ---- Detección robusta ----
   if (landmarker && frameCount % DETECT_EVERY === 0) {
     const ts = performance.now();
     let prevLook = isLookAway, prevLips = lipsActive, prevOcc = isOccluded;
@@ -579,7 +559,7 @@ function loop(){
           const arRaw  = w / (h + 1e-6);
           const offRaw = lateralOffset(lm, minx, maxx);
 
-          // yaw/pitch por ojos + matriz (si hay)
+          // yaw/pitch
           const yawEyes = yawFromEyes(lm);
           let yawRaw = yawEyes;
           let pitchRaw = pitchFromFeatures(lm);
@@ -668,8 +648,6 @@ function loop(){
           let enter = poseAwayEnter || transAwayEnter || eyesAwayEnter || gazeAwayEnter;
           let exit  = (poseAwayExit && transAwayExit && eyesAwayExit && gazeAwayExit);
 
-          // Si la calibración detectó que tu baseline ya estaba "desviado",
-          // // volteamos la lógica para no invertir "atento/mirada".
           if (invertSense) {
             const poseEnter = poseAwayEnter || transAwayEnter;
             const poseExit  = poseAwayExit  && transAwayExit;
@@ -690,7 +668,6 @@ function loop(){
           if (!isOccluded) {
             awayNow = enter || (movementFast && !exit);
             backNow = exit && !movementFast;
-
 
             if (!isLookAway && !movementFast) {
               adaptBaseline(ema.ar, ema.off, ema.yaw, ema.pitch, ema.gaze, ema.gH, ema.gV, ema.mouth);
@@ -986,6 +963,8 @@ btnStart?.addEventListener('click', ()=>{
   running = true;
   frameCount = 0;
 
+  // tiempos
+  sessionStart = performance.now();          // ✅ importante
   startedAtISO = new Date().toISOString();
 
   // recoger resultado del examen cuando ocurra
@@ -994,8 +973,6 @@ btnStart?.addEventListener('click', ()=>{
     updateLastAttemptExam?.(lastExamResult);
   }, { once: true });
 
-
-  
   // Off-tab
   offTabStart   = isInTab() ? null : performance.now();
   offTabEpisodes= 0;
@@ -1020,7 +997,7 @@ btnStart?.addEventListener('click', ()=>{
   sessionStatus && (sessionStatus.textContent = 'Monitoreando');
   tabLogger.start?.();
 
-  ensureLiveEpisodeUI();          // ← crea los spans si no existen
+  ensureLiveEpisodeUI();
   updateLiveEpisodeUI(performance.now());
 
   requestAnimationFrame(loop);
@@ -1061,17 +1038,15 @@ btnStop?.addEventListener('click', ()=>{
     durationMs: Math.round(summary.duration_ms),
     summary,
     exam: lastExamResult || null,
-    // 👇 clave correcta (plural) y acotada para no saturar localStorage
     evidences: (typeof evidence?.list === 'function') ? evidence.list().slice(-24) : []
   };
 
   saveAttempt(attempt);
-  saveAttemptRemote(attempt);   
+  saveAttemptRemote(attempt);   // ✅ llamado aquí, no en top-level
   try { localStorage.removeItem('proctor.last_exam'); } catch {}
+
   console.log('[proctor] intento guardado:', attempt);
 });
-
-await saveAttemptRemote(attempt);
 
 // Re-apertura / dispositivos
 document.addEventListener('visibilitychange', async ()=>{
@@ -1095,10 +1070,8 @@ navigator.mediaDevices?.addEventListener?.('devicechange', async ()=>{
   lipsEl&&(lipsEl.textContent='—');
   offCntEl&&(offCntEl.textContent='0'); offTimeEl&&(offTimeEl.textContent='00:00');
 
-  // Prepara los contadores en vivo si aún no existen
   ensureLiveEpisodeUI();
 
-  // Enlace de privacidad (si mantienes esa opción)
   document.getElementById('open-privacy')
     ?.addEventListener('click', (e)=>{ e.preventDefault(); window.open('/privacidad.html','_blank','noopener'); });
 })();

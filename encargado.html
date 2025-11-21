@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Panel — Profesor</title>
 
-  <!-- Ruta absoluta + cache buster -->
+  <!-- hoja principal (usa cache-buster opcional) -->
   <link rel="stylesheet" href="/src/styles.css?v=20251120"/>
 
   <style>
@@ -16,9 +16,10 @@
     td{background:#0c1428;color:#dfe7f6}
     .row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
     .pill{display:inline-flex;align-items:center;padding:2px 8px;border-radius:999px;background:#0f1b34;border:1px solid var(--border);color:#cdd7ee}
+    .pill-warn{background:#2a1a0f;border-color:#8a3; color:#e6f7d9}
     .muted{color:var(--muted);font-size:.92rem}
 
-    /* --- modal de detalle --- */
+    /* Modal de detalle */
     .backdrop{position:fixed;inset:0;background:rgba(0,0,0,.45);display:none;z-index:300}
     .modal{position:fixed;left:50%;top:7%;transform:translateX(-50%);
       width:min(980px,94vw);background:#0b1324;border:1px solid var(--border);
@@ -27,18 +28,24 @@
     .modal footer{border-top:1px solid var(--border);border-bottom:none;display:flex;justify-content:flex-end;gap:8px}
     .modal .body{padding:14px}
 
-    /* --- toast sencillo --- */
+    /* Grid de evidencias */
+    .ev-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:12px}
+    .ev-card{border:1px solid var(--border);border-radius:12px;padding:8px;background:#0b1324;box-shadow:0 2px 10px rgba(2,8,23,.12)}
+    .ev-card img{width:100%;height:auto;border-radius:8px;display:block}
+    .ev-note{font-size:.85rem;color:var(--muted);margin-top:6px}
+
+    /* Tarjeta banco examen + botones básicos */
+    .card{background:#0b1324;border:1px solid var(--border);border-radius:14px;padding:14px;margin:16px auto;color:#e6edf7}
+    .auth-input{width:100%;height:48px;padding:10px 12px;border-radius:12px;border:1px solid #1c2a48;background:#0e1a2f;color:#e6edf7}
+    .primary{height:44px;border:0;border-radius:12px;background:#2f6cf6;color:#fff;font-weight:600;padding:0 14px;cursor:pointer}
+    .secondary{height:44px;border:1px solid #21365c;border-radius:12px;background:#0f1b34;color:#e6edf7;padding:0 12px;cursor:pointer}
+
+    /* Toast */
     .toast{position:fixed;right:16px;bottom:16px;background:#0b1324;color:#e6edf7;
       border:1px solid #21365c;border-radius:12px;padding:12px 14px;box-shadow:0 10px 30px rgba(2,8,23,.4);
       display:none;z-index:400}
     .toast.ok{border-color:#2e7d32}
     .toast.err{border-color:#b3261e}
-
-    /* sección banco */
-    .card{background:#0b1324;border:1px solid var(--border);border-radius:14px;padding:14px;margin:16px auto;color:#e6edf7}
-    .auth-input{width:100%;height:48px;padding:10px 12px;border-radius:12px;border:1px solid #1c2a48;background:#0e1a2f;color:#e6edf7}
-    .primary{height:44px;border:0;border-radius:12px;background:#2f6cf6;color:#fff;font-weight:600;padding:0 14px;cursor:pointer}
-    .secondary{height:44px;border:1px solid #21365c;border-radius:12px;background:#0f1b34;color:#e6edf7;padding:0 12px;cursor:pointer}
   </style>
 </head>
 <body>
@@ -46,13 +53,8 @@
     <div class="wrap row" style="justify-content:space-between">
       <h1>Panel del profesor</h1>
       <nav class="row">
-  <!-- opción A (recomendada) -->
-  <button id="btn-logout" class="secondary" type="button">Salir</button>
-
-  <!-- opción B si quieres seguir con <a> -->
-  <!-- <a id="btn-logout" href="#" class="secondary">Salir</a> -->
-</nav>
-
+        <button id="btn-logout" class="secondary" type="button">Salir</button>
+      </nav>
     </div>
   </header>
 
@@ -117,22 +119,14 @@
     import { requireRole, clearSession } from './src/roles.js';
     requireRole('prof');
 
-    const btnLogout = document.getElementById('btn-logout');
-if (btnLogout) {
-  btnLogout.addEventListener('click', async (e) => {
-    e.preventDefault();              // por si es <a>
-    try { await fetch('/api/auth/logout', { method: 'POST' }); } catch {}
-    clearSession();                  // borra sesión local (localStorage/sessionStorage)
-    location.href = 'login.html';    // redirige
-  });
-}
-
     const $ = (s)=>document.querySelector(s);
 
+    // ---- UI refs
     const tblBody   = $('#tbl tbody');
     const countPill = $('#count-pill');
     const btnAll    = $('#btn-export-all');
     const btnClr    = $('#btn-clear');
+    const btnLogout = $('#btn-logout');
 
     const backdrop  = $('#backdrop');
     const modal     = $('#modal');
@@ -142,26 +136,26 @@ if (btnLogout) {
     const mExport   = $('#m-export');
     const toast     = $('#toast');
 
-    // ---------- util ----------
-    const fmtTime = (ms)=>{ const ss=Math.floor((ms||0)/1000); const mm=String(Math.floor(ss/60)).padStart(2,'0'); const s=String(ss%60).padStart(2,'0'); return `${mm}:${s}`; };
-    const fmt = (ts)=>{ try{ return new Date(ts).toLocaleString(); }catch{ return '—'; } };
-    const safe = (v)=> (v==null || v==='') ? '—' : String(v);
+    // ---- utils
+    const fmtTime = (ms)=>{ const s=Math.floor((ms||0)/1000); const mm=String(Math.floor(s/60)).padStart(2,'0'); const ss=String(s%60).padStart(2,'0'); return `${mm}:${ss}`; };
+    const fmt     = (ts)=>{ try{ return new Date(ts).toLocaleString(); }catch{ return '—'; } };
+    const safe    = (v)=> (v==null || v==='') ? '—' : String(v);
 
     function showToast(msg, ok=true){
       toast.textContent = msg;
       toast.classList.remove('ok','err');
       toast.classList.add(ok ? 'ok' : 'err');
       toast.style.display = 'block';
-      setTimeout(()=>{ toast.style.display='none'; }, 2600);
+      setTimeout(()=>{ toast.style.display='none'; }, 2400);
     }
 
-    // ---------- datos ----------
-    let DATA = [];    // cache en memoria
+    // ---- data
+    let DATA = [];
+    let CURRENT = null;
 
     async function fetchAttemptsFromCloud() {
       const r = await fetch('/api/attempt/list?limit=200', { cache: 'no-store' });
-      // si el server devolviera HTML por error, esto tirará excepción que capturamos
-      const j = await r.json();
+      const j = await r.json(); // si viene HTML fallará y lo atrapamos arriba
       if (!r.ok || !j.ok) throw new Error(j.error || 'No se pudo cargar intentos');
       return j.items || [];
     }
@@ -169,17 +163,15 @@ if (btnLogout) {
     function render(items){
       DATA = items;
       countPill.textContent = `${items.length} intento${items.length===1?'':'s'}`;
-
       tblBody.innerHTML = items.map((a,i)=>{
-        // summary viene plano con episodios (por compat)
-        const off = a.summary?.off_episodes ?? 0;
-        const look = a.summary?.lookaway_episodes ?? 0;
-        const speak = a.summary?.speak_episodes ?? 0;
-        const ex  = a.exam || {};
-        const examTxt = (ex.score != null && ex.total != null)
-          ? `${ex.score}/${ex.total}`
-          : (ex.correct != null && ex.total != null)
-            ? `${ex.correct}/${ex.total}` : '—';
+        const off   = a.summary?.off_episodes ?? a.summary?.tab_activity?.off_episodes ?? 0;
+        const look  = a.summary?.lookaway_episodes ?? a.summary?.attention?.lookaway_episodes ?? 0;
+        const speak = a.summary?.speak_episodes ?? a.summary?.lips?.speak_episodes ?? 0;
+        const ex = a.exam || {};
+        const examTxt =
+          (ex.score   != null && ex.total != null) ? `${ex.score}/${ex.total}` :
+          (ex.correct != null && ex.total != null) ? `${ex.correct}/${ex.total}` :
+          '—';
 
         return `
           <tr>
@@ -205,106 +197,84 @@ if (btnLogout) {
       }catch(e){
         console.error(e);
         showToast('No se pudieron cargar los intentos', false);
-        render([]); // vacía
+        render([]);
       }
     }
 
-    // ---------- ver detalle ----------
-    function findAttempt(id){ return DATA.find(x=>String(x.id)===String(id)); }
+    // ---- detalle + evidencias
+    const srcOf = (it) => it?.data || it?.image_base64 || it?.image || it?.img || it?.url || '';
 
     function openDetail(id){
-      const a = findAttempt(id);
+      const a = DATA.find(x => String(x.id) === String(id));
       if(!a) return;
+      CURRENT = a;
 
-      // métricas básicas (con fallback por si tu summary viene en otro shape)
-const off   = a.summary?.tab_activity?.off_episodes ?? a.summary?.off_episodes ?? 0;
-const look  = a.summary?.attention?.lookaway_episodes ?? a.summary?.lookaway_episodes ?? 0;
-const speak = a.summary?.lips?.speak_episodes ?? a.summary?.speak_episodes ?? 0;
+      const off   = a.summary?.tab_activity?.off_episodes ?? a.summary?.off_episodes ?? 0;
+      const look  = a.summary?.attention?.lookaway_episodes ?? a.summary?.lookaway_episodes ?? 0;
+      const speak = a.summary?.lips?.speak_episodes ?? a.summary?.speak_episodes ?? 0;
 
-// examen: acepta {score,total} o {correct,total}
-const ex = a.exam || {};
-const examTxt =
-  (ex.score   != null && ex.total != null) ? `${ex.score}/${ex.total}` :
-  (ex.correct != null && ex.total != null) ? `${ex.correct}/${ex.total}` :
-  '—';
-  // …dentro de openDetail(a) justo antes de asignar mBody.innerHTML:
-const evid = Array.isArray(a.evidences) ? a.evidences
-           : (Array.isArray(a.evidence) ? a.evidence : []);
+      const ex = a.exam || {};
+      const examTxt =
+        (ex.score   != null && ex.total != null) ? `${ex.score}/${ex.total}` :
+        (ex.correct != null && ex.total != null) ? `${ex.correct}/${ex.total}` :
+        '—';
 
-const srcOf = (it) =>
-  it?.data || it?.image_base64 || it?.image || it?.img || it?.url || '';
+      const evid = Array.isArray(a.evidences) ? a.evidences
+                 : (Array.isArray(a.evidence) ? a.evidence : []);
 
-mBody.innerHTML = `
-  <div class="row" style="margin-bottom:8px">
-    <span class="pill">Inicio: ${fmt(a.startedAt)}</span>
-    <span class="pill">Fin: ${fmt(a.endedAt)}</span>
-    <span class="pill">Duración: ${fmtTime(a.durationMs||0)}</span>
-    <span class="pill">Examen: ${examTxt}</span>
-  </div>
+      mTitle.textContent = `Intento ${a.id} — ${safe(a.student?.name)}`;
+      mBody.innerHTML = `
+        <div class="row" style="margin-bottom:8px">
+          <span class="pill">Inicio: ${fmt(a.startedAt)}</span>
+          <span class="pill">Fin: ${fmt(a.endedAt)}</span>
+          <span class="pill">Duración: ${fmtTime(a.durationMs||0)}</span>
+          <span class="pill">Examen: ${examTxt}</span>
+        </div>
 
-  <h4>Resumen</h4>
-  <ul>
-    <li>Off-tab (episodios): ${off}</li>
-    <li>Mirada desviada (episodios): ${look}</li>
-    <li>Posible habla (episodios): ${speak}</li>
-  </ul>
+        <h4>Resumen</h4>
+        <ul>
+          <li>Off-tab (episodios): ${off}</li>
+          <li>Mirada desviada (episodios): ${look}</li>
+          <li>Posible habla (episodios): ${speak}</li>
+        </ul>
 
-  <h4>Evidencias</h4>
-  <div class="ev-grid" id="ev-grid">
-    ${
-      evid.length
-        ? evid.map(it => {
-            const src = srcOf(it);
-            return `
-              <div class="ev-card">
-                <div class="pill pill-warn">${it.kind || 'alerta'}</div>
-                ${src ? `<img src="${src}" alt="${it.kind||'evidencia'}" />`
-                      : `<div class="muted">Sin imagen adjunta</div>`}
-                <div class="ev-note">
-                  ${new Date(it.t || it.taken_at || Date.now()).toLocaleTimeString()}
-                  — ${it.note || ''}
-                </div>
-              </div>`;
-          }).join('')
-        : '<div class="muted">No hay evidencias capturadas.</div>'
-    }
-  </div>
-`;
+        <h4>Evidencias</h4>
+        <div class="ev-grid">
+          ${
+            evid.length
+              ? evid.map(it=>{
+                  const src = srcOf(it);
+                  return `
+                    <div class="ev-card">
+                      <div class="pill pill-warn">${it.kind || 'alerta'}</div>
+                      ${ src ? `<img src="${src}" alt="${it.kind||'evidencia'}">`
+                             : `<div class="muted">Sin imagen adjunta</div>` }
+                      <div class="ev-note">
+                        ${new Date(it.t || it.taken_at || Date.now()).toLocaleTimeString()} — ${it.note || ''}
+                      </div>
+                    </div>`;
+                }).join('')
+              : '<div class="muted">No hay evidencias capturadas.</div>'
+          }
+        </div>
+      `;
 
-
-mBody.innerHTML = `
-  <div class="row" style="margin-bottom:8px">
-    <span class="pill">Inicio: ${fmt(a.startedAt)}</span>
-    <span class="pill">Fin: ${fmt(a.endedAt)}</span>
-    <span class="pill">Duración: ${fmtTime(a.durationMs || 0)}</span>
-    <span class="pill">Examen: ${examTxt}</span>
-  </div>
-
-  <h4>Resumen</h4>
-  <ul>
-    <li>Off-tab (episodios): ${off}</li>
-    <li>Mirada desviada (episodios): ${look}</li>
-    <li>Posible habla (episodios): ${speak}</li>
-  </ul>
-  <div class="muted">* Vista de detalle básica basada en los campos disponibles del backend.</div>
-`;
-
-backdrop.style.display = 'block';
-modal.style.display = 'block';
+      backdrop.style.display='block';
+      modal.style.display='block';
     }
 
-    // delegación en tabla
+    // Delegación click en tabla
     tblBody.addEventListener('click', (e)=>{
-      const btn = e.target.closest('button');
+      const btn = e.target.closest('button[data-id]');
       if (!btn) return;
-      const id = btn.dataset.id;
-      if (id) openDetail(id);
+      openDetail(btn.dataset.id);
     });
 
-    mClose.addEventListener('click', ()=>{ backdrop.style.display='none'; modal.style.display='none'; });
-    backdrop.addEventListener('click', (e)=>{ if(e.target===backdrop){ backdrop.style.display='none'; modal.style.display='none'; }});
+    // Cerrar modal
+    mClose.addEventListener('click', ()=>{ backdrop.style.display='none'; modal.style.display='none'; CURRENT=null; });
+    backdrop.addEventListener('click', (e)=>{ if(e.target===backdrop){ backdrop.style.display='none'; modal.style.display='none'; CURRENT=null; }});
 
-    // export CSV (todos / intento)
+    // Exportar CSV (todos)
     function toCSV(rows, headers){
       const esc = v => `"${String(v??'').replaceAll('"','""')}"`;
       const head = headers.map(esc).join(',');
@@ -321,9 +291,9 @@ modal.style.display = 'block';
         inicio: fmt(a.startedAt),
         fin: fmt(a.endedAt),
         duracion: fmtTime(a.durationMs||0),
-        off_tab_ep: a.summary?.off_episodes ?? 0,
-        mirada_ep:  a.summary?.lookaway_episodes ?? 0,
-        habla_ep:   a.summary?.speak_episodes ?? 0,
+        off_tab_ep: a.summary?.off_episodes ?? a.summary?.tab_activity?.off_episodes ?? 0,
+        mirada_ep:  a.summary?.lookaway_episodes ?? a.summary?.attention?.lookaway_episodes ?? 0,
+        habla_ep:   a.summary?.speak_episodes ?? a.summary?.lips?.speak_episodes ?? 0,
         puntaje: (a.exam?.score ?? a.exam?.correct ?? ''),
         total:   (a.exam?.total ?? '')
       }));
@@ -336,42 +306,38 @@ modal.style.display = 'block';
       URL.revokeObjectURL(a.href);
     });
 
+    // Exportar CSV (un intento)
     mExport.addEventListener('click', ()=>{
-      const a = mTitle.textContent.match(/Intento\s+(\S+)/);
-      const id = a?.[1];
-      const row = findAttempt(id);
-      if(!row){ showToast('No encontrado', false); return; }
+      const r = CURRENT;
+      if(!r){ showToast('No encontrado', false); return; }
       const rows = [{
-        id: row.id,
-        nombre: row.student?.name ?? '',
-        codigo: row.student?.code ?? '',
-        inicio: fmt(row.startedAt),
-        fin: fmt(row.endedAt),
-        duracion: fmtTime(row.durationMs||0),
-        off_tab_ep: row.summary?.off_episodes ?? 0,
-        mirada_ep:  row.summary?.lookaway_episodes ?? 0,
-        habla_ep:   row.summary?.speak_episodes ?? 0,
-        puntaje: (row.exam?.score ?? row.exam?.correct ?? ''),
-        total:   (row.exam?.total ?? '')
+        id: r.id,
+        nombre: r.student?.name ?? '',
+        codigo: r.student?.code ?? '',
+        inicio: fmt(r.startedAt),
+        fin: fmt(r.endedAt),
+        duracion: fmtTime(r.durationMs||0),
+        off_tab_ep: r.summary?.off_episodes ?? r.summary?.tab_activity?.off_episodes ?? 0,
+        mirada_ep:  r.summary?.lookaway_episodes ?? r.summary?.attention?.lookaway_episodes ?? 0,
+        habla_ep:   r.summary?.speak_episodes ?? r.summary?.lips?.speak_episodes ?? 0,
+        puntaje: (r.exam?.score ?? r.exam?.correct ?? ''),
+        total:   (r.exam?.total ?? '')
       }];
       const csv = toCSV(rows, Object.keys(rows[0]));
       const blob = new Blob([csv], {type:'text/csv'});
-      const an = document.createElement('a');
-      an.href = URL.createObjectURL(blob);
-      an.download = `intento_${row.id}.csv`;
-      an.click();
-      URL.revokeObjectURL(an.href);
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = `intento_${r.id}.csv`;
+      a.click();
+      URL.revokeObjectURL(a.href);
     });
 
-    // limpiar cache local (no afecta BD)
+    // Limpiar cache local (solo localStorage)
     btnClr.addEventListener('click', ()=>{
-      try{
-        localStorage.removeItem('proctor.attempts');
-        showToast('Cache local limpiada');
-      }catch{}
+      try{ localStorage.removeItem('proctor.attempts'); showToast('Cache local limpiada'); }catch{}
     });
 
-    // ---------- subir examen ----------
+    // Subida de examen (CSV/JSON)
     async function parseFileToQuestions(file) {
       const text = await file.text();
       if (file.name.toLowerCase().endsWith('.json')) {
@@ -414,13 +380,8 @@ modal.style.display = 'block';
           headers:{'Content-Type':'application/json'},
           body: JSON.stringify({ name, questions })
         });
-        // Manejo si el server accidentalmente responde HTML:
-        let j;
-        try { j = await r.json(); }
-        catch { throw new Error('Respuesta no JSON'); }
-
+        let j; try{ j = await r.json(); }catch{ throw new Error('Respuesta no JSON'); }
         if (!r.ok || !j.ok) throw new Error(j.error || 'Error guardando el examen');
-
         showToast(`Examen "${name}" activado (${j.saved} preguntas).`, true);
       }catch(e){
         console.error(e);
@@ -428,14 +389,15 @@ modal.style.display = 'block';
       }
     });
 
-    // ---------- logout ----------
-    $('#btn-logout').addEventListener('click', async ()=>{
+    // Logout
+    btnLogout.addEventListener('click', async (e)=>{
+      e.preventDefault();
       try{ await fetch('/api/auth/logout', {method:'POST'}); }catch{}
       clearSession();
       location.replace('login.html');
     });
 
-    // go!
+    // Go!
     loadAndRender();
   </script>
 </body>
