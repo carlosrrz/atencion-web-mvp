@@ -345,7 +345,7 @@ els.rt.textContent = '0.0';
   els.text.textContent = '...';
 })();
 */
-els.text.textContent = 'El examen se cargará cuando ingreses el código.';
+els.text.textContent = 'Por favor, ingrese sus datos correctamente y prenda su cámara con el objetivo de iniciar el monitoreo correspondiente. De lo contrario, no podrá empezar el examen. Recuerde que debe presionar el botón "Iniciar Monitoreo" justo antes de empezar el examen y "Finalizar monitoreo" al terminarlo.';
 
 els.start?.addEventListener('click', startTest);
 els.next?.addEventListener('click', nextQuestion);

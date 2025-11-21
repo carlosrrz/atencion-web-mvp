@@ -1,20 +1,3 @@
-<script type="module">
-  import { requireRole } from './src/roles.js';
-  requireRole(['student']); // evita ver la página si no está logueado como student
-  // Fuerza recarga cuando se vuelve con Atrás/Adelante
-window.addEventListener('pageshow', (event) => {
-  // event.persisted = true → la página vino del bfcache
-  const nav = performance.getEntriesByType('navigation')[0];
-  const isBackForward = event.persisted || nav?.type === 'back_forward';
-
-  if (isBackForward) {
-    // recarga desde el servidor → se vuelve a ejecutar requireRole(...)
-    location.reload();
-  }
-});
-
-</script>
-
 <!doctype html>
 <html lang="es">
 <head>
@@ -79,7 +62,7 @@ window.addEventListener('pageshow', (event) => {
           <div class="quiz-meta">
             Pregunta <span id="exam-idx">0</span>/<span id="exam-total">0</span> · RT: <span id="exam-rt">0.0</span>s
           </div>
-          <div id="q-text" class="q-text">Por favor, ingrese sus datos correctamente y prenda su cámara con el objetivo de iniciar el monitoreo correspondiente. De lo contrario, no podrá empezar el examen. Recuerde que debe presionar el botón 'Iniciar monitoreo' justo antes de empezar el examen y 'Finalizar monitoreo' al terminarlo. </div>
+          <div id="q-text" class="q-text">---</div>
           <div id="q-options" class="q-options"></div>
           <div class="exam-actions">
             <button id="btn-exam-start"  class="primary">Iniciar test</button>
@@ -153,24 +136,35 @@ window.addEventListener('pageshow', (event) => {
   </div>
 
   <!-- Gate de rol -->
-<script type="module">
-import { requireRole, clearSession } from './src/roles.js';
-requireRole('student');
+  <script type="module">
+  import { requireRole, clearSession } from './src/roles.js';
 
-window.addEventListener('pageshow', (event) => {
-  const nav = performance.getEntriesByType('navigation')[0];
-  const isBackForward = event.persisted || nav?.type === 'back_forward';
+  // solo estudiantes pueden ver esta página
+  requireRole('student');
 
-  if (isBackForward) {
-    location.reload();
-  }
-});
-</script>
+  // Evitar que la vista se "reviva" con el botón Atrás
+  window.addEventListener('pageshow', (event) => {
+    const nav = performance.getEntriesByType('navigation')[0];
+    const isBackForward = event.persisted || nav?.type === 'back_forward';
 
-<!-- Orden: helpers -> examen -> app -->
-<script type="module" src="./src/bootstrap-student.js"></script>
+    if (isBackForward) {
+      location.reload();
+    }
+  });
 
+  // Logout correcto para estudiante
+  const btnLogout = document.getElementById('btn-logout');
+  btnLogout?.addEventListener('click', async (e) => {
+    e.preventDefault();
+    try {
+      await fetch('/api/auth/logout', { method: 'POST' });
+    } catch {}
+    clearSession();            // limpia user/role en localStorage
+    location.href = 'login.html';
+  });
+  </script>
 
-
+  <!-- Orden: helpers -> examen -> app -->
+  <script type="module" src="./src/bootstrap-student.js"></script>
 </body>
 </html>
