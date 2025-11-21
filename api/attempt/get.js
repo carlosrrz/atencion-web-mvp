@@ -42,13 +42,23 @@ export default async function handler(req, res) {
       [id]
     );
 
-    const evidences = ev.rows.map(e => ({
-      t: e.taken_at,
-      kind: e.kind,
-      note: e.note || '',
-      // si ya está en base64, adjuntamos prefijo data: para el <img>
-      data: e.image_base64 ? `data:image/jpeg;base64,${e.image_base64}` : null
-    }));
+    const evidences = ev.rows.map(e => {
+  let data = e.image_base64 || null;
+
+  // Si en BD está solo el base64 → le ponemos prefijo.
+  // Si ya viene como "data:image/..." → lo dejamos tal cual.
+  if (data && !String(data).startsWith('data:')) {
+    data = `data:image/jpeg;base64,${data}`;
+  }
+
+  return {
+    t: e.taken_at,
+    kind: e.kind,
+    note: e.note || '',
+    data
+  };
+});
+
 
     const attempt = {
       id: r.id,
