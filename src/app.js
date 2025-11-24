@@ -158,6 +158,10 @@ let frameCount = 0;
 let sessionStart = 0;        // ← se setea al iniciar
 let startedAtISO = null;
 
+// estado global para que exam.js pueda saber si el monitoreo está activo
+window.__monitoringRunning = false;
+
+
 let landmarker = null;
 
 // Off-tab (visibilidad O foco)
@@ -982,7 +986,10 @@ btnEvidDl?.addEventListener('click', ()=> evidence.downloadJSON() );
 btnStart?.addEventListener('click', ()=>{
   if (!stream){ alert('Primero permite la cámara.'); return; }
   running = true;
+  window.__monitoringRunning = true;   // 👈 NUEVO
   frameCount = 0;
+  // ...
+
 
   // tiempos
   sessionStart = performance.now();          // ✅ importante
@@ -1031,8 +1038,11 @@ btnStop?.addEventListener('click', ()=>{
 
   // detener pipeline/UI
   running = false;
+  window.__monitoringRunning = false;  // 👈 NUEVO
   metrics.stop();
   sessionStatus && (sessionStatus.textContent = 'Detenida');
+  // ...
+
 
   // export de actividad de pestaña
   tabLogger.stopAndDownloadCSV?.();
@@ -1051,10 +1061,29 @@ btnStop?.addEventListener('click', ()=>{
   const currentUser = (typeof window !== 'undefined' && window.__currentUser) ? window.__currentUser : null;
 
   // ===== Guardar intento (único) para el panel del profesor =====
+  // Usuario de sesión (lo setea roles.js cuando haces login)
+  const sessionUser = window.__currentUser || null;
+
+  const fallbackName  = (sessionUser?.name  || '').trim();
+  const fallbackEmail = (sessionUser?.email || '').trim();
+
+  // Para "Código" usamos, en este orden: code del user, studentCode, id, o un texto por defecto
+  const fallbackCodeRaw =
+    sessionUser?.code ||
+    sessionUser?.studentCode ||
+    (sessionUser?.id != null ? String(sessionUser.id) : '') ||
+    '';
+
+  const fallbackCode = (fallbackCodeRaw || 's/c').trim(); // s/c = sin código
+
   const attempt = {
     id: `att_${Date.now().toString(36)}`,
-    userId: currentUser?.id ?? null,   // opcional, por si el backend lo usa
-    student,
+    student: {
+      // Si todavía existieran los inputs antiguos, se usan; si no, se toma de la sesión
+      name:  (studentName?.value  || fallbackName  || 'Alumno').trim(),
+      code:  (studentCode?.value  || fallbackCode  || 's/c').trim(),
+      email: (studentEmail?.value || fallbackEmail || '').trim(),
+    },
     startedAt: startedAtISO || new Date(Date.now() - summary.duration_ms).toISOString(),
     endedAt:   new Date().toISOString(),
     durationMs: Math.round(summary.duration_ms),
@@ -1062,6 +1091,7 @@ btnStop?.addEventListener('click', ()=>{
     exam: lastExamResult || null,
     evidences: (typeof evidence?.list === 'function') ? evidence.list().slice(-24) : []
   };
+
 
   saveAttempt(attempt);
   saveAttemptRemote(attempt);   // ✅ llamado aquí, no en top-level

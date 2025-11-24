@@ -81,6 +81,22 @@ function clearQuestionUI() {
   resultEl && resultEl.classList.add('hidden');
 }
 
+// 🔒 Nuevo: exigir cámara + monitoreo antes de empezar el test
+function ensureMonitoringBeforeExam() {
+  const camOK = !!window.__camReady;
+  const monOK = !!window.__monitoringRunning;
+
+  if (!camOK) {
+    alert('Primero permite la cámara y verifica que esté activa.');
+    return false;
+  }
+  if (!monOK) {
+    alert('Primero inicia el monitoreo antes de comenzar el test.');
+    return false;
+  }
+  return true;
+}
+
 // ==== Render de pregunta ====
 function renderQuestion() {
   if (!exam || !exam.questions || !exam.questions.length) {
@@ -235,15 +251,22 @@ async function loadExamByCode(code) {
 }
 
 // ==== Listeners ====
+
+// Iniciar test
 btnStart?.addEventListener('click', async () => {
   const code = (inputCode?.value || '').trim();
   if (!code) {
     alert('Ingresa el código de examen que te indicó el profesor.');
     return;
   }
+
+  // 🔒 Requisito: cámara + monitoreo activos
+  if (!ensureMonitoringBeforeExam()) return;
+
   await loadExamByCode(code);
 });
 
+// Siguiente
 btnNext?.addEventListener('click', () => {
   if (!exam) return;
   storeCurrentAnswer();
@@ -252,18 +275,15 @@ btnNext?.addEventListener('click', () => {
     currentIdx += 1;
     renderQuestion();
 
-    // Si estamos en la última, oculta "Siguiente"
+    // Si estamos en la última, deshabilita "Siguiente"
     if (currentIdx === exam.questions.length - 1 && btnNext) {
       btnNext.disabled = true;
     }
   }
 });
 
+// Finalizar
 btnFinish?.addEventListener('click', () => {
   if (!exam) return;
   finishExam();
 });
-
-// Si quieres permitir reiniciar el mismo examen, podrías hacer que
-// btnStart vuelva a llamar loadExamByCode y resetear estado, pero
-// por ahora lo dejamos como "una vez por sesión".
