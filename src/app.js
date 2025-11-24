@@ -1,6 +1,7 @@
 // app.js — Mirada + Oclusión + Labios + Anti-blink + Off-tab + Resumen modal + Episodios en vivo
 import { createMetrics } from './metrics.js';
 import { createTabLogger } from './tab-logger.js';
+import { getSession } from './roles.js';   // ⬅ NUEVO
 
 // ===== saveAttempt robusto SIN top-level await =====
 let saveAttempt = (attempt) => {
@@ -171,6 +172,25 @@ let offTabAccumMs = 0;
 
 const metrics = createMetrics();
 const tabLogger = createTabLogger({ offTabThresholdMs: 1500 });
+
+function getCurrentStudentInfo() {
+  try {
+    const sess = getSession?.() || window.__currentUser || {};
+    return {
+      name:  (sess.name  || '').trim(),
+      code:  (sess.code  || '').trim(),
+      email: (sess.email || '').trim()
+    };
+  } catch {
+    const u = window.__currentUser || {};
+    return {
+      name:  (u.name  || '').trim(),
+      code:  (u.code  || '').trim(),
+      email: (u.email || '').trim()
+    };
+  }
+}
+
 
 /* Calibración / baseline / auto-flip */
 let calibrating = false;
@@ -1056,33 +1076,16 @@ btnStop?.addEventListener('click', ()=>{
     try { lastExamResult = JSON.parse(localStorage.getItem('proctor.last_exam') || 'null'); } catch {}
   }
 
-  // === Obtener datos del estudiante desde la sesión ===
-  const student = getStudentFromSessionAndInputs();
-  const currentUser = (typeof window !== 'undefined' && window.__currentUser) ? window.__currentUser : null;
+  // 🔹 datos del usuario logueado
+  const stu = getCurrentStudentInfo();
 
   // ===== Guardar intento (único) para el panel del profesor =====
-  // Usuario de sesión (lo setea roles.js cuando haces login)
-  const sessionUser = window.__currentUser || null;
-
-  const fallbackName  = (sessionUser?.name  || '').trim();
-  const fallbackEmail = (sessionUser?.email || '').trim();
-
-  // Para "Código" usamos, en este orden: code del user, studentCode, id, o un texto por defecto
-  const fallbackCodeRaw =
-    sessionUser?.code ||
-    sessionUser?.studentCode ||
-    (sessionUser?.id != null ? String(sessionUser.id) : '') ||
-    '';
-
-  const fallbackCode = (fallbackCodeRaw || 's/c').trim(); // s/c = sin código
-
   const attempt = {
     id: `att_${Date.now().toString(36)}`,
     student: {
-      // Si todavía existieran los inputs antiguos, se usan; si no, se toma de la sesión
-      name:  (studentName?.value  || fallbackName  || 'Alumno').trim(),
-      code:  (studentCode?.value  || fallbackCode  || 's/c').trim(),
-      email: (studentEmail?.value || fallbackEmail || '').trim(),
+      name:  stu.name,
+      code:  stu.code,
+      email: stu.email,
     },
     startedAt: startedAtISO || new Date(Date.now() - summary.duration_ms).toISOString(),
     endedAt:   new Date().toISOString(),
@@ -1092,14 +1095,12 @@ btnStop?.addEventListener('click', ()=>{
     evidences: (typeof evidence?.list === 'function') ? evidence.list().slice(-24) : []
   };
 
-
   saveAttempt(attempt);
-  saveAttemptRemote(attempt);   // ✅ llamado aquí, no en top-level
+  saveAttemptRemote(attempt);
   try { localStorage.removeItem('proctor.last_exam'); } catch {}
 
   console.log('[proctor] intento guardado:', attempt);
 });
-
 // Re-apertura / dispositivos
 document.addEventListener('visibilitychange', async ()=>{
   if (document.visibilityState==='visible' && !stream && camRequested){

@@ -135,14 +135,13 @@
 
         <!-- Nuevo: código de estudiante -->
         <input
-          id="reg-code"
-          class="auth-input"
-          placeholder="Código de estudiante"
-          inputmode="numeric"
-          maxlength="20"
-          pattern="^[0-9]{3,20}$"
-          title="Código de estudiante: solo números (3–20 dígitos)."
-        />
+  id="reg-code"
+  class="auth-input"
+  placeholder="Código de estudiante"
+  autocomplete="off"
+  minlength="3"
+  maxlength="20"
+/>
 
         <input
           id="reg-pass"
@@ -235,56 +234,43 @@
     $('btn-register').addEventListener('click', () => show($('reg-modal')));
     $('reg-cancel').addEventListener('click', () => hide($('reg-modal')));
 
-    $('reg-submit').addEventListener('click', async () => {
-      const name  = clean($('reg-name').value);
-      const email = $('reg-email').value.trim().toLowerCase();
-      const password = $('reg-pass').value.trim();
-      const role  = $('reg-role').value;
-      const code  = $('reg-code').value.trim();
+      $('reg-submit').addEventListener('click', async () => {
+    const name  = clean($('reg-name').value);
+    const code  = $('reg-code').value.trim();
+    const email = $('reg-email').value.trim().toLowerCase();
+    const password = $('reg-pass').value.trim();
+    const role  = $('reg-role').value;
 
-      if (!name || !email || !password) {
-        return alert('Completa todos los campos');
-      }
-      if (!NAME_RE.test(name)) {
-        return alert('Nombre inválido (usa solo letras, espacios, apóstrofo o guion; 2–60 caracteres).');
-      }
-      if (!EMAIL_RE.test(email)) {
-        return alert('Correo inválido.');
-      }
+    if (!name || !email || !password || !code) {
+      return alert('Completa todos los campos (nombre, código, correo y contraseña).');
+    }
+    if (!NAME_RE.test(name)) {
+      return alert('Nombre inválido (usa solo letras, espacios, apóstrofo o guion; 2–60 caracteres).');
+    }
+    if (!EMAIL_RE.test(email)) {
+      return alert('Correo inválido.');
+    }
+    if (code.length < 3 || code.length > 20 || /\s/.test(code)) {
+      return alert('Código de alumno inválido.');
+    }
+    if (password.length < 6) {
+      return alert('La contraseña debe tener al menos 6 caracteres.');
+    }
 
-      if (role === 'student') {
-        if (!code) {
-          return alert('Ingresa tu código de estudiante.');
-        }
-        if (!CODE_RE.test(code)) {
-          return alert('Código inválido (solo números, 3–20 dígitos).');
-        }
-      }
-
-      if (password.length < 6) {
-        return alert('La contraseña debe tener al menos 6 caracteres.');
-      }
-      if (password.length > 64) {
-        return alert('La contraseña no debe superar 64 caracteres.');
-      }
-
-      const r = await fetch('/api/auth/register', {
-        method:'POST',
-        headers:{'Content-Type':'application/json'},
-        body: JSON.stringify({
-          name,
-          email,
-          password,
-          role,
-          studentCode: role === 'student' ? code : null
-        })
-      });
-      const j = await r.json();
-      if (!r.ok || !j.ok) return alert(j?.error || 'No se pudo registrar');
-
-      alert('Cuenta creada correctamente. Ahora inicia sesión.');
-      document.getElementById('reg-modal').classList.add('hidden');
+    const r = await fetch('/api/auth/register', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name, email, password, code, role })
     });
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok || !j.ok) {
+      return alert(j?.error || 'No se pudo registrar');
+    }
+
+    alert('Cuenta creada correctamente. Ahora inicia sesión.');
+    document.getElementById('reg-modal').classList.add('hidden');
+  });
+
   </script>
 </body>
 </html>
