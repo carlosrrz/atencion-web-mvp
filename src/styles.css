@@ -525,3 +525,44 @@ dialog.modal::backdrop { background: rgba(0,0,0,.55); backdrop-filter: blur(2px)
   box-shadow: 0 0 0 2px rgba(47,108,246,.4);
   background: #1a2c55;
 }
+
+/* ===== Campos de formulario (login + estudiante) ===== */
+.auth-input,
+.exam-input {
+  width: 100%;
+  height: 56px;
+  padding: 14px 16px;
+  border-radius: 14px;
+  border: 1px solid #1c2a48;
+  background: #0e1a2f;
+  color: #e6edf7;
+  outline: none;
+  transition: box-shadow .15s ease, border-color .15s ease, background .15s ease;
+}
+
+.auth-input::placeholder,
+.exam-input::placeholder {
+  color: #b9c6dc;
+  opacity: 0.9;
+}
+
+.auth-input:focus,
+.exam-input:focus {
+  border-color: #335bd8;
+  box-shadow: 0 0 0 3px rgba(51, 91, 216, .25);
+  background: #0f1e37;
+}
+
+/* ===== Ajuste de header en la vista de estudiante ===== */
+body.estudiante-page {
+  background:
+    radial-gradient(1200px 600px at 20% -10%, rgba(42,84,190,.22), transparent 60%),
+    radial-gradient(900px 500px at 110% 10%, rgba(1,35,80,.22), transparent 55%),
+    #0a1020;
+  color: #e6edf7;
+}
+
+body.estudiante-page .topbar {
+  background: transparent; /* deja ver el fondo */
+  box-shadow: none;
+}
