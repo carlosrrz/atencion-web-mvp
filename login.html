@@ -180,9 +180,11 @@
     const $  = (id)=>document.getElementById(id);
     const show = el => el.classList.remove('hidden');
     const hide = el => el.classList.add('hidden');
-
+    
+    
     const EMAIL_RE =
-      /^(?!.*\.\.)(?!.*\.$)(?!^\.)[A-Za-z0-9](?:[A-Za-z0-9._%+-]{0,62}[A-Za-z0-9])?@[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?(?:\.[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?)+$/;
+    /^(?!.*\.\.)(?!.*\.$)(?!^\.)[A-Za-z0-9](?:[A-Za-z0-9._%+-]{0,62}[A-Za-z0-9])?@[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?(?:\.[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?)*\.[A-Za-z]{2,4}$/;
+
 
     const NAME_RE =
       /^(?=.{2,60}$)[A-Za-zÁÉÍÓÚÜÑáéíóúüñ]+(?:[ '\-][A-Za-zÁÉÍÓÚÜÑáéíóúüñ]+)*$/;
@@ -213,8 +215,15 @@
       }
       if (!r.ok || !j.ok) return alert(j?.error || 'Login fallido');
 
-      setSession(j.user); // { id, name, email, role, code? }
-      location.replace(j.user.role === 'prof' ? 'encargado.html' : 'estudiante.html');
+            setSession(j.user); // { id, name, email, role }
+
+      if (j.user.role === 'prof') {
+        location.replace('encargado.html');
+      } else if (j.user.role === 'admin') {
+        location.replace('admin.html');
+      } else {
+        location.replace('estudiante.html');
+      }
     });
 
     // Enter para enviar

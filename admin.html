@@ -1,0 +1,141 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Panel de administrador</title>
+  <link rel="stylesheet" href="/src/styles.css?v=20251120">
+
+  <style>
+    body {
+      background:
+        radial-gradient(1200px 600px at 20% -10%, rgba(42,84,190,.22), transparent 60%),
+        radial-gradient(900px 500px at 110% 10%, rgba(1,35,80,.22), transparent 55%),
+        #0a1020;
+      color:#e6edf7;
+    }
+    .card { background:#0b1324; border-color:#13233f; }
+    .form-row{display:flex;flex-direction:column;gap:10px;margin-top:12px}
+    .auth-input{
+      width:100%;height:52px;padding:12px 14px;border-radius:14px;
+      border:1px solid #1c2a48;background:#0e1a2f;color:#e6edf7;outline:none;
+    }
+    .auth-input::placeholder{color:#b9c6dc;opacity:.85}
+    .auth-input:focus{
+      border-color:#335bd8;
+      box-shadow:0 0 0 3px rgba(51,91,216,.25);
+      background:#0f1e37;
+    }
+    .primary{
+      height:52px;border:0;border-radius:14px;background:#2f6cf6;color:#fff;
+      font-weight:600;font-size:16px;cursor:pointer;
+      box-shadow:0 10px 24px rgba(47,108,246,.34);
+    }
+    .primary:hover{background:#2a5fe0}
+    .secondary{
+      height:40px;border-radius:12px;border:1px solid #29406d;
+      background:#0e1a2f;color:#e6edf7;padding:0 14px;cursor:pointer;
+    }
+    .help{font-size:14px;opacity:.9;margin-top:4px}
+  </style>
+</head>
+<body>
+  <header class="topbar">
+    <div class="wrap">
+      <h1>Panel de administrador</h1>
+      <nav>
+        <a id="btn-logout" href="login.html">Salir</a>
+      </nav>
+    </div>
+  </header>
+
+  <main class="wrap" style="max-width:720px;margin-top:32px;">
+    <section class="card" style="padding:22px;border-radius:18px;">
+      <h2 style="margin-top:0;">Crear profesor</h2>
+      <p class="help">
+        Desde aquí el administrador puede registrar nuevas cuentas de <strong>profesor</strong>.
+      </p>
+
+      <div class="form-row">
+        <input id="prof-name"  class="auth-input" placeholder="Nombre completo del profesor" autocomplete="name" />
+        <input id="prof-email" class="auth-input" type="email" placeholder="Correo institucional" autocomplete="email" />
+        <input id="prof-pass"  class="auth-input" type="password" placeholder="Contraseña temporal" autocomplete="new-password" />
+        <button id="prof-create" class="primary" type="button">Crear profesor</button>
+      </div>
+
+      <p class="help">
+        Al crear la cuenta, el profesor podrá iniciar sesión con ese correo y contraseña y acceder a su panel.
+      </p>
+    </section>
+  </main>
+
+  <script type="module">
+    import { requireRole, clearSession } from './src/roles.js';
+
+    // Solo admins pueden entrar
+    requireRole('admin');
+
+    const $ = (id) => document.getElementById(id);
+
+    const EMAIL_RE =
+      /^(?!.*\.\.)(?!.*\.$)(?!^\.)[A-Za-z0-9](?:[A-Za-z0-9._%+-]{0,62}[A-Za-z0-9])?@[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?(?:\.[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?)*\.[A-Za-z]{2,4}$/;
+
+    // Logout admin
+    const btnLogout = $('btn-logout');
+    btnLogout?.addEventListener('click', async (e) => {
+      e.preventDefault();
+      try {
+        await fetch('/api/auth/logout', { method: 'POST' });
+      } catch {}
+      clearSession();
+      location.href = 'login.html';
+    });
+
+    // Crear profesor
+    $('prof-create').addEventListener('click', async () => {
+      const name  = $('prof-name').value.trim();
+      const email = $('prof-email').value.trim().toLowerCase();
+      const pass  = $('prof-pass').value.trim();
+
+      if (!name || !email || !pass) {
+        alert('Completa nombre, correo y contraseña.');
+        return;
+      }
+      if (!EMAIL_RE.test(email)) {
+        alert('Correo inválido.');
+        return;
+      }
+      if (pass.length < 6) {
+        alert('La contraseña debe tener al menos 6 caracteres.');
+        return;
+      }
+
+      try {
+        const res = await fetch('/api/auth/register', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            name,
+            email,
+            password: pass,
+            role: 'prof'   // <- lo importante
+          })
+        });
+
+        const j = await res.json().catch(() => ({}));
+        if (!res.ok || !j.ok) {
+          alert(j?.error || 'No se pudo crear el profesor.');
+          return;
+        }
+
+        alert('Profesor creado correctamente.');
+        $('prof-name').value  = '';
+        $('prof-email').value = '';
+        $('prof-pass').value  = '';
+      } catch (e) {
+        alert('Error de red al crear el profesor.');
+      }
+    });
+  </script>
+</body>
+</html>
