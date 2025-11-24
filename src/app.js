@@ -79,6 +79,94 @@ const btnEvid      = document.getElementById('btn-evidencias');
 const btnEvidClose = document.getElementById('btn-evid-close');
 const btnEvidDl    = document.getElementById('btn-evid-download');
 
+// Reglas de contraseña
+const PASS_MIN = 8;
+const PASS_MAX = 32;
+// cualquier carácter no espacio, entre 8 y 32
+const PASS_RE = new RegExp(`^\\S{${PASS_MIN},${PASS_MAX}}$`);
+
+function markInvalid(el, msg) {
+  if (!el) return;
+  el.classList.add('is-invalid');
+  if (msg) el.setAttribute('title', msg);
+}
+
+function clearInvalid(el) {
+  if (!el) return;
+  el.classList.remove('is-invalid');
+  el.removeAttribute('title');
+}
+
+function validatePasswordField(inputEl) {
+  const value = (inputEl?.value || '').trim();
+  clearInvalid(inputEl);
+
+  if (!PASS_RE.test(value)) {
+    markInvalid(
+      inputEl,
+      `Contraseña inválida (entre ${PASS_MIN} y ${PASS_MAX} caracteres, sin espacios).`
+    );
+    return { ok: false, value: null };
+  }
+  return { ok: true, value };
+}
+
+
+const REG = {
+  name:  document.getElementById('reg-name'),
+  email: document.getElementById('reg-email'),
+  pass:  document.getElementById('reg-pass'),
+  role:  document.getElementById('reg-role')
+};
+
+const LOGIN = {
+  email: document.getElementById('login-email'),
+  pass:  document.getElementById('login-pass')
+};
+
+document.getElementById('btn-register')?.addEventListener('click', async (e) => {
+  e.preventDefault();
+
+  // ...validas nombre y correo como ya lo haces...
+
+  const passCheck = validatePasswordField(REG.pass);
+  if (!passCheck.ok) {
+    alert(`La contraseña debe tener entre ${PASS_MIN} y ${PASS_MAX} caracteres y no contener espacios.`);
+    REG.pass.focus();
+    return;
+  }
+
+  const payload = {
+    name: REG.name.value.trim(),
+    email: REG.email.value.trim().toLowerCase(),
+    password: passCheck.value,
+    role: REG.role.value
+  };
+
+  // aquí haces el fetch a /api/auth/register como ya lo tenías
+});
+
+document.getElementById('btn-login')?.addEventListener('click', async (e) => {
+  e.preventDefault();
+
+  // ...validas email si quieres...
+
+  const passCheck = validatePasswordField(LOGIN.pass);
+  if (!passCheck.ok) {
+    alert(`La contraseña debe tener entre ${PASS_MIN} y ${PASS_MAX} caracteres y no contener espacios.`);
+    LOGIN.pass.focus();
+    return;
+  }
+
+  const payload = {
+    email: LOGIN.email.value.trim().toLowerCase(),
+    password: passCheck.value
+  };
+
+  // aquí haces el fetch a /api/auth/login como ya lo tenías
+});
+
+
 /* ===== Evidencias ===== */
 function createEvidence(){
   const items = []; // {t, kind, note, data}

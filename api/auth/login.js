@@ -2,6 +2,16 @@
 import bcrypt from 'bcryptjs';
 import { getPool } from '../../lib/db.js';
 
+const { email, password } = body;
+
+if (!password || password.length < 8 || password.length > 32) {
+  return res.status(400).json({
+    ok: false,
+    error: 'Contraseña inválida.'
+  });
+}
+
+
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
     return res.status(405).json({ ok:false, error:'Method not allowed' });

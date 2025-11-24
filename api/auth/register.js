@@ -13,6 +13,13 @@ const clean = (s='') => s.normalize('NFKC').replace(/\s+/g,' ').trim();
 // antes: const role = body.role;
 const role = 'student';  // 🔒 siempre estudiante
 
+if (!password || password.length < 8 || password.length > 32) {
+  return res.status(400).json({
+    ok: false,
+    error: 'La contraseña debe tener entre 8 y 32 caracteres.'
+  });
+}
+
 
 export default async function handler(req, res) {
   if (req.method !== 'POST')

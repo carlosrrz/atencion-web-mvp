@@ -87,7 +87,8 @@
       <h2>Ingreso</h2>
       <div class="row">
         <input id="user" class="auth-input" placeholder="Usuario (correo)" autocomplete="username" />
-        <input id="pass" class="auth-input" type="password" placeholder="Contraseña" autocomplete="current-password" />
+        <input id="pass" class="auth-input" type="password" placeholder="Contraseña" autocomplete="current-password" minlength="8"
+  maxlength="32"/>
         <button id="btn" class="primary" type="button">Entrar</button>
         <button id="btn-register" class="secondary" type="button">Crear cuenta</button>
       </div>
@@ -121,7 +122,8 @@
   title="Correo inválido: sin puntos consecutivos ni punto al inicio/fin y dominio válido."
 />
 
-        <input id="reg-pass"  class="auth-input" type="password" placeholder="Contraseña" autocomplete="new-password" />
+        <input id="reg-pass"  class="auth-input" type="password" placeholder="Contraseña" autocomplete="new-password" minlength="8"
+  maxlength="32"/>
         <select id="reg-role" class="auth-input">
           <option value="student">Estudiante</option>
         </select>
