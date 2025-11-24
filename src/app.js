@@ -30,7 +30,7 @@ let updateLastAttemptExam; // opcional; se usará con ?. más abajo
 // MediaPipe
 import { FilesetResolver, FaceLandmarker } from "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.3";
 
-// ===== Campos estudiante =====
+// ===== Campos estudiante (ya NO se usan como fuente principal; solo fallback) =====
 const studentName  = document.getElementById('student-name');
 const studentCode  = document.getElementById('student-code');
 const studentEmail = document.getElementById('student-email');
@@ -767,6 +767,27 @@ window.addEventListener('blur', handleTabStateChange);
 window.addEventListener('focus', handleTabStateChange);
 tabLogger.setOnAlert?.((type)=>{ if (type==='off_tab') evidence.snap?.('alert/off_tab','Fuera de pestaña ≥ umbral'); });
 
+/* ===== Helper: obtener datos del estudiante desde la sesión ===== */
+function getStudentFromSessionAndInputs() {
+  const u = (typeof window !== 'undefined' && window.__currentUser) ? window.__currentUser : {};
+
+  const student = {
+    name:  (u.name || '').trim(),
+    // cuando tengas algo como u.studentCode en /api/auth/me, lo usamos;
+    // mientras tanto, usamos u.code si existiera:
+    code:  (u.studentCode || u.code || '').trim(),
+    email: (u.email || '').trim(),
+  };
+
+  // Fallback: si por alguna razón no hay datos en la sesión,
+  // intenta leer los inputs antiguos (si siguen en el HTML).
+  if (!student.name && studentName)  student.name  = (studentName.value  || '').trim();
+  if (!student.code && studentCode)  student.code  = (studentCode.value  || '').trim();
+  if (!student.email && studentEmail)student.email = (studentEmail.value || '').trim();
+
+  return student;
+}
+
 /* ===== Botones ===== */
 btnPermitir?.addEventListener('click', async ()=>{
   camRequested = true;
@@ -1025,14 +1046,15 @@ btnStop?.addEventListener('click', ()=>{
     try { lastExamResult = JSON.parse(localStorage.getItem('proctor.last_exam') || 'null'); } catch {}
   }
 
+  // === Obtener datos del estudiante desde la sesión ===
+  const student = getStudentFromSessionAndInputs();
+  const currentUser = (typeof window !== 'undefined' && window.__currentUser) ? window.__currentUser : null;
+
   // ===== Guardar intento (único) para el panel del profesor =====
   const attempt = {
     id: `att_${Date.now().toString(36)}`,
-    student: {
-      name:  (studentName?.value || '').trim(),
-      code:  (studentCode?.value || '').trim(),
-      email: (studentEmail?.value || '').trim(),
-    },
+    userId: currentUser?.id ?? null,   // opcional, por si el backend lo usa
+    student,
     startedAt: startedAtISO || new Date(Date.now() - summary.duration_ms).toISOString(),
     endedAt:   new Date().toISOString(),
     durationMs: Math.round(summary.duration_ms),

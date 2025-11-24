@@ -86,8 +86,20 @@
     <div class="auth-card">
       <h2>Ingreso</h2>
       <div class="row">
-        <input id="user" class="auth-input" placeholder="Usuario (correo)" autocomplete="username" />
-        <input id="pass" class="auth-input" type="password" placeholder="Contraseña" autocomplete="current-password" />
+        <input
+          id="user"
+          class="auth-input"
+          placeholder="Usuario (correo)"
+          autocomplete="username"
+        />
+        <input
+          id="pass"
+          class="auth-input"
+          type="password"
+          placeholder="Contraseña"
+          autocomplete="current-password"
+          maxlength="64"
+        />
         <button id="btn" class="primary" type="button">Entrar</button>
         <button id="btn-register" class="secondary" type="button">Crear cuenta</button>
       </div>
@@ -100,31 +112,52 @@
       <h3>Crear cuenta</h3>
       <div class="row">
         <input
-  id="reg-name"
-  class="auth-input"
-  placeholder="Nombre"
-  autocomplete="name"
-  minlength="2"
-  maxlength="60"
-  pattern="^[A-Za-zÁÉÍÓÚÜÑáéíóúüñ]+(?:[ '\-][A-Za-zÁÉÍÓÚÜÑáéíóúüñ]+)*$"
-  required
-/>
+          id="reg-name"
+          class="auth-input"
+          placeholder="Nombre"
+          autocomplete="name"
+          minlength="2"
+          maxlength="60"
+          pattern="^[A-Za-zÁÉÍÓÚÜÑáéíóúüñ]+(?:[ '\-][A-Za-zÁÉÍÓÚÜÑáéíóúüñ]+)*$"
+          required
+        />
 
         <input
-  id="reg-email"
-  class="auth-input"
-  type="email"
-  inputmode="email"
-  placeholder="Correo"
-  autocomplete="username"
-  pattern="^(?!.*\.\.)(?!.*\.$)(?!^\.)[A-Za-z0-9](?:[A-Za-z0-9._%+-]{0,62}[A-Za-z0-9])?@[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?(?:\.[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?)+$"
-  title="Correo inválido: sin puntos consecutivos ni punto al inicio/fin y dominio válido."
-/>
+          id="reg-email"
+          class="auth-input"
+          type="email"
+          inputmode="email"
+          placeholder="Correo"
+          autocomplete="username"
+          pattern="^(?!.*\.\.)(?!.*\.$)(?!^\.)[A-Za-z0-9](?:[A-Za-z0-9._%+-]{0,62}[A-Za-z0-9])?@[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?(?:\.[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?)+$"
+          title="Correo inválido: sin puntos consecutivos ni punto al inicio/fin y dominio válido."
+        />
 
-        <input id="reg-pass"  class="auth-input" type="password" placeholder="Contraseña" autocomplete="new-password" />
+        <!-- Nuevo: código de estudiante -->
+        <input
+          id="reg-code"
+          class="auth-input"
+          placeholder="Código de estudiante"
+          inputmode="numeric"
+          maxlength="20"
+          pattern="^[0-9]{3,20}$"
+          title="Código de estudiante: solo números (3–20 dígitos)."
+        />
+
+        <input
+          id="reg-pass"
+          class="auth-input"
+          type="password"
+          placeholder="Contraseña"
+          autocomplete="new-password"
+          minlength="6"
+          maxlength="64"
+        />
+
         <select id="reg-role" class="auth-input">
           <option value="student">Estudiante</option>
         </select>
+
         <div class="row right">
           <button id="reg-cancel" class="secondary" type="button">Cancelar</button>
           <button id="reg-submit" class="primary" type="button">Crear</button>
@@ -133,7 +166,7 @@
     </div>
   </div>
 
-  <!-- Modal de confirmación -->
+  <!-- Modal de confirmación (por ahora no se usa, pero lo dejamos por si acaso) -->
   <div id="info-modal" class="modal hidden">
     <div class="modal-card" style="text-align:center">
       <div class="check-badge">
@@ -155,19 +188,26 @@
     const $  = (id)=>document.getElementById(id);
     const show = el => el.classList.remove('hidden');
     const hide = el => el.classList.add('hidden');
-    const EMAIL_RE = /^(?!.*\.\.)(?!.*\.$)(?!^\.)[A-Za-z0-9](?:[A-Za-z0-9._%+-]{0,62}[A-Za-z0-9])?@[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?(?:\.[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?)+$/;
+
+    const EMAIL_RE =
+      /^(?!.*\.\.)(?!.*\.$)(?!^\.)[A-Za-z0-9](?:[A-Za-z0-9._%+-]{0,62}[A-Za-z0-9])?@[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?(?:\.[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?)+$/;
+
     // Normaliza: colapsa espacios y recorta
     const clean = (s) => s.normalize('NFKC').replace(/\s+/g, ' ').trim();
+
     // Nombre 2–60, solo letras/espa/’/-
     const NAME_RE =
-    /^(?=.{2,60}$)[A-Za-zÁÉÍÓÚÜÑáéíóúüñ]+(?:[ '\-][A-Za-zÁÉÍÓÚÜÑáéíóúüñ]+)*$/;
+      /^(?=.{2,60}$)[A-Za-zÁÉÍÓÚÜÑáéíóúüñ]+(?:[ '\-][A-Za-zÁÉÍÓÚÜÑáéíóúüñ]+)*$/;
 
+    // Código estudiante: solo números, 3–20 dígitos
+    const CODE_RE = /^[0-9]{3,20}$/;
 
     // ===== LOGIN =====
     $('btn').addEventListener('click', async () => {
       const email = $('user').value.trim();
       const password = $('pass').value.trim();
       if (!email || !password) return alert('Completa usuario y contraseña');
+      if (password.length > 64) return alert('La contraseña no debe superar 64 caracteres.');
 
       let r, j;
       try {
@@ -182,7 +222,7 @@
       }
       if (!r.ok || !j.ok) return alert(j?.error || 'Login fallido');
 
-      setSession(j.user); // { id, name, email, role }
+      setSession(j.user); // { id, name, email, role, studentCode? }
       location.replace(j.user.role === 'prof' ? 'encargado.html' : 'estudiante.html');
     });
 
@@ -195,28 +235,56 @@
     $('btn-register').addEventListener('click', () => show($('reg-modal')));
     $('reg-cancel').addEventListener('click', () => hide($('reg-modal')));
 
-   $('reg-submit').addEventListener('click', async () => {
-  const name  = clean($('reg-name').value);
-  const email = $('reg-email').value.trim().toLowerCase();
-  const password = $('reg-pass').value.trim();
-  const role  = $('reg-role').value;
+    $('reg-submit').addEventListener('click', async () => {
+      const name  = clean($('reg-name').value);
+      const email = $('reg-email').value.trim().toLowerCase();
+      const password = $('reg-pass').value.trim();
+      const role  = $('reg-role').value;
+      const code  = $('reg-code').value.trim();
 
-  if (!name || !email || !password) return alert('Completa todos los campos');
-  if (!NAME_RE.test(name)) return alert('Nombre inválido (usa solo letras, espacios, apóstrofo o guion; 2–60 caracteres).');
-  if (!EMAIL_RE.test(email)) return alert('Correo inválido.');
-  if (password.length < 6)   return alert('La contraseña debe tener al menos 6 caracteres.');
+      if (!name || !email || !password) {
+        return alert('Completa todos los campos');
+      }
+      if (!NAME_RE.test(name)) {
+        return alert('Nombre inválido (usa solo letras, espacios, apóstrofo o guion; 2–60 caracteres).');
+      }
+      if (!EMAIL_RE.test(email)) {
+        return alert('Correo inválido.');
+      }
 
-  const r = await fetch('/api/auth/register', {
-    method:'POST',
-    headers:{'Content-Type':'application/json'},
-    body: JSON.stringify({ name, email, password, role })
-  });
-  const j = await r.json();
-  if (!r.ok || !j.ok) return alert(j?.error || 'No se pudo registrar');
+      if (role === 'student') {
+        if (!code) {
+          return alert('Ingresa tu código de estudiante.');
+        }
+        if (!CODE_RE.test(code)) {
+          return alert('Código inválido (solo números, 3–20 dígitos).');
+        }
+      }
 
-  alert('Cuenta creada correctamente. Ahora inicia sesión.');
-  document.getElementById('reg-modal').classList.add('hidden');
-});
-</script>
+      if (password.length < 6) {
+        return alert('La contraseña debe tener al menos 6 caracteres.');
+      }
+      if (password.length > 64) {
+        return alert('La contraseña no debe superar 64 caracteres.');
+      }
+
+      const r = await fetch('/api/auth/register', {
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({
+          name,
+          email,
+          password,
+          role,
+          studentCode: role === 'student' ? code : null
+        })
+      });
+      const j = await r.json();
+      if (!r.ok || !j.ok) return alert(j?.error || 'No se pudo registrar');
+
+      alert('Cuenta creada correctamente. Ahora inicia sesión.');
+      document.getElementById('reg-modal').classList.add('hidden');
+    });
+  </script>
 </body>
 </html>
