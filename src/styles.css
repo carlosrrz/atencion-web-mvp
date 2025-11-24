@@ -500,3 +500,28 @@ dialog.modal::backdrop { background: rgba(0,0,0,.55); backdrop-filter: blur(2px)
   border-color: #e53e3e !important;
   box-shadow: 0 0 0 3px rgba(229, 62, 62, .2) !important;
 }
+.q-options {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.q-option {
+  border-radius: 12px;
+  padding: 10px 14px;
+  border: 1px solid #1c2a48;
+  background: #0e1a2f;
+  color: #e6edf7;
+  cursor: pointer;
+  text-align: left;
+}
+
+.q-option:hover {
+  background: #12213a;
+}
+
+.q-option-selected {
+  border-color: #2f6cf6;
+  box-shadow: 0 0 0 2px rgba(47,108,246,.4);
+  background: #1a2c55;
+}
