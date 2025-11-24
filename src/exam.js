@@ -1,255 +1,241 @@
-// src/exam.js
-// Lógica del examen: carga por código, navegación de preguntas y resultado final.
-// Ya NO valida nombre/código/alumno: solo código de examen + cámara activa.
+// src/src/exam.js — Lógica del test del estudiante
 
-const inputCode  = document.getElementById('exam-code');
-const btnStart   = document.getElementById('btn-exam-start');
-const btnNext    = document.getElementById('btn-exam-next');
-const btnFinish  = document.getElementById('btn-exam-finish');
+const examCodeInput = document.getElementById('exam-code');
+const btnExamStart  = document.getElementById('btn-exam-start');
+const btnNext       = document.getElementById('btn-exam-next');
+const btnFinish     = document.getElementById('btn-exam-finish');
 
-const spanIdx    = document.getElementById('exam-idx');
-const spanTotal  = document.getElementById('exam-total');
-const spanRT     = document.getElementById('exam-rt');
-const divQText   = document.getElementById('q-text');
-const divQOpts   = document.getElementById('q-options');
-const divResult  = document.getElementById('exam-result');
+const qText      = document.getElementById('q-text');
+const qOptions   = document.getElementById('q-options');
+const examResult = document.getElementById('exam-result');
+const examIdx    = document.getElementById('exam-idx');
+const examTotal  = document.getElementById('exam-total');
+const examRT     = document.getElementById('exam-rt');
 
-if (!inputCode || !btnStart || !divQText || !divQOpts) {
-  console.warn('[exam] No se encontraron elementos clave. ¿Está bien el HTML?');
-}
+// Algo razonable: 3–12 caracteres (pueden ser números o letras)
+const EXAM_CODE_RE = /^[A-Za-z0-9]{3,12}$/;
 
-// Código: solo números 4–8 dígitos (igual que en backend)
-const EXAM_CODE_RE = /^[0-9]{4,8}$/;
+let currentExam = null;
+let idx = 0;
+let answers = [];
+let questionStartTs = null;
 
-const examState = {
-  exam: null,          // { name, questions: [...] }
-  codeUsed: null,
-  idx: 0,
-  started: false,
-  finished: false,
-  answers: [],         // índice de opción elegida por pregunta
-  rtStart: 0           // performance.now() al mostrar la pregunta
-};
+// ---------- Helpers de UI ----------
 
-function resetUI() {
-  spanIdx && (spanIdx.textContent = '0');
-  spanTotal && (spanTotal.textContent = '0');
-  spanRT && (spanRT.textContent = '0.0');
-  divQText && (divQText.textContent = '---');
-  if (divQOpts) divQOpts.innerHTML = '';
-  if (divResult) {
-    divResult.textContent = '';
-    divResult.classList.add('hidden');
+function resetState() {
+  currentExam = null;
+  idx = 0;
+  answers = [];
+  questionStartTs = null;
+
+  if (examIdx)   examIdx.textContent = '0';
+  if (examTotal) examTotal.textContent = '0';
+  if (examRT)    examRT.textContent = '0.0';
+  if (qText)     qText.textContent = '---';
+  if (qOptions)  qOptions.innerHTML = '';
+
+  if (examResult) {
+    examResult.textContent = '';
+    examResult.classList.add('hidden');
   }
-  btnNext && btnNext.classList.add('hidden');
-  btnFinish && btnFinish.classList.add('hidden');
-  btnStart && btnStart.classList.remove('hidden');
+
+  if (btnNext)   btnNext.classList.add('hidden');
+  if (btnFinish) btnFinish.classList.add('hidden');
+
+  if (btnExamStart) {
+    btnExamStart.classList.remove('hidden');
+    btnExamStart.disabled = false;
+    btnExamStart.textContent = 'Iniciar test';
+  }
+
+  if (examCodeInput) {
+    examCodeInput.disabled = false;
+  }
 }
 
-// ==== Utilidades de opciones ====
-
-function markSelected(idx) {
-  if (!divQOpts) return;
-  [...divQOpts.querySelectorAll('button[data-idx]')].forEach(b => {
-    const sel = Number(b.dataset.idx) === idx;
-    b.dataset.selected = sel ? '1' : '0';
-    b.classList.toggle('selected', sel); // por si tienes estilos
+function markSelected(optIndex) {
+  if (!qOptions) return;
+  [...qOptions.children].forEach((el, i) => {
+    if (i === optIndex) el.classList.add('selected');
+    else el.classList.remove('selected');
   });
-}
-
-function getSelectedIdx() {
-  if (!divQOpts) return null;
-  const btn = divQOpts.querySelector('button[data-selected="1"]');
-  if (!btn) return null;
-  return Number(btn.dataset.idx);
 }
 
 function renderQuestion() {
-  const exam = examState.exam;
-  if (!exam || !Array.isArray(exam.questions) || !exam.questions.length) return;
+  if (!currentExam) return;
+  const q = currentExam.questions[idx];
+  if (!q) return;
 
-  const q = exam.questions[examState.idx];
-  const total = exam.questions.length;
+  if (examIdx)   examIdx.textContent = String(idx + 1);
+  if (examTotal) examTotal.textContent = String(currentExam.questions.length);
+  if (qText)     qText.textContent = q.text || `Pregunta ${idx + 1}`;
 
-  spanIdx && (spanIdx.textContent = String(examState.idx + 1));
-  spanTotal && (spanTotal.textContent = String(total));
-  spanRT && (spanRT.textContent = '0.0');
+  if (qOptions) {
+    qOptions.innerHTML = '';
 
-  if (divQText) divQText.textContent = q.text || '';
-
-  if (divQOpts) {
-    divQOpts.innerHTML = '';
     (q.options || []).forEach((opt, i) => {
       const btn = document.createElement('button');
       btn.type = 'button';
-      btn.className = 'secondary'; // o la clase que ya uses para opciones
+      btn.className = 'q-option';
       btn.textContent = opt;
-      btn.dataset.idx = String(i);
-      btn.dataset.selected = '0';
       btn.addEventListener('click', () => {
+        answers[idx] = i;
         markSelected(i);
       });
-      divQOpts.appendChild(btn);
+      qOptions.appendChild(btn);
     });
+
+    if (typeof answers[idx] === 'number') {
+      markSelected(answers[idx]);
+    }
   }
 
-  // botón siguiente / finalizar
-  if (btnNext)   btnNext.classList.toggle('hidden', examState.idx >= total - 1);
-  if (btnFinish) btnFinish.classList.toggle('hidden', examState.idx < total - 1);
-
-  // arranca RT de esta pregunta
-  examState.rtStart = performance.now();
+  questionStartTs = performance.now();
+  if (examRT) examRT.textContent = '0.0';
 }
 
-function commitCurrentAnswer() {
-  const idx = getSelectedIdx();
-  if (idx == null) {
-    alert('Selecciona una opción antes de continuar.');
-    return false;
-  }
-  examState.answers[examState.idx] = idx;
-
-  if (spanRT && examState.rtStart) {
-    const rt = (performance.now() - examState.rtStart) / 1000;
-    spanRT.textContent = rt.toFixed(1);
-  }
-  return true;
-}
-
-// ==== Carga de examen desde backend ====
-
-async function fetchExamByCode(code) {
-  const url = `/api/exams/current?code=${encodeURIComponent(code)}`;
-  console.log('[exam] GET', url);
-  const res = await fetch(url, { cache: 'no-store' });
-  const j = await res.json().catch(() => null);
-
-  if (!res.ok || !j?.ok || !j.exam || !Array.isArray(j.exam.questions) || !j.exam.questions.length) {
-    console.warn('[exam] respuesta inválida', res.status, j);
-    throw new Error(j?.error || 'Código de examen incorrecto o no disponible.');
-  }
-
-  return j.exam;
-}
-
-// ==== Finalizar examen ====
-
-function finishExam() {
-  const exam = examState.exam;
-  if (!exam) return;
-
-  const questions = exam.questions || [];
+function computeScore() {
+  if (!currentExam) return { correct: 0, total: 0 };
+  const qs = currentExam.questions || [];
   let correct = 0;
-  questions.forEach((q, i) => {
-    const ansIdx = examState.answers[i];
-    if (ansIdx != null && Number(ansIdx) === Number(q.correct)) {
+
+  qs.forEach((q, i) => {
+    const ans = answers[i];
+    if (typeof ans === 'number' && Number(ans) === Number(q.correct)) {
       correct++;
     }
   });
-  const total = questions.length || 0;
-  const detail = {
-    correct,
-    total,
-    score: total ? correct / total : 0
-  };
+
+  return { correct, total: qs.length };
+}
+
+// ---------- Handlers principales ----------
+
+async function startExam() {
+  if (!examCodeInput) return;
+  const code = examCodeInput.value.trim();
+
+  if (!code) {
+    alert('Ingresa el código de examen.');
+    return;
+  }
+  if (!EXAM_CODE_RE.test(code)) {
+    alert('Código de examen inválido.');
+    return;
+  }
+
+  // Que la cámara esté lista (la marca app.js en window.__camReady)
+  if (!window.__camReady) {
+    alert('Primero permite la cámara antes de iniciar el test.');
+    return;
+  }
+
+  btnExamStart.disabled = true;
+  btnExamStart.textContent = 'Cargando...';
 
   try {
-    localStorage.setItem('proctor.last_exam', JSON.stringify(detail));
+    const res = await fetch('/api/exams/current', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ code })
+    });
+
+    const j = await res.json().catch(() => ({}));
+
+    if (!res.ok || !j.ok || !j.exam) {
+      alert(j.error || 'No se pudo cargar el examen.');
+      btnExamStart.disabled = false;
+      btnExamStart.textContent = 'Iniciar test';
+      return;
+    }
+
+    const questions = Array.isArray(j.exam.questions) ? j.exam.questions : [];
+    if (!questions.length) {
+      alert('Este examen no tiene preguntas configuradas.');
+      btnExamStart.disabled = false;
+      btnExamStart.textContent = 'Iniciar test';
+      return;
+    }
+
+    currentExam = {
+      id: j.exam.id,
+      name: j.exam.name,
+      accessCode: j.exam.accessCode,
+      questions
+    };
+
+    idx = 0;
+    answers = [];
+
+    if (examResult) {
+      examResult.classList.add('hidden');
+      examResult.textContent = '';
+    }
+
+    examCodeInput.disabled = true;
+    btnExamStart.classList.add('hidden');
+    btnNext.classList.remove('hidden');
+    btnFinish.classList.remove('hidden');
+
+    renderQuestion();
+  } catch (err) {
+    console.error('[exam] error al obtener examen', err);
+    alert('Error de red al obtener examen.');
+    btnExamStart.disabled = false;
+    btnExamStart.textContent = 'Iniciar test';
+  }
+}
+
+function onNextQuestion() {
+  if (!currentExam) return;
+  const qs = currentExam.questions || [];
+
+  if (typeof answers[idx] !== 'number') {
+    const cont = confirm(
+      'No has marcado respuesta para esta pregunta. ¿Continuar igualmente?'
+    );
+    if (!cont) return;
+  }
+
+  if (idx < qs.length - 1) {
+    idx++;
+    renderQuestion();
+  } else {
+    onFinishExam();
+  }
+}
+
+function onFinishExam() {
+  if (!currentExam) return;
+
+  const { correct, total } = computeScore();
+
+  if (examResult) {
+    examResult.textContent = `Resultado: ${correct}/${total} respuestas correctas.`;
+    examResult.classList.remove('hidden');
+  }
+
+  const result = { correct, total };
+
+  // Guardar para app.js (por si el evento se pierde)
+  try {
+    localStorage.setItem('proctor.last_exam', JSON.stringify(result));
   } catch {}
 
-  // evento para app.js
+  // Evento que escucha app.js
   try {
-    window.dispatchEvent(new CustomEvent('exam:finished', { detail }));
+    window.dispatchEvent(new CustomEvent('exam:finished', { detail: result }));
   } catch (e) {
     console.warn('[exam] no se pudo despachar exam:finished', e);
   }
 
-  if (divResult) {
-    divResult.classList.remove('hidden');
-    divResult.textContent = `Respuestas correctas: ${correct} de ${total}.`;
-  }
-
-  examState.finished = true;
-  btnNext && btnNext.classList.add('hidden');
-  btnFinish && btnFinish.classList.add('hidden');
-  btnStart && btnStart.classList.remove('hidden');
-  inputCode && (inputCode.disabled = false);
+  resetState();
 }
 
-// ==== Handlers de botones ====
-
-btnStart?.addEventListener('click', async () => {
-  const rawCode = (inputCode?.value || '').trim();
-
-  // 1) Validar código
-  if (!rawCode) {
-    alert('Ingresa el código de examen que te dio el profesor.');
-    inputCode?.focus();
-    return;
-  }
-  if (!EXAM_CODE_RE.test(rawCode)) {
-    alert('Código de examen inválido (usa solo números, 4–8 dígitos).');
-    inputCode?.focus();
-    return;
-  }
-
-  // 2) Verificar cámara
-  if (!window.__camReady) {
-    alert('Antes de iniciar el examen, presiona "Permitir cámara" y verifica que el video se vea.');
-    return;
-  }
-
-  try {
-    btnStart.disabled = true;
-    btnStart.textContent = 'Cargando...';
-
-    const exam = await fetchExamByCode(rawCode);
-
-    examState.exam = exam;
-    examState.codeUsed = rawCode;
-    examState.idx = 0;
-    examState.answers = [];
-    examState.started = true;
-    examState.finished = false;
-
-    if (divResult) {
-      divResult.textContent = '';
-      divResult.classList.add('hidden');
-    }
-
-    inputCode && (inputCode.disabled = true);
-
-    renderQuestion();
-  } catch (e) {
-    console.error('[exam] error al iniciar', e);
-    alert(e.message || 'No se pudo cargar el examen.');
-  } finally {
-    btnStart.disabled = false;
-    btnStart.textContent = 'Iniciar test';
-    btnStart.classList.add('hidden');  // se oculta mientras dura el examen
-  }
-});
-
-btnNext?.addEventListener('click', () => {
-  if (!examState.exam || !examState.started || examState.finished) return;
-  if (!commitCurrentAnswer()) return;
-
-  const total = examState.exam.questions.length;
-  if (examState.idx < total - 1) {
-    examState.idx++;
-    renderQuestion();
-  }
-});
-
-btnFinish?.addEventListener('click', () => {
-  if (!examState.exam || !examState.started || examState.finished) return;
-  if (!commitCurrentAnswer()) return;
-  finishExam();
-});
+// ---------- Eventos de UI ----------
+btnExamStart && btnExamStart.addEventListener('click', startExam);
+btnNext      && btnNext.addEventListener('click', onNextQuestion);
+btnFinish    && btnFinish.addEventListener('click', onFinishExam);
 
 // Estado inicial
-resetUI();
-
-// Exponer para depuración si quieres
-window.__examState = examState;
-console.log('[exam] módulo cargado');
+resetState();
