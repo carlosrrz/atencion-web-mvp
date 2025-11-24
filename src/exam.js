@@ -5,6 +5,8 @@
 // src/exam.js
 // src/exam.js
 let QUESTIONS = [];
+import { getSession } from './roles.js';
+
 
 // ahora acepta examCode y devuelve bool
 async function loadQuestions({ take = 8, examCode = null } = {}) {
@@ -88,32 +90,24 @@ function clearInvalid(el) {
 }
 
 function validateStudentFields() {
-  const name = (F.name?.value || '').trim();
-  const code = (F.code?.value || '').trim();
-  const email = (F.email?.value || '').trim().toLowerCase();
+  const u = getSession() || {};
 
-  // limpia marcas anteriores
-  [F.name, F.code, F.email].forEach(clearInvalid);
+  const name  = (u.name || '').trim();
+  const code  = (u.studentCode || u.code || '').trim();
+  const email = (u.email || '').trim().toLowerCase();
 
-  // nombre
-  if (!name || name.replace(/\s+/g,'').length < 3 || !NAME_RE.test(name)) {
-    markInvalid(F.name, 'Nombre inválido (3–80 caracteres, solo letras/espacios/guiones).');
-    F.name?.focus();
-    return { ok: false, error: 'Ingresa el nombre correctamente' };
+  if (!name || name.replace(/\s+/g, '').length < 3) {
+    return {
+      ok: false,
+      error: 'Tu cuenta no tiene un nombre válido. Cierra sesión y vuelve a entrar, o avisa al profesor.'
+    };
   }
 
-  // código
-  if (!CODE_RE.test(code)) {
-    markInvalid(F.code, 'Código inválido (3–20, solo letras/números, guion o guion bajo).');
-    F.code?.focus();
-    return { ok: false, error: 'Ingresa el ID correctamente' };
-  }
-
-  // correo (opcional)
-  if (email && !EMAIL_RE.test(email)) {
-    markInvalid(F.email, 'Correo inválido.');
-    F.email?.focus();
-    return { ok: false, error: 'Ingresa el correo correctamente' };
+  if (!code) {
+    return {
+      ok: false,
+      error: 'Tu cuenta no tiene código de estudiante. Pide al profesor que te registre con tu código.'
+    };
   }
 
   return {
@@ -121,6 +115,7 @@ function validateStudentFields() {
     data: { name, code, email: email || null }
   };
 }
+
 
 // Validación en vivo (quita el rojo al teclear)
 [F.name, F.code, F.email].forEach(el => {
