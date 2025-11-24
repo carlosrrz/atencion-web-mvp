@@ -62,7 +62,7 @@
       padding:0 16px; cursor:pointer;
     }
 
-    /* ===== Modales (respaldo) ===== */
+    /* ===== Modales ===== */
     .hidden{ display:none }
     .modal{
       position:fixed; inset:0; display:grid; place-items:center;
@@ -86,20 +86,8 @@
     <div class="auth-card">
       <h2>Ingreso</h2>
       <div class="row">
-        <input
-          id="user"
-          class="auth-input"
-          placeholder="Usuario (correo)"
-          autocomplete="username"
-        />
-        <input
-          id="pass"
-          class="auth-input"
-          type="password"
-          placeholder="Contraseña"
-          autocomplete="current-password"
-          maxlength="64"
-        />
+        <input id="user" class="auth-input" placeholder="Usuario (correo)" autocomplete="username" />
+        <input id="pass" class="auth-input" type="password" placeholder="Contraseña" autocomplete="current-password" />
         <button id="btn" class="primary" type="button">Entrar</button>
         <button id="btn-register" class="secondary" type="button">Crear cuenta</button>
       </div>
@@ -111,6 +99,7 @@
     <div class="modal-card">
       <h3>Crear cuenta</h3>
       <div class="row">
+        <!-- Nombre -->
         <input
           id="reg-name"
           class="auth-input"
@@ -122,6 +111,7 @@
           required
         />
 
+        <!-- Correo -->
         <input
           id="reg-email"
           class="auth-input"
@@ -133,26 +123,26 @@
           title="Correo inválido: sin puntos consecutivos ni punto al inicio/fin y dominio válido."
         />
 
-        <!-- Nuevo: código de estudiante -->
+        <!-- Código de estudiante (solo números) -->
         <input
-  id="reg-code"
-  class="auth-input"
-  placeholder="Código de estudiante"
-  autocomplete="off"
-  minlength="3"
-  maxlength="20"
-/>
+          id="reg-code"
+          class="auth-input"
+          placeholder="Código de estudiante"
+          inputmode="numeric"
+          autocomplete="off"
+          maxlength="12"
+        />
 
+        <!-- Contraseña -->
         <input
           id="reg-pass"
           class="auth-input"
           type="password"
           placeholder="Contraseña"
           autocomplete="new-password"
-          minlength="6"
-          maxlength="64"
         />
 
+        <!-- Rol (por ahora solo estudiante) -->
         <select id="reg-role" class="auth-input">
           <option value="student">Estudiante</option>
         </select>
@@ -165,7 +155,7 @@
     </div>
   </div>
 
-  <!-- Modal de confirmación (por ahora no se usa, pero lo dejamos por si acaso) -->
+  <!-- Modal de confirmación (lo seguimos usando si quieres más adelante) -->
   <div id="info-modal" class="modal hidden">
     <div class="modal-card" style="text-align:center">
       <div class="check-badge">
@@ -191,22 +181,20 @@
     const EMAIL_RE =
       /^(?!.*\.\.)(?!.*\.$)(?!^\.)[A-Za-z0-9](?:[A-Za-z0-9._%+-]{0,62}[A-Za-z0-9])?@[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?(?:\.[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?)+$/;
 
-    // Normaliza: colapsa espacios y recorta
-    const clean = (s) => s.normalize('NFKC').replace(/\s+/g, ' ').trim();
-
-    // Nombre 2–60, solo letras/espa/’/-
     const NAME_RE =
       /^(?=.{2,60}$)[A-Za-zÁÉÍÓÚÜÑáéíóúüñ]+(?:[ '\-][A-Za-zÁÉÍÓÚÜÑáéíóúüñ]+)*$/;
 
-    // Código estudiante: solo números, 3–20 dígitos
-    const CODE_RE = /^[0-9]{3,20}$/;
+    // Código: solo dígitos, por ejemplo de 4 a 12
+    const CODE_RE = /^\d{4,12}$/;
 
-    // ===== LOGIN =====
+    // Normaliza: colapsa espacios y recorta
+    const clean = (s='') => s.normalize('NFKC').replace(/\s+/g, ' ').trim();
+
+    // ==== LOGIN ====
     $('btn').addEventListener('click', async () => {
       const email = $('user').value.trim();
       const password = $('pass').value.trim();
       if (!email || !password) return alert('Completa usuario y contraseña');
-      if (password.length > 64) return alert('La contraseña no debe superar 64 caracteres.');
 
       let r, j;
       try {
@@ -217,60 +205,92 @@
         });
         j = await r.json();
       } catch {
-        alert('Error de red'); return;
+        alert('Error de red');
+        return;
       }
       if (!r.ok || !j.ok) return alert(j?.error || 'Login fallido');
 
-      setSession(j.user); // { id, name, email, role, studentCode? }
+      setSession(j.user); // { id, name, email, role, code? }
       location.replace(j.user.role === 'prof' ? 'encargado.html' : 'estudiante.html');
     });
 
     // Enter para enviar
     ['user','pass'].forEach(id=>{
-      $(id).addEventListener('keydown', e => { if (e.key === 'Enter') $('btn').click(); });
+      $(id).addEventListener('keydown', e => {
+        if (e.key === 'Enter') $('btn').click();
+      });
     });
 
-    // ===== REGISTRO =====
-    $('btn-register').addEventListener('click', () => show($('reg-modal')));
-    $('reg-cancel').addEventListener('click', () => hide($('reg-modal')));
+    // ==== REGISTRO ====
 
-      $('reg-submit').addEventListener('click', async () => {
-    const name  = clean($('reg-name').value);
-    const code  = $('reg-code').value.trim();
-    const email = $('reg-email').value.trim().toLowerCase();
-    const password = $('reg-pass').value.trim();
-    const role  = $('reg-role').value;
-
-    if (!name || !email || !password || !code) {
-      return alert('Completa todos los campos (nombre, código, correo y contraseña).');
-    }
-    if (!NAME_RE.test(name)) {
-      return alert('Nombre inválido (usa solo letras, espacios, apóstrofo o guion; 2–60 caracteres).');
-    }
-    if (!EMAIL_RE.test(email)) {
-      return alert('Correo inválido.');
-    }
-    if (code.length < 3 || code.length > 20 || /\s/.test(code)) {
-      return alert('Código de alumno inválido.');
-    }
-    if (password.length < 6) {
-      return alert('La contraseña debe tener al menos 6 caracteres.');
+    // Deja el formulario limpio
+    function resetRegForm() {
+      $('reg-name').value  = '';
+      $('reg-email').value = '';
+      $('reg-code').value  = '';
+      $('reg-pass').value  = '';
+      $('reg-role').value  = 'student';
     }
 
-    const r = await fetch('/api/auth/register', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name, email, password, code, role })
+    // Abrir modal: siempre limpio
+    $('btn-register').addEventListener('click', () => {
+      resetRegForm();
+      show($('reg-modal'));
     });
-    const j = await r.json().catch(() => ({}));
-    if (!r.ok || !j.ok) {
-      return alert(j?.error || 'No se pudo registrar');
-    }
 
-    alert('Cuenta creada correctamente. Ahora inicia sesión.');
-    document.getElementById('reg-modal').classList.add('hidden');
-  });
+    // Cancelar: cierra y limpia
+    $('reg-cancel').addEventListener('click', () => {
+      hide($('reg-modal'));
+      resetRegForm();
+    });
 
+    $('reg-submit').addEventListener('click', async () => {
+      const name  = clean($('reg-name').value);
+      const email = $('reg-email').value.trim().toLowerCase();
+      const code  = $('reg-code').value.trim();
+      const password = $('reg-pass').value.trim();
+      const role  = 'student'; // fijo por ahora
+
+      if (!name || !email || !code || !password)
+        return alert('Completa todos los campos');
+
+      if (!NAME_RE.test(name))
+        return alert('Ingresa el nombre correctamente.');
+
+      if (!EMAIL_RE.test(email))
+        return alert('Correo inválido.');
+
+      if (!CODE_RE.test(code))
+        return alert('El código de estudiante debe tener solo números (4 a 12 dígitos).');
+
+      if (password.length < 6)
+        return alert('La contraseña debe tener al menos 6 caracteres.');
+
+      let r, j;
+      try {
+        r = await fetch('/api/auth/register', {
+          method:'POST',
+          headers:{'Content-Type':'application/json'},
+          body: JSON.stringify({ name, email, password, role, code })
+        });
+        j = await r.json().catch(() => ({}));
+      } catch (e) {
+        alert('Error de red al registrar.');
+        return;
+      }
+
+      if (!r.ok || !j.ok)
+        return alert(j?.error || 'No se pudo registrar');
+
+      alert('Cuenta creada correctamente. Ahora inicia sesión.');
+      hide($('reg-modal'));
+      resetRegForm();
+    });
+
+    // Cerrar modal de info si lo usas más adelante
+    $('info-ok')?.addEventListener('click', () => {
+      hide($('info-modal'));
+    });
   </script>
 </body>
 </html>
