@@ -13,19 +13,6 @@ const clean = (s='') => s.normalize('NFKC').replace(/\s+/g,' ').trim();
 // antes: const role = body.role;
 const role = 'student';  // 🔒 siempre estudiante
 
-const user = await registerUser({ name, email, password, role, studentCode: code });
-
-return res.status(200).json({
-  ok: true,
-  user: {
-    id: user.id,
-    name: user.name,
-    email: user.email,
-    role: user.role,
-    studentCode: user.student_code
-  }
-});
-
 
 export default async function handler(req, res) {
   if (req.method !== 'POST')

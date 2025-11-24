@@ -1,20 +1,3 @@
-import { getSession } from './roles.js';
-
-// ...
-
-function getStudentFromSession() {
-  const u = getSession() || {};
-  return {
-    name : (u.name || '').trim(),
-    code : (u.studentCode || u.code || '').trim(),
-    email: (u.email || '').trim() || null
-  };
-}
-
-// Y donde antes armabas student desde el DOM:
-const student = getStudentFromSession();
-
-
 // src/src/bootstrap-student.js
 // Carga robusta con fallback entre ./src/src y ./src
 const CANDS = [

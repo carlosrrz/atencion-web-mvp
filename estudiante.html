@@ -39,12 +39,20 @@
 
   <main class="wrap grid-2">
     <section>
-      
+      <!-- Datos del estudiante -->
+      <div class="card">
+        <h2>Datos del estudiante</h2>
+        <div class="row">
+          <input id="student-name"  placeholder="Nombre y apellidos" style="flex:1" />
+          <input id="student-code"  placeholder="Código"           style="width:180px" />
+          <input id="student-email" placeholder="Correo (opcional)" style="width:260px" />
+        </div>
+        <p class="help">Se guardarán junto con el resumen del monitoreo.</p>
+      </div>
 
         <div class="exam-row">
     <label for="exam-code">Código de examen</label>
-    <input id="exam-code" class="auth-input" placeholder="Código que indica el profesor" minlength="8"
-  maxlength="32"/>
+    <input id="exam-code" class="auth-input" placeholder="Código que indica el profesor" />
   </div>
 
       <!-- Examen -->
