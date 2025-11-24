@@ -42,12 +42,14 @@ export function clearSession() {
 // Intenta refrescar desde /api/auth/me usando la cookie "token"
 export async function refreshFromServer() {
   try {
-    const res = await fetch('/api/auth/me');
+    const res = await fetch('/api/auth/me', { cache: 'no-store' });
     const j = await res.json().catch(() => ({}));
+
     if (!res.ok || !j.ok || !j.user) {
       console.warn('[roles] /api/auth/me no válido:', res.status, j);
       return null;
     }
+
     setSession(j.user);
     return j.user;
   } catch (e) {
@@ -55,6 +57,9 @@ export async function refreshFromServer() {
     return null;
   }
 }
+
+// Para evitar que se ejecute requireRole muchas veces en paralelo
+let pendingRequire = null;
 
 /**
  * Gate de rol.
@@ -64,44 +69,71 @@ export async function refreshFromServer() {
  * - Si el rol no coincide, redirige según el caso.
  */
 export async function requireRole(expectedRole) {
-  try {
-    // 1) Intenta sesión local (lo que setSession guardó al hacer login)
-    let user = getSession();
+  const currentPage = (location.pathname.split('/').pop() || '').toLowerCase();
 
-    // 2) Si no hay nada local, intenta con el backend (/api/auth/me)
-    if (!user) {
-      user = await refreshFromServer();
-    }
+  // Si ya hay una validación en curso, reúsala
+  if (pendingRequire) {
+    const u = await pendingRequire.catch(() => null);
+    return checkRoleAndRedirect(u, expectedRole, currentPage);
+  }
 
-    // 3) Si sigue sin haber usuario → no está logueado
-    if (!user) {
-      console.warn('[roles] sin sesión → login');
-      location.replace('login.html');
-      return;
-    }
+  pendingRequire = (async () => {
+    try {
+      // 1) Intenta sesión local
+      let user = getSession();
 
-    // 4) Validar rol (si se pide uno)
-    if (expectedRole && user.role !== expectedRole) {
-      console.warn('[roles] rol no permitido. Esperado:', expectedRole, 'tiene:', user.role);
-      if (user.role === 'prof') {
-        // Si es prof y trata de entrar a vista de estudiante → mandarlo a encargado
-        location.replace('encargado.html');
-      } else if (user.role === 'student') {
-        // Si es student y trata de ir a vista prof → mandarlo a estudiante
-        location.replace('estudiante.html');
-      } else {
-        // Rol raro → al login
+      // 2) Si no hay nada local, intenta backend
+      if (!user) {
+        user = await refreshFromServer();
+      }
+
+      // 3) Si sigue sin haber usuario → no está logueado
+      if (!user) {
+        console.warn('[roles] sin sesión → login');
+        if (currentPage !== 'login.html') {
+          location.replace('login.html');
+        }
+        return null;
+      }
+
+      window.__currentUser = user;
+      return user;
+    } catch (e) {
+      console.error('[roles] error inesperado en requireRole:', e);
+      if (currentPage !== 'login.html') {
         location.replace('login.html');
       }
-      return;
+      return null;
     }
+  })();
 
-    // 5) Exponerlo globalmente
-    window.__currentUser = user;
-    console.log('[roles] requireRole OK para', expectedRole || '(cualquiera)', '→', user);
-    return user;
-  } catch (e) {
-    console.error('[roles] error inesperado en requireRole:', e);
-    location.replace('login.html');
+  const user = await pendingRequire.catch(() => null);
+  return checkRoleAndRedirect(user, expectedRole, currentPage);
+}
+
+function checkRoleAndRedirect(user, expectedRole, currentPage) {
+  if (!user) return null;
+
+  if (expectedRole && user.role !== expectedRole) {
+    console.warn('[roles] rol no permitido. Esperado:', expectedRole, 'tiene:', user.role);
+
+    if (user.role === 'prof') {
+      if (currentPage !== 'encargado.html') {
+        location.replace('encargado.html');
+      }
+    } else if (user.role === 'student') {
+      if (currentPage !== 'estudiante.html') {
+        location.replace('estudiante.html');
+      }
+    } else {
+      if (currentPage !== 'login.html') {
+        location.replace('login.html');
+      }
+    }
+    return null;
   }
+
+  window.__currentUser = user;
+  console.log('[roles] requireRole OK para', expectedRole || '(cualquiera)', '→', user);
+  return user;
 }
