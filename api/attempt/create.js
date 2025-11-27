@@ -1,38 +1,38 @@
 // /api/attempt/create.js
 import { getPool } from '../../lib/db.js';
+import { randomUUID } from 'crypto';
+
+const clean = (s = '') =>
+  String(s).normalize('NFKC').replace(/\s+/g, ' ').trim();
+
+const NAME_RE =
+  /^(?=.{2,60}$)[A-Za-zÁÉÍÓÚÜÑáéíóúüñ]+(?:[ '\-][A-Za-zÁÉÍÓÚÜÑáéíóúüñ]+)*$/;
+
+// solo números (ajusta el {1,32} si quieres mínimo/máximo)
+const CODE_RE = /^\d{1,32}$/;
 
 function num(v, d = 0) {
   const n = Number(v);
   return Number.isFinite(n) ? n : d;
 }
 
-function ts(v) {
+function toDate(v) {
   try {
     if (!v) return null;
     if (v instanceof Date) return v;
     const d = new Date(v);
-    return isNaN(d.getTime()) ? null : d;
+    return Number.isFinite(d.getTime()) ? d : null;
   } catch {
     return null;
   }
 }
-
-// Normaliza: colapsa espacios, recorta, y mantiene unicode estable
-const clean = (s = '') => String(s).normalize('NFKC').replace(/\s+/g, ' ').trim();
-
-// Nombre 2–60, solo letras + espacio/apóstrofo/guion
-const NAME_RE =
-  /^(?=.{2,60}$)[A-Za-zÁÉÍÓÚÜÑáéíóúüñ]+(?:[ '\-][A-Za-zÁÉÍÓÚÜÑáéíóúüñ]+)*$/;
-
-// Código SOLO numérico (1–20 dígitos)
-const CODE_RE = /^\d{1,20}$/;
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
     return res.status(405).json({ ok: false, error: 'Method not allowed' });
   }
 
-  // 1) Leer body (puede venir como objeto o string)
+  // Body robusto (Vercel a veces manda string)
   let body = req.body;
   if (typeof body === 'string') {
     try {
@@ -41,15 +41,14 @@ export default async function handler(req, res) {
       return res.status(400).json({ ok: false, error: 'JSON inválido' });
     }
   }
-  if (!body || typeof body !== 'object') {
-    return res.status(400).json({ ok: false, error: 'Body inválido' });
-  }
+  body = body && typeof body === 'object' ? body : {};
 
-  // 2) Validar estudiante
+  // ---- 1) Validar estudiante ----
   const student = body.student || {};
   const name = clean(student.name);
   const code = clean(student.code);
-  const email = clean(student.email || '');
+  const emailRaw = student.email == null ? null : clean(student.email);
+  const email = emailRaw ? emailRaw.toLowerCase() : null;
 
   if (!name || !code) {
     return res.status(400).json({ ok: false, error: 'Faltan nombre y/o código del estudiante' });
@@ -61,7 +60,7 @@ export default async function handler(req, res) {
     return res.status(400).json({ ok: false, error: 'Código inválido (solo números)' });
   }
 
-  // 3) Normalizar resumen / métricas
+  // ---- 2) Normalizar resumen / métricas (con defaults) ----
   const sum = body.summary || {};
   const ta = sum.tab_activity || {};
   const att = sum.attention || {};
@@ -69,51 +68,45 @@ export default async function handler(req, res) {
   const lip = sum.lips || {};
   const perf = sum.performance || {};
 
-  // aceptar exam:{score,total} o exam:{correct,total}
   const ex = body.exam || {};
-  const exScore = (ex.score != null ? num(ex.score, null) : (ex.correct != null ? num(ex.correct, null) : null));
-  const exTotal = (ex.total != null ? num(ex.total, null) : null);
+  const exScore = ex.score != null ? num(ex.score, null) : (ex.correct != null ? num(ex.correct, null) : null);
+  const exTotal = ex.total != null ? num(ex.total, null) : null;
 
-  const startedAt = ts(body.startedAt) || new Date();
-  const endedAt = ts(body.endedAt) || new Date();
-  const duration = Math.max(0, num(body.durationMs, 0));
+  const startedAt = toDate(body.startedAt) || new Date();
+  const endedAt = toDate(body.endedAt) || new Date();
+  const durationMs =
+    body.durationMs != null ? num(body.durationMs, 0) : Math.max(0, endedAt.getTime() - startedAt.getTime());
 
   const attemptSummary = {
     ...sum,
-    exam: exTotal != null ? { score: exScore ?? null, total: exTotal } : undefined
+    exam: exTotal != null ? { score: exScore ?? null, total: exTotal } : undefined,
   };
 
-  // 4) DB con transacción REAL (un solo client)
+  // ---- 3) DB ----
   const pool = getPool();
   const client = await pool.connect();
 
   try {
     await client.query('BEGIN');
 
-    // 4a) Obtener/crear student
+    // 3a) upsert student por code
     let studentId;
-    {
-      const q1 = await client.query(
-        'SELECT id FROM students WHERE code = $1 LIMIT 1',
-        [code]
-      );
+    const q1 = await client.query('SELECT id FROM students WHERE code = $1 LIMIT 1', [code]);
 
-      if (q1.rows.length) {
-        studentId = q1.rows[0].id;
-        await client.query(
-          'UPDATE students SET name=$1, email=$2 WHERE id=$3',
-          [name, email || null, studentId]
-        );
-      } else {
-        const q2 = await client.query(
-          'INSERT INTO students (id, code, name, email) VALUES (gen_random_uuid(), $1, $2, $3) RETURNING id',
-          [code, name, email || null]
-        );
-        studentId = q2.rows[0].id;
-      }
+    if (q1.rowCount) {
+      studentId = q1.rows[0].id;
+      await client.query('UPDATE students SET name=$1, email=$2 WHERE id=$3', [name, email, studentId]);
+    } else {
+      studentId = randomUUID();
+      await client.query(
+        'INSERT INTO students (id, code, name, email) VALUES ($1, $2, $3, $4)',
+        [studentId, code, name, email]
+      );
     }
 
-    // 4b) Insertar attempt
+    // 3b) insertar attempt
+    const attemptId = randomUUID();
+
     const insertAttempt = `
       INSERT INTO attempts (
         id, student_id, started_at, ended_at, duration_ms,
@@ -124,72 +117,77 @@ export default async function handler(req, res) {
         fps_median, latency_p95_ms, perf_overall,
         summary
       ) VALUES (
-        gen_random_uuid(), $1, $2, $3, $4,
-        $5, $6, $7, $8,
-        $9, $10, $11,
-        $12, $13,
-        $14, $15, $16,
-        $17, $18, $19,
-        $20
+        $1, $2, $3, $4, $5,
+        $6, $7, $8, $9,
+        $10, $11, $12,
+        $13, $14,
+        $15, $16, $17,
+        $18, $19, $20,
+        $21
       )
-      RETURNING id
     `;
 
     const vals = [
+      attemptId,
       studentId,
-      startedAt, endedAt, duration,
+      startedAt,
+      endedAt,
+      durationMs,
 
-      num(ta.off_episodes, 0),
-      num(ta.off_total_ms, 0),
-      num(ta.off_longest_ms, 0),
-      num(ta.threshold_ms ?? ta.offThresholdMs ?? ta.off_threshold_ms ?? 1500, 1500),
+      num(ta.off_episodes),
+      num(ta.off_total_ms),
+      num(ta.off_longest_ms),
+      num(ta.threshold_ms ?? ta.offThresholdMs ?? 1500),
 
-      num(att.lookaway_episodes, 0),
-      num(att.lookaway_total_ms, 0),
-      num(att.lookaway_longest_ms, 0),
+      num(att.lookaway_episodes),
+      num(att.lookaway_total_ms),
+      num(att.lookaway_longest_ms),
 
-      num(occ.episodes, 0),
-      num(occ.total_ms, 0),
+      num(occ.episodes),
+      num(occ.total_ms),
 
-      num(lip.speak_episodes, 0),
-      num(lip.speak_total_ms, 0),
-      num(lip.speak_longest_ms, 0),
+      num(lip.speak_episodes),
+      num(lip.speak_total_ms),
+      num(lip.speak_longest_ms),
 
-      num(perf.fps_median, 0),
-      num(perf.latency_p95_ms ?? perf.p95 ?? 0, 0),
+      num(perf.fps_median),
+      num(perf.latency_p95_ms ?? perf.p95),
       String(perf.perf_overall ?? perf.overall ?? ''),
 
-      attemptSummary
+      attemptSummary,
     ];
 
-    const a = await client.query(insertAttempt, vals);
-    const attemptId = a.rows[0].id;
+    await client.query(insertAttempt, vals);
 
-    // 4c) Evidencias (acepta evidences[] o evidence[])
-    const evidList = Array.isArray(body.evidences) ? body.evidences
-      : Array.isArray(body.evidence) ? body.evidence
-      : [];
+    // 3c) evidences (acepta evidences[] o evidence[])
+    const evidList = Array.isArray(body.evidences)
+      ? body.evidences
+      : Array.isArray(body.evidence)
+        ? body.evidence
+        : [];
 
-    for (const ev of evidList.slice(-200)) { // límite por seguridad
+    for (const ev of evidList) {
       await client.query(
         `INSERT INTO evidences (attempt_id, taken_at, kind, note, image_base64)
          VALUES ($1, $2, $3, $4, $5)`,
         [
           attemptId,
-          ts(ev?.t) || new Date(),
+          toDate(ev?.t) || new Date(),
           String(ev?.kind || 'alert').slice(0, 60),
-          ev?.note ? String(ev.note).slice(0, 500) : null,
-          ev?.data || null
+          ev?.note || null,
+          ev?.data || null,
         ]
       );
     }
 
     await client.query('COMMIT');
 
-    // Devuelve ambos para compatibilidad (tu pytest acepta attempt_id o id)
+    // devuelvo ambos por compatibilidad con tu pytest
     return res.status(200).json({ ok: true, attempt_id: attemptId, id: attemptId });
   } catch (err) {
-    try { await client.query('ROLLBACK'); } catch {}
+    try {
+      await client.query('ROLLBACK');
+    } catch {}
     console.error('[attempt/create] ERROR:', err);
     return res.status(500).json({ ok: false, error: String(err?.message || err) });
   } finally {
