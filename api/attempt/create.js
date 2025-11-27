@@ -5,83 +5,115 @@ function num(v, d = 0) {
   const n = Number(v);
   return Number.isFinite(n) ? n : d;
 }
+
 function ts(v) {
-  // acepta Date.now(), ISO, o ya Date
   try {
     if (!v) return null;
     if (v instanceof Date) return v;
     const d = new Date(v);
     return isNaN(d.getTime()) ? null : d;
-  } catch { return null; }
+  } catch {
+    return null;
+  }
 }
+
+// Normaliza: colapsa espacios, recorta, y mantiene unicode estable
+const clean = (s = '') => String(s).normalize('NFKC').replace(/\s+/g, ' ').trim();
+
+// Nombre 2–60, solo letras + espacio/apóstrofo/guion
+const NAME_RE =
+  /^(?=.{2,60}$)[A-Za-zÁÉÍÓÚÜÑáéíóúüñ]+(?:[ '\-][A-Za-zÁÉÍÓÚÜÑáéíóúüñ]+)*$/;
+
+// Código SOLO numérico (1–20 dígitos)
+const CODE_RE = /^\d{1,20}$/;
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
-    return res.status(405).json({ ok:false, error:'Method not allowed' });
+    return res.status(405).json({ ok: false, error: 'Method not allowed' });
   }
 
+  // 1) Leer body (puede venir como objeto o string)
   let body = req.body;
   if (typeof body === 'string') {
-    try { body = JSON.parse(body); } 
-    catch { return res.status(400).json({ ok:false, error:'JSON inválido' }); }
+    try {
+      body = JSON.parse(body);
+    } catch {
+      return res.status(400).json({ ok: false, error: 'JSON inválido' });
+    }
+  }
+  if (!body || typeof body !== 'object') {
+    return res.status(400).json({ ok: false, error: 'Body inválido' });
   }
 
+  // 2) Validar estudiante
+  const student = body.student || {};
+  const name = clean(student.name);
+  const code = clean(student.code);
+  const email = clean(student.email || '');
+
+  if (!name || !code) {
+    return res.status(400).json({ ok: false, error: 'Faltan nombre y/o código del estudiante' });
+  }
+  if (!NAME_RE.test(name)) {
+    return res.status(400).json({ ok: false, error: 'Nombre inválido' });
+  }
+  if (!CODE_RE.test(code)) {
+    return res.status(400).json({ ok: false, error: 'Código inválido (solo números)' });
+  }
+
+  // 3) Normalizar resumen / métricas
+  const sum = body.summary || {};
+  const ta = sum.tab_activity || {};
+  const att = sum.attention || {};
+  const occ = sum.occlusion || {};
+  const lip = sum.lips || {};
+  const perf = sum.performance || {};
+
+  // aceptar exam:{score,total} o exam:{correct,total}
+  const ex = body.exam || {};
+  const exScore = (ex.score != null ? num(ex.score, null) : (ex.correct != null ? num(ex.correct, null) : null));
+  const exTotal = (ex.total != null ? num(ex.total, null) : null);
+
+  const startedAt = ts(body.startedAt) || new Date();
+  const endedAt = ts(body.endedAt) || new Date();
+  const duration = Math.max(0, num(body.durationMs, 0));
+
+  const attemptSummary = {
+    ...sum,
+    exam: exTotal != null ? { score: exScore ?? null, total: exTotal } : undefined
+  };
+
+  // 4) DB con transacción REAL (un solo client)
+  const pool = getPool();
+  const client = await pool.connect();
+
   try {
-    // ---- 1) Validar estudiante ----
-    const student = body.student || {};
-    const name  = (student.name || '').trim();
-    const code  = (student.code || '').trim();
-    const email = (student.email || null);
+    await client.query('BEGIN');
 
-    if (!name || !code) {
-      return res.status(400).json({ ok:false, error:'Faltan nombre y/o código del estudiante' });
-    }
-
-    // ---- 2) Normalizar resumen / métricas ----
-    const sum  = body.summary || {};
-    const ta   = sum.tab_activity || {};
-    const att  = sum.attention     || {};
-    const occ  = sum.occlusion     || {};
-    const lip  = sum.lips          || {};
-    const perf = sum.performance   || {};
-
-    // aceptar exam:{score,total} o exam:{correct,total}
-    const ex    = body.exam || {};
-    const exScore = num(ex.score != null ? ex.score : ex.correct, null);
-    const exTotal = num(ex.total, null);
-
-    const startedAt = ts(body.startedAt) || new Date();
-    const endedAt   = ts(body.endedAt)   || new Date();
-    const duration  = num(body.durationMs);
-
-    // ---- 3) DB ----
-    const pool = getPool();
-    await pool.query('BEGIN');
-
-    // 3a) Obtener/crear student
+    // 4a) Obtener/crear student
     let studentId;
     {
-      const q1 = await pool.query(
+      const q1 = await client.query(
         'SELECT id FROM students WHERE code = $1 LIMIT 1',
         [code]
       );
+
       if (q1.rows.length) {
         studentId = q1.rows[0].id;
-        // actualizar nombre/email por si cambian
-        await pool.query(
+        await client.query(
           'UPDATE students SET name=$1, email=$2 WHERE id=$3',
-          [name, email, studentId]
+          [name, email || null, studentId]
         );
       } else {
-        const q2 = await pool.query(
+        const q2 = await client.query(
           'INSERT INTO students (id, code, name, email) VALUES (gen_random_uuid(), $1, $2, $3) RETURNING id',
-          [code, name, email]
+          [code, name, email || null]
         );
         studentId = q2.rows[0].id;
       }
     }
 
-    // 3b) Insertar attempt
+    // 4b) Insertar attempt
     const insertAttempt = `
       INSERT INTO attempts (
         id, student_id, started_at, ended_at, duration_ms,
@@ -103,76 +135,64 @@ export default async function handler(req, res) {
       RETURNING id
     `;
 
-    const attemptSummary = {
-      ...sum,
-      exam: exTotal != null
-        ? { score: exScore ?? null, total: exTotal }
-        : undefined
-    };
-
     const vals = [
       studentId,
       startedAt, endedAt, duration,
-      num(ta.off_episodes), num(ta.off_total_ms), num(ta.off_longest_ms), num(ta.threshold_ms ?? ta.offThresholdMs ?? 1500),
-      num(att.lookaway_episodes), num(att.lookaway_total_ms), num(att.lookaway_longest_ms),
-      num(occ.episodes), num(occ.total_ms),
-      num(lip.speak_episodes), num(lip.speak_total_ms), num(lip.speak_longest_ms),
-      num(perf.fps_median), num(perf.latency_p95_ms ?? perf.p95), String(perf.perf_overall ?? perf.overall ?? ''),
+
+      num(ta.off_episodes, 0),
+      num(ta.off_total_ms, 0),
+      num(ta.off_longest_ms, 0),
+      num(ta.threshold_ms ?? ta.offThresholdMs ?? ta.off_threshold_ms ?? 1500, 1500),
+
+      num(att.lookaway_episodes, 0),
+      num(att.lookaway_total_ms, 0),
+      num(att.lookaway_longest_ms, 0),
+
+      num(occ.episodes, 0),
+      num(occ.total_ms, 0),
+
+      num(lip.speak_episodes, 0),
+      num(lip.speak_total_ms, 0),
+      num(lip.speak_longest_ms, 0),
+
+      num(perf.fps_median, 0),
+      num(perf.latency_p95_ms ?? perf.p95 ?? 0, 0),
+      String(perf.perf_overall ?? perf.overall ?? ''),
+
       attemptSummary
     ];
 
-    const a = await pool.query(insertAttempt, vals);
+    const a = await client.query(insertAttempt, vals);
     const attemptId = a.rows[0].id;
 
-    // 3c) Evidencias (acepta evidences[] o evidence[])
+    // 4c) Evidencias (acepta evidences[] o evidence[])
     const evidList = Array.isArray(body.evidences) ? body.evidences
-                    : Array.isArray(body.evidence)  ? body.evidence
-                    : [];
-    for (const ev of evidList) {
-      await pool.query(
+      : Array.isArray(body.evidence) ? body.evidence
+      : [];
+
+    for (const ev of evidList.slice(-200)) { // límite por seguridad
+      await client.query(
         `INSERT INTO evidences (attempt_id, taken_at, kind, note, image_base64)
          VALUES ($1, $2, $3, $4, $5)`,
         [
           attemptId,
-          ts(ev.t) || new Date(),
-          (ev.kind || 'alert').slice(0,60),
-          ev.note || null,
-          ev.data || null
+          ts(ev?.t) || new Date(),
+          String(ev?.kind || 'alert').slice(0, 60),
+          ev?.note ? String(ev.note).slice(0, 500) : null,
+          ev?.data || null
         ]
       );
     }
 
-    await pool.query('COMMIT');
-    return res.status(200).json({ ok:true, attempt_id: attemptId });
+    await client.query('COMMIT');
+
+    // Devuelve ambos para compatibilidad (tu pytest acepta attempt_id o id)
+    return res.status(200).json({ ok: true, attempt_id: attemptId, id: attemptId });
   } catch (err) {
-    try { await getPool().query('ROLLBACK'); } catch {}
+    try { await client.query('ROLLBACK'); } catch {}
     console.error('[attempt/create] ERROR:', err);
-    return res.status(500).json({ ok:false, error: String(err.message || err) });
-  }
-}
-// api/attempt/create.js (Route Handler de Next/Vercel)
-export async function POST(req) {
-  try {
-    const body = await req.json();
-
-    const attempt = {
-      id: body.id,
-      student: body.student,
-      startedAt: body.startedAt,
-      endedAt: body.endedAt,
-      durationMs: body.durationMs,
-      summary: body.summary,
-      exam: body.exam ?? null,
-      evidences: Array.isArray(body.evidences) ? body.evidences.slice(-24) :
-                 Array.isArray(body.evidence)  ? body.evidence.slice(-24)  : [] // <- acepta ambas
-    };
-
-    // guarda en DB (usa tu repo)
-    const repo = getAttemptRepo(); // tu fábrica
-    await repo.save(attempt);
-
-    return Response.json({ ok: true, id: attempt.id });
-  } catch (e) {
-    return new Response(JSON.stringify({ ok:false, error: String(e?.message || e)}), { status: 500 });
+    return res.status(500).json({ ok: false, error: String(err?.message || err) });
+  } finally {
+    client.release();
   }
 }
