@@ -1,0 +1,173 @@
+openapi: 3.0.3
+info:
+  title: Proctoring MVP API
+  version: "1.0.0"
+  description: Documentación de endpoints para pruebas post-despliegue (Swagger).
+
+servers:
+  - url: https://atencion-web-mvp.vercel.app
+
+paths:
+  /api/auth/login:
+    post:
+      summary: Login de usuario
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password]
+              properties:
+                email: { type: string, example: "carlosrz@gmail.com" }
+                password: { type: string, example: "carlos123" }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok: { type: boolean, example: true }
+                  role: { type: string, example: "Profesor" }
+                  token: { type: string, nullable: true, description: "Si tu backend usa token, aquí vendría." }
+        "400":
+          description: Datos inválidos
+
+  /api/attempt/create:
+    post:
+      summary: Crear intento (guardar métricas y evidencias)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AttemptCreateRequest"
+      responses:
+        "200":
+          description: Intento creado
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok: { type: boolean, example: true }
+                  attempt_id: { type: string, example: "4d2c..." }
+        "400":
+          description: Validación fallida
+        "500":
+          description: Error interno
+
+  /api/attempt/list:
+    get:
+      summary: Listar intentos
+      parameters:
+        - in: query
+          name: limit
+          schema: { type: integer, example: 50 }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok: { type: boolean, example: true }
+                  items:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/AttemptListItem"
+
+  /api/attempt/get:
+    get:
+      summary: Obtener detalle de un intento
+      parameters:
+        - in: query
+          name: id
+          required: true
+          schema: { type: string, example: "4d2c..." }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok: { type: boolean, example: true }
+                  attempt:
+                    $ref: "#/components/schemas/AttemptDetail"
+        "404":
+          description: No encontrado
+
+components:
+  schemas:
+    Student:
+      type: object
+      properties:
+        name: { type: string, example: "Pytest Estudiante" }
+        code: { type: string, example: "12345678" }
+        email: { type: string, nullable: true, example: "pytest@example.com" }
+
+    AttemptCreateRequest:
+      type: object
+      required: [student, summary]
+      properties:
+        student:
+          $ref: "#/components/schemas/Student"
+        startedAt: { type: string, nullable: true, example: "2025-11-21T10:00:00Z" }
+        endedAt:   { type: string, nullable: true, example: "2025-11-21T10:00:10Z" }
+        durationMs: { type: integer, nullable: true, example: 10000 }
+        summary:
+          type: object
+          description: Resumen de métricas del monitoreo
+        exam:
+          type: object
+          nullable: true
+          properties:
+            score: { type: integer, example: 3 }
+            total: { type: integer, example: 10 }
+        evidences:
+          type: array
+          items:
+            type: object
+            properties:
+              t: { type: string, nullable: true, example: "2025-11-21T10:00:05Z" }
+              kind: { type: string, example: "alert" }
+              note: { type: string, nullable: true, example: "Lookaway detectado" }
+              data: { type: string, nullable: true, description: "Base64 si aplica" }
+
+    AttemptListItem:
+      type: object
+      properties:
+        id: { type: string, example: "4d2c..." }
+        student:
+          $ref: "#/components/schemas/Student"
+        startedAt: { type: string, nullable: true }
+        endedAt: { type: string, nullable: true }
+        durationMs: { type: integer, nullable: true }
+        exam:
+          type: object
+          nullable: true
+          properties:
+            score: { type: integer, example: 4 }
+            total: { type: integer, example: 10 }
+
+    AttemptDetail:
+      type: object
+      properties:
+        id: { type: string, example: "4d2c..." }
+        student:
+          $ref: "#/components/schemas/Student"
+        summary: { type: object }
+        exam:
+          type: object
+          nullable: true
+          properties:
+            score: { type: integer, example: 4 }
+            total: { type: integer, example: 10 }
+        evidences:
+          type: array
+          items: { type: object }
