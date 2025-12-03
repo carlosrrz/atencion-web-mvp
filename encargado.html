@@ -158,11 +158,6 @@ const payload = {
   }
 };
 
-const r = await fetch('/api/exams/set', {
-  method: 'POST',
-  headers: { 'Content-Type': 'application/json' },
-  body: JSON.stringify(payload)
-});
 
   // Solo dígitos en el código
   $code?.addEventListener('input', () => {
