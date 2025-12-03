@@ -110,7 +110,7 @@
     </div>
   </section>
 
-  
+
 <!-- === Crear examen sin archivo === -->
 <section class="card" style="margin-top:16px;">
   <h3 style="margin:0 0 10px 0;">Crear examen (sin archivo)</h3>
@@ -129,9 +129,41 @@
   <small style="opacity:.8; display:block; margin-top:8px;">
     Tip: crea 10 preguntas aquí mismo y listo (ya no necesitas JSON).
   </small>
+
+  
 </section>
 
 <script>
+  
+  const title = ($title?.value || '').trim();
+const code  = ($code?.value || '').trim();
+
+const questionsNormalized = questions.map(q => ({
+  text: (q.text || '').trim(),
+  options: (q.options || []).map(x => (x || '').trim()).filter(Boolean),
+  correctIndex: Number(q.correctIndex)
+}));
+
+// 👇 Payload “robusto” (por compatibilidad)
+const payload = {
+  title,
+  name: title,                 // <- por si el backend espera "name"
+  code,
+  questions: questionsNormalized,
+  exam: {                      // <- por si el backend espera body.exam
+    title,
+    name: title,
+    code,
+    questions: questionsNormalized
+  }
+};
+
+const r = await fetch('/api/exams/set', {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify(payload)
+});
+
   const $title = document.getElementById('manual-exam-title');
   const $code  = document.getElementById('manual-exam-code');
   const $qs    = document.getElementById('manual-questions');
@@ -665,7 +697,7 @@ $('#exam-upload').addEventListener('click', async ()=> {
     const r = await fetch('/api/exams/set', {
       method:'POST',
       headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({ name: rawName, accessCode: rawCode, questions })
+      body: JSON.stringify(payload)
     });
     let j; try { j = await r.json(); } catch { throw new Error('Respuesta no JSON'); }
     if (!r.ok || !j.ok) throw new Error(j.error || 'Error guardando el examen');
