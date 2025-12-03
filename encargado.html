@@ -129,16 +129,16 @@
   <small style="opacity:.8; display:block; margin-top:8px;">
     Tip: crea 10 preguntas aquí mismo y listo (ya no necesitas JSON).
   </small>
-
-  
 </section>
 
 <script>
-  
   const title = ($title?.value || '').trim();
 const code  = ($code?.value || '').trim();
+  const $qs    = document.getElementById('manual-questions');
+  const $addQ  = document.getElementById('btn-add-q');
+  const $save  = document.getElementById('btn-save-exam');
 
-const questionsNormalized = questions.map(q => ({
+  const questionsNormalized = questions.map(q => ({
   text: (q.text || '').trim(),
   options: (q.options || []).map(x => (x || '').trim()).filter(Boolean),
   correctIndex: Number(q.correctIndex)
@@ -163,12 +163,6 @@ const r = await fetch('/api/exams/set', {
   headers: { 'Content-Type': 'application/json' },
   body: JSON.stringify(payload)
 });
-
-  const $title = document.getElementById('manual-exam-title');
-  const $code  = document.getElementById('manual-exam-code');
-  const $qs    = document.getElementById('manual-questions');
-  const $addQ  = document.getElementById('btn-add-q');
-  const $save  = document.getElementById('btn-save-exam');
 
   // Solo dígitos en el código
   $code?.addEventListener('input', () => {
