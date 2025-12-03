@@ -110,40 +110,172 @@
     </div>
   </section>
 
-  <section class="card" style="margin-top:16px;">
-  <h3>Crear examen (sin JSON)</h3>
+<!-- === Crear examen sin archivo === -->
+<section class="card" style="margin-top:16px;">
+  <h3 style="margin:0 0 10px 0;">Crear examen (sin archivo)</h3>
 
-  <div class="form-grid" style="display:grid; gap:10px; grid-template-columns: 1fr 1fr;">
-    <div>
-      <label>Nombre del examen</label>
-      <input id="ex_name" class="input" type="text" placeholder="Ej: Lean Startup - Parcial" />
-    </div>
-    <div>
-      <label>Código de examen</label>
-      <input id="ex_code" class="input" type="text" inputmode="numeric" placeholder="Ej: 12345" />
-      <small style="opacity:.8;">Solo números (recomendado)</small>
-    </div>
+  <input id="manual-exam-title" class="input" placeholder="Nombre del examen" />
+  <input id="manual-exam-code"  class="input" placeholder="Código de examen (solo números)"
+         inputmode="numeric" autocomplete="off" />
+
+  <div id="manual-questions" style="margin-top:12px;"></div>
+
+  <div style="display:flex; gap:10px; margin-top:12px; flex-wrap:wrap;">
+    <button id="btn-add-q" class="btn">Agregar pregunta</button>
+    <button id="btn-save-exam" class="btn primary">Guardar y activar</button>
   </div>
 
-  <div style="margin-top:12px;">
-    <div style="display:flex; gap:10px; align-items:center; justify-content:space-between;">
-      <h4 style="margin:0;">Preguntas</h4>
-      <div style="display:flex; gap:8px;">
-        <button id="btn_add_q" class="btn">+ Añadir pregunta</button>
-        <button id="btn_clear_q" class="btn btn-ghost">Limpiar</button>
-      </div>
-    </div>
-
-    <div id="questions_wrap" style="margin-top:10px; display:flex; flex-direction:column; gap:12px;"></div>
-
-    <div style="margin-top:14px; display:flex; gap:10px; flex-wrap:wrap;">
-      <button id="btn_preview_json" class="btn btn-ghost">Ver JSON (preview)</button>
-      <button id="btn_save_activate" class="btn btn-primary">Guardar y activar</button>
-    </div>
-
-    <pre id="json_preview" style="display:none; margin-top:12px; padding:12px; border-radius:12px; background:#0b1220; border:1px solid rgba(255,255,255,.08); overflow:auto;"></pre>
-  </div>
+  <small style="opacity:.8; display:block; margin-top:8px;">
+    Tip: crea 10 preguntas aquí mismo y listo (ya no necesitas JSON).
+  </small>
 </section>
+
+<script>
+  const $title = document.getElementById('manual-exam-title');
+  const $code  = document.getElementById('manual-exam-code');
+  const $qs    = document.getElementById('manual-questions');
+  const $addQ  = document.getElementById('btn-add-q');
+  const $save  = document.getElementById('btn-save-exam');
+
+  // Solo dígitos en el código
+  $code?.addEventListener('input', () => {
+    $code.value = ($code.value || '').replace(/\D+/g, '');
+  });
+
+  let questions = [];
+
+  function addQuestion() {
+    questions.push({
+      text: '',
+      options: ['', '', '', ''],
+      correctIndex: 0
+    });
+    renderQuestions();
+  }
+
+  function removeQuestion(idx) {
+    questions.splice(idx, 1);
+    renderQuestions();
+  }
+
+  function renderQuestions() {
+    if (!$qs) return;
+    $qs.innerHTML = '';
+
+    questions.forEach((q, idx) => {
+      const wrap = document.createElement('div');
+      wrap.className = 'card';
+      wrap.style.marginTop = '10px';
+      wrap.style.padding = '12px';
+
+      wrap.innerHTML = `
+        <div style="display:flex; justify-content:space-between; gap:10px; align-items:center;">
+          <strong>Pregunta ${idx + 1}</strong>
+          <button class="btn" type="button" data-remove="${idx}">Quitar</button>
+        </div>
+
+        <input class="input" style="margin-top:10px;"
+               placeholder="Enunciado de la pregunta"
+               value="${q.text.replaceAll('"','&quot;')}" data-qtext="${idx}" />
+
+        <div style="margin-top:10px; display:grid; gap:8px;">
+          ${q.options.map((opt, j) => `
+            <input class="input"
+                   placeholder="Opción ${j + 1}"
+                   value="${String(opt).replaceAll('"','&quot;')}"
+                   data-opt="${idx}:${j}" />
+          `).join('')}
+        </div>
+
+        <div style="margin-top:10px; display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
+          <span style="opacity:.85;">Respuesta correcta:</span>
+          <select class="input" style="max-width:150px;" data-correct="${idx}">
+            ${q.options.map((_, j) => `
+              <option value="${j}" ${q.correctIndex === j ? 'selected' : ''}>Opción ${j + 1}</option>
+            `).join('')}
+          </select>
+        </div>
+      `;
+
+      $qs.appendChild(wrap);
+    });
+
+    // Binds (delegación)
+    $qs.querySelectorAll('[data-qtext]').forEach(inp => {
+      inp.addEventListener('input', (e) => {
+        const i = Number(e.target.dataset.qtext);
+        questions[i].text = e.target.value;
+      });
+    });
+
+    $qs.querySelectorAll('[data-opt]').forEach(inp => {
+      inp.addEventListener('input', (e) => {
+        const [i, j] = e.target.dataset.opt.split(':').map(Number);
+        questions[i].options[j] = e.target.value;
+      });
+    });
+
+    $qs.querySelectorAll('[data-correct]').forEach(sel => {
+      sel.addEventListener('change', (e) => {
+        const i = Number(e.target.dataset.correct);
+        questions[i].correctIndex = Number(e.target.value);
+      });
+    });
+
+    $qs.querySelectorAll('[data-remove]').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        removeQuestion(Number(e.target.dataset.remove));
+      });
+    });
+  }
+
+  $addQ?.addEventListener('click', () => addQuestion());
+
+  $save?.addEventListener('click', async () => {
+    const title = ($title?.value || '').trim();
+    const code  = ($code?.value || '').trim();
+
+    if (!title) return alert('Escribe el nombre del examen.');
+    if (!/^[0-9]{3,20}$/.test(code)) return alert('Código inválido (solo números, 3-20 dígitos).');
+    if (!questions.length) return alert('Agrega al menos 1 pregunta.');
+
+    const examPayload = {
+      title,
+      code,
+      questions: questions.map(q => ({
+        text: (q.text || '').trim(),
+        options: (q.options || []).map(x => (x || '').trim()).filter(Boolean),
+        correctIndex: Number(q.correctIndex)
+      }))
+    };
+
+    $save.disabled = true;
+    const old = $save.textContent;
+    $save.textContent = 'Guardando...';
+
+    try {
+      const r = await fetch('/api/exams/set', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(examPayload)
+      });
+      const data = await r.json().catch(() => ({}));
+
+      if (!r.ok || !data?.ok) throw new Error(data?.error || `Error ${r.status}`);
+
+      alert('Examen guardado y activado ✅');
+    } catch (e) {
+      console.error(e);
+      alert(e.message || 'No se pudo guardar el examen.');
+    } finally {
+      $save.disabled = false;
+      $save.textContent = old;
+    }
+  });
+
+  // opcional: inicia con 10 preguntas vacías
+  // for (let i=0;i<10;i++) addQuestion();
+</script>
 
 
   <!-- Modal detalle -->
