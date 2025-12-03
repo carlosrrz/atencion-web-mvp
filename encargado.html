@@ -148,6 +148,17 @@
     const EXAM_NAME_RE = /^[A-Za-zÁÉÍÓÚÜÑáéíóúüñ ]{3,60}$/;
     const EXAM_CODE_RE = /^[0-9]{4,8}$/;
 
+    // ✅ Permitir texto “normal”: letras, números, espacios, tildes y signos comunes
+// (bloquea @ # $ etc.)
+const HAS_ALNUM_RE = /[A-Za-zÁÉÍÓÚÜÑáéíóúüñ]/;
+
+// Enunciado (3 a 200 chars)
+const Q_TEXT_RE = /^[A-Za-z0-9ÁÉÍÓÚÜÑáéíóúüñ¿?¡!.,:;'"()\-_/+=*%<> ]{3,200}$/;
+
+// Opciones (1 a 120 chars)
+const OPT_TEXT_RE = /^[A-Za-z0-9ÁÉÍÓÚÜÑáéíóúüñ¿?¡!.,:;'"()\-_/+=*%<> ]{1,120}$/;
+
+
     let questions = [];
 
     function addQuestion() {
@@ -255,16 +266,35 @@
 
       // Validación rápida por pregunta (evita 400 por datos incompletos)
       for (let i = 0; i < questions.length; i++) {
-        const q = questions[i];
-        const text = (q.text || '').trim();
-        const opts = (q.options || []).map(x => (x || '').trim());
+  const q = questions[i];
+  const text = (q.text || '').trim();
+  const opts = (q.options || []).map(x => (x || '').trim());
 
-        if (!text) return alert(`Falta el enunciado en la pregunta ${i + 1}.`);
-        if (opts.some(o => !o)) return alert(`Completa TODAS las opciones en la pregunta ${i + 1}.`);
-        if (Number(q.correctIndex) < 0 || Number(q.correctIndex) > opts.length - 1) {
-          return alert(`Respuesta correcta inválida en la pregunta ${i + 1}.`);
-        }
-      }
+  if (!text) return alert(`Falta el enunciado en la pregunta ${i + 1}.`);
+  if (!Q_TEXT_RE.test(text) || !HAS_ALNUM_RE.test(text)) {
+    return alert(`Pregunta ${i + 1}: enunciado inválido. Usa solo letras/números y signos comunes (no @@@@).`);
+  }
+
+  if (opts.some(o => !o)) return alert(`Completa TODAS las opciones en la pregunta ${i + 1}.`);
+
+  // Validar cada opción
+  for (let j = 0; j < opts.length; j++) {
+    const o = opts[j];
+    if (!OPT_TEXT_RE.test(o) || !HAS_ALNUM_RE.test(o)) {
+      return alert(`Pregunta ${i + 1}: la opción ${j + 1} es inválida. Evita caracteres como @ # $.`);
+    }
+  }
+
+  // (Opcional) evitar opciones repetidas
+  const norm = opts.map(o => o.toLowerCase());
+  if (new Set(norm).size !== norm.length) {
+    return alert(`Pregunta ${i + 1}: hay opciones repetidas. Cámbialas para que sean diferentes.`);
+  }
+
+  if (Number(q.correctIndex) < 0 || Number(q.correctIndex) > opts.length - 1) {
+    return alert(`Pregunta ${i + 1}: respuesta correcta inválida.`);
+  }
+}
 
       // 👇 IMPORTANTE:
       // Tu "upload por archivo" manda { name, accessCode, questions[{text, options, correct}] }
