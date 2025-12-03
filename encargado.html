@@ -72,9 +72,9 @@
   <main class="wrap">
     <div class="row" style="justify-content:space-between;margin-bottom:12px">
       <div class="row">
-  <button id="btn-export-all" class="secondary">Exportar CSV (todos)</button>
-  <button id="btn-clear" class="secondary">Borrar registros</button>
-</div>
+        <button id="btn-export-all" class="secondary">Exportar CSV (todos)</button>
+        <button id="btn-clear" class="secondary">Borrar registros</button>
+      </div>
 
       <span class="pill" id="count-pill">0 intentos</span>
     </div>
@@ -110,173 +110,230 @@
     </div>
   </section>
 
-<!-- === Crear examen sin archivo === -->
-<section class="card" style="margin-top:16px;">
-  <h3 style="margin:0 0 10px 0;">Crear examen (sin archivo)</h3>
+  <!-- === Crear examen sin archivo === -->
+  <section class="card" style="margin-top:16px; max-width:1200px;">
+    <h3 style="margin:0 0 10px 0;">Crear examen (sin archivo)</h3>
 
-  <input id="manual-exam-title" class="input" placeholder="Nombre del examen" />
-  <input id="manual-exam-code"  class="input" placeholder="Código de examen (solo números)"
-         inputmode="numeric" autocomplete="off" />
+    <div class="row" style="flex-direction:column;gap:10px">
+      <input id="manual-exam-title" class="auth-input" placeholder="Nombre del examen" />
+      <input id="manual-exam-code"  class="auth-input" placeholder="Código de examen (solo números)"
+             inputmode="numeric" autocomplete="off" />
+    </div>
 
-  <div id="manual-questions" style="margin-top:12px;"></div>
+    <div id="manual-questions" style="margin-top:12px;"></div>
 
-  <div style="display:flex; gap:10px; margin-top:12px; flex-wrap:wrap;">
-    <button id="btn-add-q" class="btn">Agregar pregunta</button>
-    <button id="btn-save-exam" class="btn primary">Guardar y activar</button>
-  </div>
+    <div class="row" style="gap:10px; margin-top:12px;">
+      <button id="btn-add-q" class="secondary" type="button">Agregar pregunta</button>
+      <button id="btn-save-exam" class="primary" type="button">Guardar y activar</button>
+    </div>
 
-  <small style="opacity:.8; display:block; margin-top:8px;">
-    Tip: crea 10 preguntas aquí mismo y listo (ya no necesitas JSON).
-  </small>
-</section>
+    <small style="opacity:.8; display:block; margin-top:8px;">
+      Tip: crea 10 preguntas aquí mismo y listo (ya no necesitas JSON).
+    </small>
+  </section>
 
-<script>
-  const $title = document.getElementById('manual-exam-title');
-  const $code  = document.getElementById('manual-exam-code');
-  const $qs    = document.getElementById('manual-questions');
-  const $addQ  = document.getElementById('btn-add-q');
-  const $save  = document.getElementById('btn-save-exam');
+  <script>
+    const $title = document.getElementById('manual-exam-title');
+    const $code  = document.getElementById('manual-exam-code');
+    const $qs    = document.getElementById('manual-questions');
+    const $addQ  = document.getElementById('btn-add-q');
+    const $save  = document.getElementById('btn-save-exam');
 
-  // Solo dígitos en el código
-  $code?.addEventListener('input', () => {
-    $code.value = ($code.value || '').replace(/\D+/g, '');
-  });
-
-  let questions = [];
-
-  function addQuestion() {
-    questions.push({
-      text: '',
-      options: ['', '', '', ''],
-      correctIndex: 0
-    });
-    renderQuestions();
-  }
-
-  function removeQuestion(idx) {
-    questions.splice(idx, 1);
-    renderQuestions();
-  }
-
-  function renderQuestions() {
-    if (!$qs) return;
-    $qs.innerHTML = '';
-
-    questions.forEach((q, idx) => {
-      const wrap = document.createElement('div');
-      wrap.className = 'card';
-      wrap.style.marginTop = '10px';
-      wrap.style.padding = '12px';
-
-      wrap.innerHTML = `
-        <div style="display:flex; justify-content:space-between; gap:10px; align-items:center;">
-          <strong>Pregunta ${idx + 1}</strong>
-          <button class="btn" type="button" data-remove="${idx}">Quitar</button>
-        </div>
-
-        <input class="input" style="margin-top:10px;"
-               placeholder="Enunciado de la pregunta"
-               value="${q.text.replaceAll('"','&quot;')}" data-qtext="${idx}" />
-
-        <div style="margin-top:10px; display:grid; gap:8px;">
-          ${q.options.map((opt, j) => `
-            <input class="input"
-                   placeholder="Opción ${j + 1}"
-                   value="${String(opt).replaceAll('"','&quot;')}"
-                   data-opt="${idx}:${j}" />
-          `).join('')}
-        </div>
-
-        <div style="margin-top:10px; display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
-          <span style="opacity:.85;">Respuesta correcta:</span>
-          <select class="input" style="max-width:150px;" data-correct="${idx}">
-            ${q.options.map((_, j) => `
-              <option value="${j}" ${q.correctIndex === j ? 'selected' : ''}>Opción ${j + 1}</option>
-            `).join('')}
-          </select>
-        </div>
-      `;
-
-      $qs.appendChild(wrap);
+    // Solo dígitos en el código
+    $code?.addEventListener('input', () => {
+      $code.value = ($code.value || '').replace(/\D+/g, '');
     });
 
-    // Binds (delegación)
-    $qs.querySelectorAll('[data-qtext]').forEach(inp => {
-      inp.addEventListener('input', (e) => {
-        const i = Number(e.target.dataset.qtext);
-        questions[i].text = e.target.value;
+    // Validaciones similares a tu carga por archivo
+    const EXAM_NAME_RE = /^[A-Za-zÁÉÍÓÚÜÑáéíóúüñ ]{3,60}$/;
+    const EXAM_CODE_RE = /^[0-9]{4,8}$/;
+
+    let questions = [];
+
+    function addQuestion() {
+      questions.push({
+        text: '',
+        options: ['', '', '', ''],
+        correctIndex: 0
       });
-    });
-
-    $qs.querySelectorAll('[data-opt]').forEach(inp => {
-      inp.addEventListener('input', (e) => {
-        const [i, j] = e.target.dataset.opt.split(':').map(Number);
-        questions[i].options[j] = e.target.value;
-      });
-    });
-
-    $qs.querySelectorAll('[data-correct]').forEach(sel => {
-      sel.addEventListener('change', (e) => {
-        const i = Number(e.target.dataset.correct);
-        questions[i].correctIndex = Number(e.target.value);
-      });
-    });
-
-    $qs.querySelectorAll('[data-remove]').forEach(btn => {
-      btn.addEventListener('click', (e) => {
-        removeQuestion(Number(e.target.dataset.remove));
-      });
-    });
-  }
-
-  $addQ?.addEventListener('click', () => addQuestion());
-
-  $save?.addEventListener('click', async () => {
-    const title = ($title?.value || '').trim();
-    const code  = ($code?.value || '').trim();
-
-    if (!title) return alert('Escribe el nombre del examen.');
-    if (!/^[0-9]{3,20}$/.test(code)) return alert('Código inválido (solo números, 3-20 dígitos).');
-    if (!questions.length) return alert('Agrega al menos 1 pregunta.');
-
-    const examPayload = {
-      title,
-      code,
-      questions: questions.map(q => ({
-        text: (q.text || '').trim(),
-        options: (q.options || []).map(x => (x || '').trim()).filter(Boolean),
-        correctIndex: Number(q.correctIndex)
-      }))
-    };
-
-    $save.disabled = true;
-    const old = $save.textContent;
-    $save.textContent = 'Guardando...';
-
-    try {
-      const r = await fetch('/api/exams/set', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(examPayload)
-      });
-      const data = await r.json().catch(() => ({}));
-
-      if (!r.ok || !data?.ok) throw new Error(data?.error || `Error ${r.status}`);
-
-      alert('Examen guardado y activado ✅');
-    } catch (e) {
-      console.error(e);
-      alert(e.message || 'No se pudo guardar el examen.');
-    } finally {
-      $save.disabled = false;
-      $save.textContent = old;
+      renderQuestions();
     }
-  });
 
-  // opcional: inicia con 10 preguntas vacías
-  // for (let i=0;i<10;i++) addQuestion();
-</script>
+    function removeQuestion(idx) {
+      questions.splice(idx, 1);
+      renderQuestions();
+    }
 
+    function escAttr(s){
+      return String(s ?? '').replaceAll('"','&quot;');
+    }
+
+    function renderQuestions() {
+      if (!$qs) return;
+      $qs.innerHTML = '';
+
+      questions.forEach((q, idx) => {
+        const wrap = document.createElement('div');
+        wrap.className = 'card';
+        wrap.style.marginTop = '10px';
+        wrap.style.padding = '12px';
+
+        wrap.innerHTML = `
+          <div style="display:flex; justify-content:space-between; gap:10px; align-items:center;">
+            <strong>Pregunta ${idx + 1}</strong>
+            <button class="secondary" type="button" data-remove="${idx}">Quitar</button>
+          </div>
+
+          <input class="auth-input" style="margin-top:10px;"
+                 placeholder="Enunciado de la pregunta"
+                 value="${escAttr(q.text)}" data-qtext="${idx}" />
+
+          <div style="margin-top:10px; display:grid; gap:8px;">
+            ${q.options.map((opt, j) => `
+              <input class="auth-input"
+                     placeholder="Opción ${j + 1}"
+                     value="${escAttr(opt)}"
+                     data-opt="${idx}:${j}" />
+            `).join('')}
+          </div>
+
+          <div style="margin-top:10px; display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
+            <span style="opacity:.85;">Respuesta correcta:</span>
+            <select class="auth-input" style="max-width:180px; height:44px;" data-correct="${idx}">
+              ${q.options.map((_, j) => `
+                <option value="${j}" ${Number(q.correctIndex) === j ? 'selected' : ''}>Opción ${j + 1}</option>
+              `).join('')}
+            </select>
+          </div>
+        `;
+
+        $qs.appendChild(wrap);
+      });
+
+      // Binds (delegación)
+      $qs.querySelectorAll('[data-qtext]').forEach(inp => {
+        inp.addEventListener('input', (e) => {
+          const i = Number(e.target.dataset.qtext);
+          questions[i].text = e.target.value;
+        });
+      });
+
+      $qs.querySelectorAll('[data-opt]').forEach(inp => {
+        inp.addEventListener('input', (e) => {
+          const [i, j] = e.target.dataset.opt.split(':').map(Number);
+          questions[i].options[j] = e.target.value;
+        });
+      });
+
+      $qs.querySelectorAll('[data-correct]').forEach(sel => {
+        sel.addEventListener('change', (e) => {
+          const i = Number(e.target.dataset.correct);
+          questions[i].correctIndex = Number(e.target.value);
+        });
+      });
+
+      $qs.querySelectorAll('[data-remove]').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+          removeQuestion(Number(e.target.dataset.remove));
+        });
+      });
+    }
+
+    $addQ?.addEventListener('click', () => addQuestion());
+
+    $save?.addEventListener('click', async () => {
+      const title = ($title?.value || '').trim();
+      const code  = ($code?.value || '').trim();
+
+      if (!title) return alert('Escribe el nombre del examen.');
+      if (!EXAM_NAME_RE.test(title)) return alert('Nombre inválido (solo letras y espacios, 3–60).');
+
+      if (!code) return alert('Escribe el código del examen.');
+      if (!EXAM_CODE_RE.test(code)) return alert('Código inválido (solo números, 4–8 dígitos).');
+
+      if (!questions.length) return alert('Agrega al menos 1 pregunta.');
+
+      // Validación rápida por pregunta (evita 400 por datos incompletos)
+      for (let i = 0; i < questions.length; i++) {
+        const q = questions[i];
+        const text = (q.text || '').trim();
+        const opts = (q.options || []).map(x => (x || '').trim());
+
+        if (!text) return alert(`Falta el enunciado en la pregunta ${i + 1}.`);
+        if (opts.some(o => !o)) return alert(`Completa TODAS las opciones en la pregunta ${i + 1}.`);
+        if (Number(q.correctIndex) < 0 || Number(q.correctIndex) > opts.length - 1) {
+          return alert(`Respuesta correcta inválida en la pregunta ${i + 1}.`);
+        }
+      }
+
+      // 👇 IMPORTANTE:
+      // Tu "upload por archivo" manda { name, accessCode, questions[{text, options, correct}] }
+      // Entonces el manual debe mandar lo mismo + duplicado por compatibilidad.
+      const normalizedQuestions = questions.map((q, i) => {
+        const opts = (q.options || []).map(x => (x || '').trim());
+        const correctIndex = Number(q.correctIndex);
+
+        return {
+          id: `q_${i + 1}`,
+          text: (q.text || '').trim(),
+          options: opts.map(String),
+          correct: correctIndex,        // <- como tu carga por archivo (backend-friendly)
+          correctIndex: correctIndex     // <- extra por compatibilidad
+        };
+      });
+
+      const payload = {
+        // Forma esperada (según tu carga por archivo)
+        name: title,
+        accessCode: code,
+        questions: normalizedQuestions,
+
+        // Duplicado por compatibilidad (por si tu backend valida otros campos)
+        title,
+        code,
+        exam: {
+          name: title,
+          title,
+          accessCode: code,
+          code,
+          questions: normalizedQuestions
+        }
+      };
+
+      $save.disabled = true;
+      const old = $save.textContent;
+      $save.textContent = 'Guardando...';
+
+      try {
+        const r = await fetch('/api/exams/set', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+        const data = await r.json().catch(() => ({}));
+
+        if (!r.ok || !data?.ok) throw new Error(data?.error || `Error ${r.status}`);
+
+        alert('Examen guardado y activado ✅');
+
+        // opcional: limpiar todo después de guardar
+        // $title.value = '';
+        // $code.value = '';
+        // questions = [];
+        // renderQuestions();
+
+      } catch (e) {
+        console.error(e);
+        alert(e.message || 'No se pudo guardar el examen.');
+      } finally {
+        $save.disabled = false;
+        $save.textContent = old;
+      }
+    });
+
+    // Si quieres iniciar ya con 1 pregunta para que no se vea vacío:
+    if (questions.length === 0) addQuestion();
+  </script>
 
   <!-- Modal detalle -->
   <div id="backdrop" class="backdrop" aria-hidden="true"></div>
@@ -298,31 +355,17 @@
 
   <script type="module">
     import { requireRole, clearSession } from './src/roles.js';
-requireRole('prof');
+    requireRole('prof');
 
-// Evitar que la vista se "reviva" con el botón Atrás
-window.addEventListener('pageshow', (event) => {
-  const nav = performance.getEntriesByType('navigation')[0];
-  const isBackForward = event.persisted || nav?.type === 'back_forward';
+    // Evitar que la vista se "reviva" con el botón Atrás
+    window.addEventListener('pageshow', (event) => {
+      const nav = performance.getEntriesByType('navigation')[0];
+      const isBackForward = event.persisted || nav?.type === 'back_forward';
 
-  if (isBackForward) {
-    location.reload();
-  }
-});
-
-
-    // Fuerza recarga cuando se vuelve con Atrás/Adelante
-window.addEventListener('pageshow', (event) => {
-  // event.persisted = true → la página vino del bfcache
-  const nav = performance.getEntriesByType('navigation')[0];
-  const isBackForward = event.persisted || nav?.type === 'back_forward';
-
-  if (isBackForward) {
-    // recarga desde el servidor → se vuelve a ejecutar requireRole(...)
-    location.reload();
-  }
-});
-
+      if (isBackForward) {
+        location.reload();
+      }
+    });
 
     const $ = (s)=>document.querySelector(s);
 
@@ -409,105 +452,96 @@ window.addEventListener('pageshow', (event) => {
       }
     }
 
-    // detalle (lazy-load evidencias)
-    function srcOf(it){
-      return it?.data || it?.image_base64 || it?.image || it?.img || it?.url || '';
-    }
+    async function openDetail(id){
+      let a = DATA.find(x => String(x.id) === String(id));
+      if (!a) return;
 
-     async function openDetail(id){
-    let a = DATA.find(x => String(x.id) === String(id));
-    if (!a) return;
+      CURRENT_ATTEMPT = a;
 
-    // 1) intenta usar lo que vino en la lista
-    let evidences = Array.isArray(a.evidences) ? a.evidences
-                  : Array.isArray(a.evidence)  ? a.evidence  : [];
-
-    // 2) si no hay, pide el detalle al backend (no falla si no existe el endpoint)
-    if (evidences.length === 0) {
-      try {
-        const r = await fetch(`/api/attempt/get?id=${encodeURIComponent(id)}`, { cache:'no-store' });
-        const j = await r.json().catch(()=>null);
-        if (j && j.ok && j.attempt) {
-          a = { ...a, ...j.attempt };
-          evidences = Array.isArray(a.evidences) ? a.evidences
+      // 1) intenta usar lo que vino en la lista
+      let evidences = Array.isArray(a.evidences) ? a.evidences
                     : Array.isArray(a.evidence)  ? a.evidence  : [];
+
+      // 2) si no hay, pide el detalle al backend
+      if (evidences.length === 0) {
+        try {
+          const r = await fetch(`/api/attempt/get?id=${encodeURIComponent(id)}`, { cache:'no-store' });
+          const j = await r.json().catch(()=>null);
+          if (j && j.ok && j.attempt) {
+            a = { ...a, ...j.attempt };
+            CURRENT_ATTEMPT = a;
+            evidences = Array.isArray(a.evidences) ? a.evidences
+                      : Array.isArray(a.evidence)  ? a.evidence  : [];
+          }
+        } catch (e) {
+          console.warn('[detail] fetch detalle falló:', e);
         }
-      } catch (e) {
-        console.warn('[detail] fetch detalle falló:', e);
       }
+
+      const srcOf = (it) => {
+        let s = it?.data || it?.image_base64 || it?.imageBase64 || it?.img || null;
+        if (s && !String(s).startsWith('data:')) s = `data:image/jpeg;base64,${s}`;
+        return s;
+      };
+
+      const off   = a.summary?.tab_activity?.off_episodes ?? a.summary?.off_episodes ?? 0;
+      const look  = a.summary?.attention?.lookaway_episodes ?? a.summary?.lookaway_episodes ?? 0;
+      const speak = a.summary?.lips?.speak_episodes ?? a.summary?.speak_episodes ?? 0;
+      const ex = a.exam || {};
+      const examTxt =
+        (ex.score   != null && ex.total != null) ? `${ex.score}/${ex.total}` :
+        (ex.correct != null && ex.total != null) ? `${ex.correct}/${ex.total}` : '—';
+
+      mTitle.textContent = `Intento ${a.id} — ${a.student?.name || ''}`;
+
+      mBody.innerHTML = `
+        <div class="row" style="margin-bottom:8px">
+          <span class="pill">Inicio: ${fmt(a.startedAt)}</span>
+          <span class="pill">Fin: ${fmt(a.endedAt)}</span>
+          <span class="pill">Duración: ${fmtTime(a.durationMs || 0)}</span>
+          <span class="pill">Examen: ${examTxt}</span>
+        </div>
+
+        <h4>Resumen</h4>
+        <ul>
+          <li>Off-tab (episodios): ${off}</li>
+          <li>Mirada desviada (episodios): ${look}</li>
+          <li>Posible habla (episodios): ${speak}</li>
+        </ul>
+
+        <h4>Evidencias</h4>
+        <div class="ev-grid" id="ev-grid">
+          ${
+            evidences.length
+              ? evidences.map(it => {
+                  const src = srcOf(it);
+                  return `
+                    <div class="ev-card">
+                      ${src ? `<img src="${src}" alt="${it.kind||'evidencia'}" />`
+                            : `<div class="muted" style="padding:10px;">Sin imagen adjunta</div>`}
+                      <div class="ev-note">
+                        ${fmt(it.t || it.taken_at || Date.now())} — ${it.note || ''}
+                      </div>
+                    </div>`;
+                }).join('')
+              : '<div class="muted">No hay evidencias capturadas.</div>'
+          }
+        </div>
+      `;
+
+      backdrop.style.display = 'block';
+      modal.style.display = 'block';
     }
 
-    // helpers
-    const srcOf = (it) => {
-      let s = it?.data || it?.image_base64 || it?.imageBase64 || it?.img || null;
-      if (s && !String(s).startsWith('data:')) s = `data:image/jpeg;base64,${s}`;
-      return s;
-    };
-    const off   = a.summary?.tab_activity?.off_episodes ?? a.summary?.off_episodes ?? 0;
-    const look  = a.summary?.attention?.lookaway_episodes ?? a.summary?.lookaway_episodes ?? 0;
-    const speak = a.summary?.lips?.speak_episodes ?? a.summary?.speak_episodes ?? 0;
-    const ex = a.exam || {};
-    const examTxt =
-      (ex.score   != null && ex.total != null) ? `${ex.score}/${ex.total}` :
-      (ex.correct != null && ex.total != null) ? `${ex.correct}/${ex.total}` : '—';
-
-    // título
-    mTitle.textContent = `Intento ${a.id} — ${a.student?.name || ''}`;
-
-    // ⚠️ SOLO UN mBody.innerHTML (no dejes otra asignación más abajo)
-    mBody.innerHTML = `
-      <div class="row" style="margin-bottom:8px">
-        <span class="pill">Inicio: ${fmt(a.startedAt)}</span>
-        <span class="pill">Fin: ${fmt(a.endedAt)}</span>
-        <span class="pill">Duración: ${fmtTime(a.durationMs || 0)}</span>
-        <span class="pill">Examen: ${examTxt}</span>
-      </div>
-
-      <h4>Resumen</h4>
-      <ul>
-        <li>Off-tab (episodios): ${off}</li>
-        <li>Mirada desviada (episodios): ${look}</li>
-        <li>Posible habla (episodios): ${speak}</li>
-      </ul>
-
-      <h4>Evidencias</h4>
-      <div class="ev-grid" id="ev-grid">
-        ${
-          evidences.length
-            ? evidences.map(it => {
-                const src = srcOf(it);
-                return `
-                  <div class="ev-card">
-                    <div class="pill pill-warn">${it.kind || 'alerta'}</div>
-                    ${src ? `<img src="${src}" alt="${it.kind||'evidencia'}" />`
-                          : `<div class="muted">Sin imagen adjunta</div>`}
-                    <div class="ev-note">
-                      ${fmt(it.t || it.taken_at || Date.now())} — ${it.note || ''}
-                    </div>
-                  </div>`;
-              }).join('')
-            : '<div class="muted">No hay evidencias capturadas.</div>'
-        }
-      </div>
-    `;
-
-    backdrop.style.display = 'block';
-    modal.style.display = 'block';
-  }
-
-    // delegación en tabla
     tblBody.addEventListener('click', (e) => {
-  const btn = e.target.closest('button[data-id]');
-  if (!btn) return;
-  openDetail(btn.dataset.id);
-});
+      const btn = e.target.closest('button[data-id]');
+      if (!btn) return;
+      openDetail(btn.dataset.id);
+    });
 
-
-    // cerrar modal
     mClose.addEventListener('click', ()=>{ backdrop.style.display='none'; modal.style.display='none'; });
     backdrop.addEventListener('click', (e)=>{ if(e.target===backdrop){ backdrop.style.display='none'; modal.style.display='none'; }});
 
-    // exportar CSV todos
     function toCSV(rows, headers){
       const esc = v => `"${String(v??'').replaceAll('"','""')}"`;
       const head = headers.map(esc).join(',');
@@ -539,7 +573,6 @@ window.addEventListener('pageshow', (event) => {
       URL.revokeObjectURL(a.href);
     });
 
-    // exportar CSV intento abierto
     mExport.addEventListener('click', ()=>{
       const row = CURRENT_ATTEMPT;
       if(!row){ showToast('Abre un intento primero', false); return; }
@@ -565,35 +598,28 @@ window.addEventListener('pageshow', (event) => {
       URL.revokeObjectURL(an.href);
     });
 
-    // borrar registros de la BD + limpiar cache local
-btnClr.addEventListener('click', async () => {
-  const ok = confirm(
-    'Esto eliminará TODOS los intentos registrados en el panel.\n¿Seguro que deseas continuar?'
-  );
-  if (!ok) return;
+    // borrar registros
+    btnClr.addEventListener('click', async () => {
+      const ok = confirm('Esto eliminará TODOS los intentos registrados en el panel.\n¿Seguro que deseas continuar?');
+      if (!ok) return;
 
-  try {
-    const r = await fetch('/api/attempt/clear', { method: 'POST' });
-    const j = await r.json().catch(() => null);
+      try {
+        const r = await fetch('/api/attempt/clear', { method: 'POST' });
+        const j = await r.json().catch(() => null);
 
-    if (!r.ok || !j?.ok) {
-      throw new Error(j?.error || 'No se pudieron borrar los intentos');
-    }
+        if (!r.ok || !j?.ok) throw new Error(j?.error || 'No se pudieron borrar los intentos');
 
-    // limpia cache local por si acaso
-    try { localStorage.removeItem('proctor.attempts'); } catch {}
+        try { localStorage.removeItem('proctor.attempts'); } catch {}
 
-    showToast(`Se eliminaron ${j.deleted ?? 0} intentos.`, true);
+        showToast(`Se eliminaron ${j.deleted ?? 0} intentos.`, true);
+        await loadAndRender();
+      } catch (e) {
+        console.error(e);
+        showToast(e.message || 'Error al borrar los intentos', false);
+      }
+    });
 
-    // recarga lista desde el servidor
-    await loadAndRender();
-  } catch (e) {
-    console.error(e);
-    showToast(e.message || 'Error al borrar los intentos', false);
-  }
-});
-
-    // subir examen
+    // subir examen (archivo)
     async function parseFileToQuestions(file) {
       const text = await file.text();
       if (file.name.toLowerCase().endsWith('.json')) {
@@ -606,7 +632,6 @@ btnClr.addEventListener('click', async () => {
           correct: Number(q.correct ?? 0)
         }));
       } else if (file.name.toLowerCase().endsWith('.csv')) {
-        // CSV: id,text,o1,o2,o3,o4,correct
         const rows = text.trim().split(/\r?\n/).map(l => l.split(','));
         const hdr = rows.shift().map(h => h.trim().toLowerCase());
         const idx = (k) => hdr.indexOf(k);
@@ -623,59 +648,38 @@ btnClr.addEventListener('click', async () => {
       }
       throw new Error('Formato no soportado. Usa .json o .csv');
     }
-// Solo letras (incluye tildes/ñ) y espacios, entre 3 y 60 caracteres
-const EXAM_NAME_RE = /^[A-Za-zÁÉÍÓÚÜÑáéíóúüñ ]{3,60}$/;
 
+    $('#exam-upload').addEventListener('click', async ()=> {
+      const rawName = ($('#exam-name')?.value || '').trim();
+      const rawCode = ($('#exam-code-input')?.value || '').trim();
+      const file    = $('#exam-file')?.files?.[0];
 
+      if (!rawName) return showToast('Ingresa un nombre para el examen', false);
+      if (!EXAM_NAME_RE.test(rawName)) return showToast('Nombre de examen inválido (solo letras y espacios, 3–60 caracteres).', false);
 
-   // Regex para código de examen: solo números, 4–8 dígitos
-const EXAM_CODE_RE = /^[0-9]{4,8}$/;
+      if (!rawCode) return showToast('Ingresa un código de examen (4–8 dígitos).', false);
+      if (!EXAM_CODE_RE.test(rawCode)) return showToast('Código de examen inválido (solo números, 4–8 dígitos).', false);
 
-$('#exam-upload').addEventListener('click', async ()=> {
-  const rawName = ($('#exam-name')?.value || '').trim();
-  const rawCode = ($('#exam-code-input')?.value || '').trim();
-  const file    = $('#exam-file')?.files?.[0];
+      if (!file) return showToast('Selecciona un archivo CSV/JSON', false);
 
-  if (!rawName) {
-    showToast('Ingresa un nombre para el examen', false);
-    return;
-  }
-  if (!EXAM_NAME_RE.test(rawName)) {
-    showToast('Nombre de examen inválido (solo letras y espacios, 3–60 caracteres).', false);
-    return;
-  }
+      try {
+        const questions = await parseFileToQuestions(file);
 
-  if (!rawCode) {
-    showToast('Ingresa un código de examen (4–8 dígitos).', false);
-    return;
-  }
-  if (!EXAM_CODE_RE.test(rawCode)) {
-    showToast('Código de examen inválido (solo números, 4–8 dígitos).', false);
-    return;
-  }
+        const r = await fetch('/api/exams/set', {
+          method:'POST',
+          headers:{'Content-Type':'application/json'},
+          body: JSON.stringify({ name: rawName, accessCode: rawCode, questions })
+        });
 
-  if (!file) {
-    showToast('Selecciona un archivo CSV/JSON', false);
-    return;
-  }
+        let j; try { j = await r.json(); } catch { throw new Error('Respuesta no JSON'); }
+        if (!r.ok || !j.ok) throw new Error(j.error || 'Error guardando el examen');
 
-  try {
-    const questions = await parseFileToQuestions(file);
-    const r = await fetch('/api/exams/set', {
-      method:'POST',
-      headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({ name: rawName, accessCode: rawCode, questions })
+        showToast(`Examen "${rawName}" activado (${j.saved} preguntas). Código: ${rawCode}`, true);
+      } catch(e) {
+        console.error(e);
+        showToast(e.message || 'Error guardando el examen', false);
+      }
     });
-    let j; try { j = await r.json(); } catch { throw new Error('Respuesta no JSON'); }
-    if (!r.ok || !j.ok) throw new Error(j.error || 'Error guardando el examen');
-    showToast(`Examen "${rawName}" activado (${j.saved} preguntas). Código: ${rawCode}`, true);
-  } catch(e) {
-    console.error(e);
-    showToast(e.message || 'Error guardando el examen', false);
-  }
-});
-
-
 
     // logout
     const btnLogout = document.getElementById('btn-logout');
@@ -686,7 +690,6 @@ $('#exam-upload').addEventListener('click', async ()=> {
       location.href = 'login.html';
     });
 
-    // go!
     loadAndRender();
   </script>
 </body>
