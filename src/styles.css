@@ -546,6 +546,7 @@ body.login-page .card{
   background: #ffffff !important;          /* card blanca */
   color: #111827 !important;               /* texto casi negro */
   box-shadow: 0 24px 60px rgba(15,23,42,.18);
+  margin-top: 50px;
 }
 
 /* Aseguramos que los textos dentro de la card se vean oscuros */
