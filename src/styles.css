@@ -516,7 +516,7 @@ table td{
 }
 
 /* Badge de número de intentos en celeste */
-#attempt-count{
+#count-pill{
   background: #2f6cf6 !important;
   color: #ffffff !important;
   border: 1px solid #2f6cf6 !important;
