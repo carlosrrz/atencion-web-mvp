@@ -255,7 +255,7 @@ button.secondary:hover { background: #142441; }
 /* Botones dentro del modal (Cerrar / Exportar / etc.) */
 #x-close, #m-close, #m-export,
 .modal .secondary, .btn-ghost{
-  background:#1a2c53 !important;
+  background:#2a5fe0 !important;
   border:1px solid #27406d !important;
   color:#e6edf7 !important;
 }
