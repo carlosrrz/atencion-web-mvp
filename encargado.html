@@ -6,58 +6,231 @@
   <title>Panel — Profesor</title>
 
   <!-- Tu CSS principal -->
-  <link rel="stylesheet" href="/src/styles.css?v=20251120"/>
+ <link rel="stylesheet" href="/src/styles.css?v=20251210"/>
 
   <style>
-    :root{
-      --border:#21365c;
-      --muted:#9fb0d4;
-      --shadow:0 20px 40px rgba(2,8,23,.35);
-    }
-    body{background:#071021;color:#e6edf7}
+  :root{
+    --border:#d0d7e2;
+    --muted:#6b7280;
+    --shadow:0 18px 35px rgba(15,23,42,.12);
+  }
 
-    .wrap{max-width:1200px;margin:20px auto;padding:0 16px}
-    .row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+  body{
+    background:#f3f4f6;
+    color:#111827;
+    font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  }
 
-    h1{font-size:28px;margin:0}
+  .wrap{
+    max-width:1200px;
+    margin:20px auto;
+    padding:0 16px;
+  }
 
-    table{width:100%;border-collapse:separate;border-spacing:0 6px}
-    th,td{padding:10px 12px;border:1px solid var(--border)}
-    th{background:#0f1b34;text-align:left}
-    td{background:#0b1324}
+  .row{
+    display:flex;
+    gap:10px;
+    align-items:center;
+    flex-wrap:wrap;
+  }
 
-    .pill{display:inline-flex;align-items:center;padding:4px 10px;border-radius:999px;background:#0f1b34;border:1px solid var(--border);color:#cdd7ee}
-    .muted{color:var(--muted)}
-    .topbar{background:#0b1324;border-bottom:1px solid var(--border);padding:12px 0}
+  h1{
+    font-size:28px;
+    margin:0;
+  }
 
-    .card{background:#0b1324;border:1px solid var(--border);border-radius:14px;padding:14px;margin:16px auto;color:#e6edf7}
-    .auth-input{width:100%;height:48px;padding:10px 12px;border-radius:12px;border:1px solid #1c2a48;background:#0e1a2f;color:#e6edf7}
-    .primary{height:44px;border:0;border-radius:12px;background:#2f6cf6;color:#fff;font-weight:600;padding:0 14px;cursor:pointer}
-    .secondary{height:36px;border:1px solid #21365c;border-radius:10px;background:#0f1b34;color:#e6edf7;padding:0 12px;cursor:pointer}
+  table{
+    width:100%;
+    border-collapse:separate;
+    border-spacing:0 6px;
+  }
 
-    /* Modal */
-    .backdrop{position:fixed;inset:0;background:rgba(0,0,0,.45);display:none;z-index:300}
-    .modal{position:fixed;left:50%;top:6%;transform:translateX(-50%);
-      width:min(980px,94vw);max-height:88vh;overflow:auto;
-      background:#0b1324;border:1px solid var(--border);
-      border-radius:14px;box-shadow:var(--shadow);display:none;z-index:301}
-    .modal header,.modal footer{padding:12px 16px;border-bottom:1px solid var(--border)}
-    .modal footer{border-top:1px solid var(--border);border-bottom:none;display:flex;justify-content:flex-end;gap:8px}
-    .modal .body{padding:14px}
+  th,
+  td{
+    padding:10px 12px;
+    border:1px solid var(--border);
+  }
 
-    /* Evidencias */
-    .ev-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:14px;margin-top:6px}
-    .ev-card{background:#0f1b34;border:1px solid var(--border);border-radius:12px;overflow:hidden}
-    .ev-card img{width:100%;height:150px;object-fit:cover;background:#0b1324;display:block}
-    .ev-note{padding:8px 10px;color:#cbd6f0;font-size:.92rem;border-top:1px solid var(--border)}
+  th{
+    background:#e5ecf9;
+    text-align:left;
+  }
 
-    /* Toast */
-    .toast{position:fixed;right:16px;bottom:16px;background:#0b1324;color:#e6edf7;
-      border:1px solid #21365c;border-radius:12px;padding:12px 14px;box-shadow:0 10px 30px rgba(2,8,23,.4);
-      display:none;z-index:400}
-    .toast.ok{border-color:#2e7d32}
-    .toast.err{border-color:#b3261e}
-  </style>
+  td{
+    background:#ffffff;
+  }
+
+  .pill{
+    display:inline-flex;
+    align-items:center;
+    padding:4px 10px;
+    border-radius:999px;
+    background:#eef2ff;
+    border:1px solid var(--border);
+    color:#111827;
+    font-size:.9rem;
+  }
+
+  .muted{
+    color:var(--muted);
+  }
+
+  .topbar{
+    background:#ffffff;
+    border-bottom:1px solid var(--border);
+    padding:12px 0;
+  }
+
+  .card{
+    background:#ffffff;
+    border:1px solid var(--border);
+    border-radius:14px;
+    padding:14px;
+    margin:16px auto;
+    color:#111827;
+  }
+
+  .auth-input{
+    width:100%;
+    height:48px;
+    padding:10px 12px;
+    border-radius:12px;
+    border:1px solid #d1d5db;
+    background:#f9fafb;
+    color:#111827;
+  }
+
+  .auth-input::placeholder{
+    color:#9ca3af;
+  }
+
+  .primary{
+    height:44px;
+    border:0;
+    border-radius:12px;
+    background:#2563eb;
+    color:#ffffff;
+    font-weight:600;
+    padding:0 14px;
+    cursor:pointer;
+  }
+
+  .primary:disabled{
+    opacity:.6;
+    cursor:default;
+  }
+
+  .secondary{
+    height:36px;
+    border:1px solid #cbd5f5;
+    border-radius:10px;
+    background:#e5ecf9;
+    color:#111827;
+    padding:0 12px;
+    cursor:pointer;
+    font-weight:500;
+  }
+
+  /* Modal */
+  .backdrop{
+    position:fixed;
+    inset:0;
+    background:rgba(15,23,42,.25);
+    display:none;
+    z-index:300;
+  }
+
+  .modal{
+    position:fixed;
+    left:50%;
+    top:6%;
+    transform:translateX(-50%);
+    width:min(980px,94vw);
+    max-height:88vh;
+    overflow:auto;
+    background:#ffffff;
+    border:1px solid var(--border);
+    border-radius:14px;
+    box-shadow:var(--shadow);
+    display:none;
+    z-index:301;
+  }
+
+  .modal header,
+  .modal footer{
+    padding:12px 16px;
+    border-bottom:1px solid var(--border);
+    background:#f9fafb;
+  }
+
+  .modal footer{
+    border-top:1px solid var(--border);
+    border-bottom:none;
+    display:flex;
+    justify-content:flex-end;
+    gap:8px;
+  }
+
+  .modal .body{
+    padding:14px;
+    background:#ffffff;
+  }
+
+  /* Evidencias */
+  .ev-grid{
+    display:grid;
+    grid-template-columns:repeat(auto-fill,minmax(220px,1fr));
+    gap:14px;
+    margin-top:6px;
+  }
+
+  .ev-card{
+    background:#ffffff;
+    border:1px solid var(--border);
+    border-radius:12px;
+    overflow:hidden;
+  }
+
+  .ev-card img{
+    width:100%;
+    height:150px;
+    object-fit:cover;
+    background:#e5e7eb;
+    display:block;
+  }
+
+  .ev-note{
+    padding:8px 10px;
+    color:#4b5563;
+    font-size:.92rem;
+    border-top:1px solid var(--border);
+  }
+
+  /* Toast */
+  .toast{
+    position:fixed;
+    right:16px;
+    bottom:16px;
+    background:#ffffff;
+    color:#111827;
+    border:1px solid #cbd5f5;
+    border-radius:12px;
+    padding:12px 14px;
+    box-shadow:0 10px 30px rgba(15,23,42,.18);
+    display:none;
+    z-index:400;
+    font-size:.95rem;
+  }
+
+  .toast.ok{
+    border-color:#16a34a;
+  }
+
+  .toast.err{
+    border-color:#dc2626;
+  }
+</style>
+
 </head>
 <body>
   <header class="topbar">

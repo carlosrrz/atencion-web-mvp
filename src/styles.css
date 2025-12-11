@@ -232,103 +232,10 @@ tbody tr:hover{ transform: translateY(-2px); box-shadow: var(--shadow-md); }
 @media (prefers-reduced-motion: reduce){
   *{ transition:none !important; animation:none !important; }
 }
-
-
-/* === Inputs siempre oscuros (login y resto) ====================== */
-input[type="text"],
-input[type="email"],
-input[type="password"],
-input[type="number"],
-input[type="search"]{
-  background: #0f1a2b !important;      /* base oscura siempre */
-  color: #e9f1ff !important;            /* texto claro */
-  border: 1px solid rgba(255,255,255,.12) !important;
-  border-radius: 14px;
-}
-
-/* Placeholder legible */
-input::placeholder{
-  color: #b8c4d8 !important;
-  opacity: 1 !important;
-}
-
-/* Enfoque con anillo suave */
-input:focus{
-  outline: none !important;
-  border-color: #60a5fa !important;
-  box-shadow: 0 0 0 6px rgba(96,165,250,.18) !important;
-}
-
-/* Corrige autofill de Chrome (evita fondo blanco) */
-input:-webkit-autofill,
-input:-webkit-autofill:hover,
-input:-webkit-autofill:focus{
-  -webkit-text-fill-color: #e9f1ff !important;
-  -webkit-box-shadow: 0 0 0px 1000px #0f1a2b inset !important;
-  transition: background-color 9999s ease-out 0s !important;
-}
-
-/* === Tabla del profesor: todas las filas oscuras ================= */
-#tbl th,
-#tbl td{
-  background: #0e1a2a !important;                 /* MISMO tono para TODAS */
-  color: #e8f0ff !important;
-  border-color: rgba(255,255,255,.08) !important;
-}
-
-/* Si tenías zebra striping, lo anulamos explícitamente */
-#tbl tbody tr:nth-child(even) td,
-#tbl tbody tr:nth-child(odd)  td{
-  background: #0e1a2a !important;
-}
-
-/* Hover apenas más brillante para feedback */
-#tbl tbody tr:hover td{
-  background: #152640 !important;
-}
-
 /* Botones "Ver" legibles sobre fondo oscuro (por si acaso) */
 #tbl .secondary,
 #tbl button{
   color:#e9f1ff;
-}
-
-/* ===== Panel del profesor – modo oscuro consistente ===== */
-#tbl thead th {
-  color: #e6edf7;
-  background: #0b1324;
-  border-color: #1c2a48;
-}
-
-#tbl tbody tr {
-  background: #0e1a2f;
-  color: #e6edf7;
-  border-color: #1c2a48;
-}
-#tbl tbody tr:hover {
-  background: #102640;           /* resalta al pasar el cursor */
-}
-
-/* Celdas */
-#tbl td, #tbl th {
-  border-color: #1c2a48;
-}
-
-/* Botón "Ver" (si usa .secondary) */
-#tbl .secondary {
-  background: #1a2c53;
-  border: 1px solid #27406d;
-  color: #e6edf7;
-}
-#tbl .secondary:hover {
-  background: #223a6c;
-}
-
-/* “4 intentos” / badges */
-.pill, #count-pill {
-  background: #0e1a2f;
-  color: #e6edf7;
-  border: 1px solid #1c2a48;
 }
 
 /* Botones superiores */
@@ -344,68 +251,6 @@ button.secondary {
 }
 button.secondary:hover { background: #142441; }
 
-/* ====== Modal (detalle de intento) – DARK MODE ====== */
-
-/* Fondo de oscurecimiento */
-.modal-backdrop{
-  background: rgba(3,10,24,.78) !important;
-  backdrop-filter: blur(2px);
-}
-
-/* Contenedor del modal (soporta .modal y .modal .modal-card) */
-.modal,
-.modal .modal-card{
-  background:#0b1324 !important;
-  color:#e6edf7 !important;
-  border:1px solid #13233f !important;
-  border-radius:18px !important;
-  box-shadow: 0 24px 70px rgba(0,0,0,.55) !important;
-}
-
-/* Encabezado y pie del modal (si existen) */
-.modal header,
-.modal footer{
-  background:#0e1a2f !important;
-  color:#e6edf7 !important;
-  border-color:#13233f !important;
-}
-
-/* Cuerpo del modal */
-.modal .body{
-  color:#e6edf7 !important;
-}
-
-/* Chips/pastillas e indicadores dentro del modal */
-.modal .pill{
-  background:#0e1a2f !important;
-  color:#e6edf7 !important;
-  border:1px solid #1c2a48 !important;
-}
-.modal .muted,
-.modal .help{
-  color:#b9c6dc !important;
-}
-
-/* ------- Evidencias ------- */
-.ev, .ev-grid{
-  display:grid;
-  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
-  gap:12px;
-}
-.ev-card,
-.ev > div{
-  background:#0f1e37 !important;
-  border:1px solid #1c2a48 !important;
-  border-radius:12px !important;
-  padding:8px !important;
-}
-.ev-card img,
-.ev img{
-  width:100%;
-  display:block;
-  border-radius:8px;
-}
-.ev-note{ color:#9fb2d3 !important; }
 
 /* Botones dentro del modal (Cerrar / Exportar / etc.) */
 #x-close, #m-close, #m-export,
@@ -565,4 +410,101 @@ body.estudiante-page {
 body.estudiante-page .topbar {
   background: transparent; /* deja ver el fondo */
   box-shadow: none;
+}
+
+/* =========================
+   Light theme (override)
+   ========================= */
+:root{
+  --bg: #f6f8fc;
+  --surface: #ffffff;
+  --surface2: #f1f5ff;
+  --border: #d3dced;
+  --text: #0f172a;
+  --muted: #475569;
+  --primary: #2f6cf6;
+  --shadow: 0 12px 30px rgba(15,23,42,.10);
+}
+
+body{
+  background: var(--bg) !important;
+  color: var(--text) !important;
+}
+
+/* Contenedores típicos */
+.card, .modal{
+  background: var(--surface) !important;
+  border-color: var(--border) !important;
+  color: var(--text) !important;
+  box-shadow: var(--shadow);
+}
+
+/* Inputs / selects */
+input, select, textarea, .input, .auth-input{
+  background: var(--surface) !important;
+  border: 1px solid var(--border) !important;
+  color: var(--text) !important;
+}
+input::placeholder, textarea::placeholder{
+  color: #94a3b8 !important;
+}
+
+/* Botones */
+.primary, .btn.primary{
+  background: var(--primary) !important;
+  color: #fff !important;
+  border: 0 !important;
+}
+.secondary, .btn{
+  background: var(--surface2) !important;
+  color: var(--text) !important;
+  border: 1px solid var(--border) !important;
+}
+
+/* Tablas */
+table th{
+  background: var(--surface2) !important;
+  color: var(--text) !important;
+}
+table td{
+  background: var(--surface) !important;
+  color: var(--text) !important;
+}
+
+/* Chips / pills */
+.pill{
+  background: var(--surface2) !important;
+  border: 1px solid var(--border) !important;
+  color: var(--text) !important;
+}
+.muted, .ev-note{
+  color: var(--muted) !important;
+}
+
+/* Modal backdrop */
+.backdrop{
+  background: rgba(15,23,42,.25) !important;
+}
+/* Ajuste específico de la tabla del profesor en tema claro */
+#tbl thead th{
+  background: var(--surface2) !important;
+}
+
+#tbl tbody tr td{
+  background: var(--surface) !important;
+}
+/* Modal de intento y evidencias en tema claro */
+.modal-card{
+  background: var(--surface) !important;
+  border: 1px solid var(--border) !important;
+  color: var(--text) !important;
+}
+
+.ev-card{
+  background: var(--surface2) !important;
+  border: 1px solid var(--border) !important;
+}
+
+.ev-note{
+  color: var(--muted) !important;
 }
