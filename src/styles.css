@@ -534,3 +534,34 @@ body.estudiante-page .topbar h1,
 body.estudiante-page .topbar a{
   color: #ffffff !important;
 }
+/* ===== Página de login: fondo celeste + card blanca ===== */
+
+body.login-page{
+  /* fondo general celeste */
+  background: #e5f2ff !important;
+}
+
+/* Contenedor de la card (la que dice "Ingreso") */
+body.login-page .card{
+  background: #ffffff !important;          /* card blanca */
+  color: #111827 !important;               /* texto casi negro */
+  box-shadow: 0 24px 60px rgba(15,23,42,.18);
+}
+
+/* Aseguramos que los textos dentro de la card se vean oscuros */
+body.login-page .card h1,
+body.login-page .card h2,
+body.login-page .card label,
+body.login-page .card p{
+  color: #111827 !important;
+}
+
+/* Los inputs dentro del login, claros para que combinen con la card */
+body.login-page .card input{
+  background: #eef3ff !important;
+  border-color: #d0d7f0 !important;
+  color: #111827 !important;
+}
+body.login-page .card input::placeholder{
+  color: #9ca3af !important;
+}
