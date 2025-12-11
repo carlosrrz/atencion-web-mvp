@@ -237,7 +237,7 @@
     <div class="wrap row" style="justify-content:space-between">
       <h1>Panel del profesor</h1>
       <nav class="row">
-        <button id="btn-logout" class="secondary" type="button">Salir</button>
+        <button id="btn-logout" class="primary" type="button">Salir</button>
       </nav>
     </div>
   </header>
@@ -245,11 +245,11 @@
   <main class="wrap">
     <div class="row" style="justify-content:space-between;margin-bottom:12px">
       <div class="row">
-        <button id="btn-export-all" class="secondary">Exportar CSV (todos)</button>
-        <button id="btn-clear" class="secondary">Borrar registros</button>
+        <button id="btn-export-all" class="primary">Exportar CSV (todos)</button>
+        <button id="btn-clear" class="primary">Borrar registros</button>
       </div>
 
-      <span class="pill" id="count-pill">0 intentos</span>
+      <span id="attempt-count" class="pill">0 intentos</span>
     </div>
 
     <table id="tbl">
@@ -636,7 +636,7 @@ const OPT_TEXT_RE = /^[A-Za-z0-9ÁÉÍÓÚÜÑáéíóúüñ¿?¡!.,:;'"()\-_/+=
             <td>${look}</td>
             <td>${speak}</td>
             <td>${examTxt}</td>
-            <td><button class="secondary" data-id="${a.id}">Ver</button></td>
+            <td><button class="primary" data-id="${a.id}">Ver</button></td>
           </tr>`;
       }).join('');
     }

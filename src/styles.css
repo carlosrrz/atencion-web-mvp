@@ -508,3 +508,29 @@ table td{
 .ev-note{
   color: var(--muted) !important;
 }
+
+/* Cabecera de la tabla del profesor en celeste */
+#tbl thead th{
+  background: #2f6cf6 !important;   /* celeste */
+  color: #ffffff !important;        /* texto blanco */
+}
+
+/* Badge de número de intentos en celeste */
+#attempt-count{
+  background: #2f6cf6 !important;
+  color: #ffffff !important;
+  border: 1px solid #2f6cf6 !important;
+}
+
+/* Barra superior de "Evaluación (Estudiante)" en celeste */
+body.estudiante-page .topbar{
+  background: #2f6cf6 !important;
+  color: #ffffff !important;
+  box-shadow: 0 2px 10px rgba(37,99,235,.30);
+}
+
+/* Título y enlaces de la barra en blanco */
+body.estudiante-page .topbar h1,
+body.estudiante-page .topbar a{
+  color: #ffffff !important;
+}
