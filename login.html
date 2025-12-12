@@ -132,11 +132,18 @@
     display:grid; place-items:center;
   }
   .muted{ opacity:.9; }
+
+  /* En la página de login, la .wrap NO debe tener margen vertical */
+body.auth .wrap{
+  margin: 0 auto !important;   /* quita el margen de 22px del styles.css */
+}
+
+
 </style>
 
 
 </head>
-<body class="login-page">
+<body class="auth">
   <main class="wrap">
     <div class="auth-card">
       <h2>Ingreso</h2>
